@@ -35,6 +35,7 @@ interface ActivityModalProps {
   isOpen: boolean;
   onClose: () => void;
   activity?: Activity; // For editing
+  initialDate?: Date; // For pre-filling date for new activities
 }
 
 const todoSchema = z.object({
@@ -51,7 +52,7 @@ const activityFormSchema = z.object({
 
 type ActivityFormData = z.infer<typeof activityFormSchema>;
 
-export default function ActivityModal({ isOpen, onClose, activity }: ActivityModalProps) {
+export default function ActivityModal({ isOpen, onClose, activity, initialDate }: ActivityModalProps) {
   const { addActivity, updateActivity, getCategoryById } = useAppStore();
   const { toast } = useToast();
   const [isSuggestingTodos, setIsSuggestingTodos] = useState(false);
@@ -83,23 +84,32 @@ export default function ActivityModal({ isOpen, onClose, activity }: ActivityMod
   }, [activity, form, isOpen]);
 
   const onSubmit = (data: ActivityFormData) => {
-    const activityData = {
+    const baseActivityData = {
       title: data.title,
       categoryId: data.categoryId,
-      todos: data.todos?.map(t => ({ text: t.text })) || [], // Only pass text for new todos
+      todos: data.todos?.map(t => ({ text: t.text })) || [],
     };
 
     if (activity) {
-      // When updating, we need to be careful with todo IDs
       const updatedTodos = data.todos?.map(t => ({
-        id: t.id || '', // This needs to be handled properly if allowing adding new todos while editing
+        id: t.id || '', 
         text: t.text,
         completed: t.completed || false
       })) || [];
-      updateActivity(activity.id, { ...activityData, todos: updatedTodos as Todo[] });
+      updateActivity(activity.id, { 
+        title: data.title, 
+        categoryId: data.categoryId, 
+        todos: updatedTodos as Todo[] 
+      });
       toast({ title: "Activity Updated", description: "Your activity has been successfully updated." });
     } else {
-      addActivity(activityData);
+      let newActivityCreatedAt: number;
+      if (initialDate) {
+        newActivityCreatedAt = initialDate.getTime();
+      } else {
+        newActivityCreatedAt = new Date().getTime();
+      }
+      addActivity(baseActivityData, newActivityCreatedAt);
       toast({ title: "Activity Added", description: "Your new activity has been successfully added." });
     }
     onClose();
@@ -117,7 +127,6 @@ export default function ActivityModal({ isOpen, onClose, activity }: ActivityMod
       const result = await suggestTodos(input);
       if (result.todos && result.todos.length > 0) {
         result.todos.forEach(todoText => {
-          // Check if todo already exists to avoid duplicates
           const existingTodo = fields.find(field => field.text.toLowerCase() === todoText.toLowerCase());
           if (!existingTodo) {
             append({ text: todoText, completed: false });
@@ -145,6 +154,7 @@ export default function ActivityModal({ isOpen, onClose, activity }: ActivityMod
           <DialogTitle>{activity ? "Edit Activity" : "Add New Activity"}</DialogTitle>
           <DialogDescription>
             {activity ? "Update the details of your activity." : "Fill in the details for your new activity."}
+            {initialDate && !activity && ` Activity will be for ${format(initialDate, "PPP")}.`}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -189,7 +199,7 @@ export default function ActivityModal({ isOpen, onClose, activity }: ActivityMod
               <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
                 {fields.map((item, index) => (
                   <div key={item.id} className="flex items-center space-x-2">
-                    {activity && ( // Only show checkbox if editing existing activity with existing todos
+                    {activity && ( 
                        <FormField
                         control={form.control}
                         name={`todos.${index}.completed`}
@@ -244,3 +254,5 @@ export default function ActivityModal({ isOpen, onClose, activity }: ActivityMod
     </Dialog>
   );
 }
+// Helper function (ensure it's imported or defined if not already)
+import { format } from 'date-fns';

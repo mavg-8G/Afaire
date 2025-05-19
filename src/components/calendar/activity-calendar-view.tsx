@@ -7,8 +7,10 @@ import type { Activity } from '@/lib/types';
 import { isSameDay, format } from 'date-fns';
 import ActivityModal from '@/components/forms/activity-modal';
 import ActivityListItem from './activity-list-item';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { PlusCircle } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +30,8 @@ export default function ActivityCalendarView() {
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | undefined>(undefined);
   const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
+  const [isAddingActivityForSelectedDate, setIsAddingActivityForSelectedDate] = useState(false);
+
 
   const eventDays = useMemo(() => {
     return activities.map(activity => new Date(activity.createdAt));
@@ -41,7 +45,16 @@ export default function ActivityCalendarView() {
 
   const handleEditActivity = (activity: Activity) => {
     setEditingActivity(activity);
+    setIsAddingActivityForSelectedDate(false);
     setIsActivityModalOpen(true);
+  };
+
+  const handleAddNewActivityForSelectedDate = () => {
+    if (selectedDate) {
+      setEditingActivity(undefined);
+      setIsAddingActivityForSelectedDate(true);
+      setIsActivityModalOpen(true);
+    }
   };
 
   const handleOpenDeleteConfirm = (activity: Activity) => {
@@ -58,7 +71,8 @@ export default function ActivityCalendarView() {
 
   const handleCloseModal = () => {
     setIsActivityModalOpen(false);
-    setEditingActivity(undefined); 
+    setEditingActivity(undefined);
+    setIsAddingActivityForSelectedDate(false);
   };
 
   const modifiers = {
@@ -84,15 +98,15 @@ export default function ActivityCalendarView() {
         </CardContent>
       </Card>
       
-      <Card className="lg:w-1/2 xl:w-1/3 shadow-lg w-full flex-grow">
+      <Card className="lg:w-1/2 xl:w-1/3 shadow-lg w-full flex flex-col">
         <CardHeader>
           <CardTitle>
             Activities for {selectedDate ? format(selectedDate, 'PPP') : 'Selected Date'}
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex-grow">
           {activitiesForSelectedDay.length > 0 ? (
-            <ScrollArea className="h-[calc(100vh-26rem)] sm:h-[calc(100vh-24rem)] pr-1">
+            <ScrollArea className="h-[calc(100vh-30rem)] sm:h-[calc(100vh-28rem)] pr-1">
               <div className="space-y-3">
                 {activitiesForSelectedDay.map(activity => (
                   <ActivityListItem 
@@ -111,13 +125,24 @@ export default function ActivityCalendarView() {
             </p>
           )}
         </CardContent>
+        <CardFooter>
+          <Button 
+            onClick={handleAddNewActivityForSelectedDate} 
+            disabled={!selectedDate}
+            className="w-full"
+          >
+            <PlusCircle className="mr-2 h-5 w-5" />
+            Add Activity for {selectedDate ? format(selectedDate, 'MMM d') : '...'}
+          </Button>
+        </CardFooter>
       </Card>
 
-      {isActivityModalOpen && editingActivity && (
+      {isActivityModalOpen && (
         <ActivityModal
           isOpen={isActivityModalOpen}
           onClose={handleCloseModal}
           activity={editingActivity}
+          initialDate={isAddingActivityForSelectedDate && selectedDate ? selectedDate : undefined}
         />
       )}
 
