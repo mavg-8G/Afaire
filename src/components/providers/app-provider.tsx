@@ -99,8 +99,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const fiveMinutesInMs = 5 * 60 * 1000;
         const timeDiffMs = activityDateTime.getTime() - now.getTime();
 
-        // Notify if activity is within the next 5 minutes (but not past)
-        if (timeDiffMs > 0 && timeDiffMs <= fiveMinutesInMs) {
+        // Notify if activity is scheduled for now or within the next 5 minutes (but not past 5 min window)
+        if (timeDiffMs >= 0 && timeDiffMs <= fiveMinutesInMs) {
           toast({
             title: "Activity Starting Soon!",
             description: `"${activity.title}" is scheduled for ${activity.time}.`
@@ -213,3 +213,4 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+
