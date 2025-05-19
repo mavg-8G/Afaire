@@ -5,54 +5,82 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Edit3, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useAppStore } from '@/hooks/use-app-store';
+import { cn } from '@/lib/utils';
 
 interface ActivityListItemProps {
   activity: Activity;
   category: Category | undefined;
   onEdit: () => void;
-  onDelete: () => void; // New prop
+  onDelete: () => void;
 }
 
 export default function ActivityListItem({ activity, category, onEdit, onDelete }: ActivityListItemProps) {
+  const { updateActivity } = useAppStore();
   const completedTodos = activity.todos.filter(t => t.completed).length;
   const totalTodos = activity.todos.length;
 
+  const handleActivityCompletedChange = (completed: boolean) => {
+    updateActivity(activity.id, { completed });
+  };
+
   return (
-    <Card className="shadow-sm hover:shadow-md transition-shadow duration-150 ease-in-out">
+    <Card className={cn(
+      "shadow-sm hover:shadow-md transition-shadow duration-150 ease-in-out",
+      activity.completed && "bg-muted/50 opacity-75"
+    )}>
       <CardHeader className="flex flex-row items-center justify-between pb-2 pt-3 px-4 space-y-0">
-        <CardTitle className="text-base font-medium leading-tight">{activity.title}</CardTitle>
-        <div className="flex items-center">
-          <Button variant="ghost" size="icon" onClick={onEdit} className="h-7 w-7 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-grow min-w-0">
+          <Checkbox
+            id={`activity-completed-${activity.id}`}
+            checked={!!activity.completed}
+            onCheckedChange={(checked) => handleActivityCompletedChange(Boolean(checked))}
+            aria-labelledby={`activity-title-${activity.id}`}
+          />
+          <CardTitle 
+            id={`activity-title-${activity.id}`}
+            className={cn(
+              "text-base font-medium leading-tight truncate",
+              activity.completed && "line-through text-muted-foreground"
+            )}
+            title={activity.title} // Show full title on hover if truncated
+          >
+            {activity.title}
+          </CardTitle>
+        </div>
+        <div className="flex items-center flex-shrink-0">
+          <Button variant="ghost" size="icon" onClick={onEdit} className="h-7 w-7">
             <Edit3 className="h-4 w-4" />
             <span className="sr-only">Edit Activity</span>
           </Button>
-          <Button variant="ghost" size="icon" onClick={onDelete} className="h-7 w-7 flex-shrink-0 text-destructive hover:text-destructive">
+          <Button variant="ghost" size="icon" onClick={onDelete} className="h-7 w-7 text-destructive hover:text-destructive">
             <Trash2 className="h-4 w-4" />
             <span className="sr-only">Delete Activity</span>
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="px-4 pb-3">
+      <CardContent className="px-4 pb-3 pl-11"> {/* Added pl-11 to align content with title after checkbox */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           {category && (
-            <Badge variant="secondary" className="text-xs py-0.5 px-1.5">
+            <Badge variant={activity.completed ? "outline" : "secondary"} className="text-xs py-0.5 px-1.5">
               {category.icon && <category.icon className="mr-1 h-3 w-3" />}
               {category.name}
             </Badge>
           )}
           {totalTodos > 0 && (
-            <p className="text-xs text-muted-foreground mt-1 sm:mt-0">
+            <p className={cn("text-xs", activity.completed ? "text-muted-foreground" : "text-muted-foreground")}>
               {completedTodos} / {totalTodos} todos completed
             </p>
           )}
         </div>
-         {totalTodos === 0 && !category && ( // Show if no category and no todos
-          <p className="text-xs text-muted-foreground mt-1">
+         {totalTodos === 0 && !category && (
+          <p className={cn("text-xs mt-1", activity.completed ? "text-muted-foreground/80" : "text-muted-foreground")}>
             No details available.
           </p>
         )}
-         {totalTodos === 0 && category && ( // Show if category but no todos
-          <p className="text-xs text-muted-foreground mt-1">
+         {totalTodos === 0 && category && (
+          <p className={cn("text-xs mt-1", activity.completed ? "text-muted-foreground/80" : "text-muted-foreground")}>
             No todos for this activity.
           </p>
         )}

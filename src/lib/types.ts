@@ -15,6 +15,7 @@ export interface Activity {
   todos: Todo[];
   status: ActivityStatus;
   createdAt: number; // Timestamp
+  completed?: boolean; // Added for activity completion status
 }
 
 export interface Category {

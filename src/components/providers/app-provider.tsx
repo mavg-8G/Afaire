@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs
 export interface AppContextType {
   activities: Activity[];
   categories: Category[];
-  addActivity: (activityData: Omit<Activity, 'id' | 'todos' | 'status' | 'createdAt'> & { todos?: Omit<Todo, 'id' | 'completed'>[] }, customCreatedAt?: number) => void;
+  addActivity: (activityData: Omit<Activity, 'id' | 'todos' | 'status' | 'createdAt' | 'completed'> & { todos?: Omit<Todo, 'id' | 'completed'>[] }, customCreatedAt?: number) => void;
   updateActivity: (activityId: string, updates: Partial<Activity>) => void;
   deleteActivity: (activityId: string) => void;
   addTodoToActivity: (activityId: string, todoText: string) => void;
@@ -58,7 +58,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
   const addActivity = useCallback((
-      activityData: Omit<Activity, 'id' | 'todos' | 'status' | 'createdAt'> & { todos?: Omit<Todo, 'id' | 'completed'>[] },
+      activityData: Omit<Activity, 'id' | 'todos' | 'status' | 'createdAt' | 'completed'> & { todos?: Omit<Todo, 'id' | 'completed'>[] },
       customCreatedAt?: number
     ) => {
     const newActivity: Activity = {
@@ -67,6 +67,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       todos: (activityData.todos || []).map(todo => ({ ...todo, id: uuidv4(), completed: false })),
       status: 'todo',
       createdAt: customCreatedAt !== undefined ? customCreatedAt : Date.now(),
+      completed: false, // Initialize as not completed
     };
     setActivities(prev => [...prev, newActivity]);
   }, []);
