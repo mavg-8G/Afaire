@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -98,4 +99,37 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Custom style for react-day-picker event indicator */
+.day-with-event {
+  position: relative;
+}
+
+/* Style for the dot itself, targeting the button inside the day cell */
+.rdp-day_selected.day-with-event button::after,
+.day-with-event button::after {
+  content: '';
+  position: absolute;
+  bottom: 4px; /* Adjust vertical position */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px; /* Size of the dot */
+  height: 6px; /* Size of the dot */
+  border-radius: 50%;
+  background-color: hsl(var(--accent)); /* Default dot color (green) */
+  z-index: 1; /* Ensure dot is above other button content if any */
+}
+
+/* Dot color for selected day with event (make it contrast with primary selection color) */
+.rdp-day_selected.day-with-event button::after {
+  background-color: hsl(var(--accent-foreground)); /* White dot on blue selected day */
+}
+
+/* Ensure today's dot is also visible */
+.rdp-day_today.day-with-event button::after {
+   background-color: hsl(var(--primary)); /* Blue dot on accent (today) background */
+}
+.rdp-day_today.rdp-day_selected.day-with-event button::after {
+  background-color: hsl(var(--accent-foreground)); /* Keep it white if today is also selected */
 }

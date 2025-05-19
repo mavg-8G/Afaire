@@ -1,13 +1,13 @@
 
 import AppHeader from '@/components/layout/app-header';
-import KanbanBoard from '@/components/kanban/kanban-board';
+import ActivityCalendarView from '@/components/calendar/activity-calendar-view';
 
 export default function AppPage() {
   return (
-    <div className="flex flex-col flex-grow">
+    <div className="flex flex-col flex-grow min-h-screen">
       <AppHeader />
       <main className="flex-grow">
-        <KanbanBoard />
+        <ActivityCalendarView />
       </main>
     </div>
   );
