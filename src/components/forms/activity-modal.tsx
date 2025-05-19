@@ -22,7 +22,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea';
+import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle, Trash2, Sparkles, Loader2 } from 'lucide-react';
 import { useAppStore } from '@/hooks/use-app-store';
