@@ -3,16 +3,17 @@
 import type { Activity, Category } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Edit3 } from 'lucide-react';
+import { Edit3, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface ActivityListItemProps {
   activity: Activity;
   category: Category | undefined;
   onEdit: () => void;
+  onDelete: () => void; // New prop
 }
 
-export default function ActivityListItem({ activity, category, onEdit }: ActivityListItemProps) {
+export default function ActivityListItem({ activity, category, onEdit, onDelete }: ActivityListItemProps) {
   const completedTodos = activity.todos.filter(t => t.completed).length;
   const totalTodos = activity.todos.length;
 
@@ -20,10 +21,16 @@ export default function ActivityListItem({ activity, category, onEdit }: Activit
     <Card className="shadow-sm hover:shadow-md transition-shadow duration-150 ease-in-out">
       <CardHeader className="flex flex-row items-center justify-between pb-2 pt-3 px-4 space-y-0">
         <CardTitle className="text-base font-medium leading-tight">{activity.title}</CardTitle>
-        <Button variant="ghost" size="icon" onClick={onEdit} className="h-7 w-7 flex-shrink-0">
-          <Edit3 className="h-4 w-4" />
-          <span className="sr-only">Edit Activity</span>
-        </Button>
+        <div className="flex items-center">
+          <Button variant="ghost" size="icon" onClick={onEdit} className="h-7 w-7 flex-shrink-0">
+            <Edit3 className="h-4 w-4" />
+            <span className="sr-only">Edit Activity</span>
+          </Button>
+          <Button variant="ghost" size="icon" onClick={onDelete} className="h-7 w-7 flex-shrink-0 text-destructive hover:text-destructive">
+            <Trash2 className="h-4 w-4" />
+            <span className="sr-only">Delete Activity</span>
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="px-4 pb-3">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">

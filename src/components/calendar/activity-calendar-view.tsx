@@ -9,12 +9,25 @@ import ActivityModal from '@/components/forms/activity-modal';
 import ActivityListItem from './activity-list-item';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from '@/hooks/use-toast';
 
 export default function ActivityCalendarView() {
-  const { activities, getCategoryById } = useAppStore();
+  const { activities, getCategoryById, deleteActivity } = useAppStore();
+  const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | undefined>(undefined);
+  const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
 
   const eventDays = useMemo(() => {
     return activities.map(activity => new Date(activity.createdAt));
@@ -23,12 +36,24 @@ export default function ActivityCalendarView() {
   const activitiesForSelectedDay = useMemo(() => {
     if (!selectedDate) return [];
     return activities.filter(activity => isSameDay(new Date(activity.createdAt), selectedDate))
-                     .sort((a, b) => a.createdAt - b.createdAt); // Sort by creation time
+                     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }, [activities, selectedDate]);
 
   const handleEditActivity = (activity: Activity) => {
     setEditingActivity(activity);
     setIsActivityModalOpen(true);
+  };
+
+  const handleOpenDeleteConfirm = (activity: Activity) => {
+    setActivityToDelete(activity);
+  };
+
+  const handleConfirmDelete = () => {
+    if (activityToDelete) {
+      deleteActivity(activityToDelete.id);
+      toast({ title: "Activity Deleted", description: `"${activityToDelete.title}" has been removed.` });
+      setActivityToDelete(null);
+    }
   };
 
   const handleCloseModal = () => {
@@ -38,7 +63,6 @@ export default function ActivityCalendarView() {
 
   const modifiers = {
     hasEvent: eventDays,
-    // selected: selectedDate, // react-day-picker handles selected styling via the 'selected' prop directly
   };
 
   const modifiersClassNames = {
@@ -68,14 +92,15 @@ export default function ActivityCalendarView() {
         </CardHeader>
         <CardContent>
           {activitiesForSelectedDay.length > 0 ? (
-            <ScrollArea className="h-[calc(100vh-26rem)] sm:h-[calc(100vh-24rem)] pr-1"> {/* Adjusted height */}
+            <ScrollArea className="h-[calc(100vh-26rem)] sm:h-[calc(100vh-24rem)] pr-1">
               <div className="space-y-3">
                 {activitiesForSelectedDay.map(activity => (
                   <ActivityListItem 
                     key={activity.id} 
                     activity={activity} 
                     category={getCategoryById(activity.categoryId)}
-                    onEdit={() => handleEditActivity(activity)} 
+                    onEdit={() => handleEditActivity(activity)}
+                    onDelete={() => handleOpenDeleteConfirm(activity)}
                   />
                 ))}
               </div>
@@ -88,12 +113,30 @@ export default function ActivityCalendarView() {
         </CardContent>
       </Card>
 
-      {isActivityModalOpen && editingActivity && ( // Ensure editingActivity is defined before rendering modal
+      {isActivityModalOpen && editingActivity && (
         <ActivityModal
           isOpen={isActivityModalOpen}
           onClose={handleCloseModal}
           activity={editingActivity}
         />
+      )}
+
+      {activityToDelete && (
+        <AlertDialog open={!!activityToDelete} onOpenChange={() => setActivityToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the activity
+                "{activityToDelete.title}" and all its associated todos.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setActivityToDelete(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleConfirmDelete}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
     </div>
   );
