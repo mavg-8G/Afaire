@@ -5,11 +5,19 @@ import React, { createContext, useState, useCallback, useEffect } from 'react';
 import type { Activity, Todo, Category, ActivityStatus } from '@/lib/types';
 import { INITIAL_CATEGORIES } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs
+import { useToast } from '@/hooks/use-toast';
+import { isSameDay } from 'date-fns';
 
 export interface AppContextType {
   activities: Activity[];
   categories: Category[];
-  addActivity: (activityData: Omit<Activity, 'id' | 'todos' | 'status' | 'createdAt' | 'completed'> & { todos?: Omit<Todo, 'id' | 'completed'>[] }, customCreatedAt?: number) => void;
+  addActivity: (
+    activityData: Omit<Activity, 'id' | 'todos' | 'status' | 'createdAt' | 'completed'> & { 
+      todos?: Omit<Todo, 'id' | 'completed'>[];
+      time?: string; 
+    }, 
+    customCreatedAt?: number
+  ) => void;
   updateActivity: (activityId: string, updates: Partial<Activity>) => void;
   deleteActivity: (activityId: string) => void;
   addTodoToActivity: (activityId: string, todoText: string) => void;
@@ -30,6 +38,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [categories] = useState<Category[]>(INITIAL_CATEGORIES);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const [lastNotificationCheckDay, setLastNotificationCheckDay] = useState<number | null>(null);
+  const [notifiedToday, setNotifiedToday] = useState<Set<string>>(new Set());
+
 
   useEffect(() => {
     try {
@@ -46,7 +59,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   useEffect(() => {
-    if (!isLoading) { // Only save when not initially loading
+    if (!isLoading) { 
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVITIES, JSON.stringify(activities));
       } catch (err) {
@@ -56,18 +69,67 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [activities, isLoading]);
 
+  // Effect for activity notifications
+  useEffect(() => {
+    if (isLoading) return; // Don't run notifications while loading
+
+    const intervalId = setInterval(() => {
+      const now = new Date();
+      const currentDay = now.getDate();
+
+      if (lastNotificationCheckDay !== null && lastNotificationCheckDay !== currentDay) {
+        setNotifiedToday(new Set()); // Reset for the new day
+      }
+      setLastNotificationCheckDay(currentDay);
+
+      activities.forEach(activity => {
+        if (!activity.time || notifiedToday.has(activity.id)) {
+          return;
+        }
+
+        const activityDatePart = new Date(activity.createdAt);
+        if (!isSameDay(activityDatePart, now)) {
+          return; // Activity is not for today
+        }
+
+        const [hours, minutes] = activity.time.split(':').map(Number);
+        const activityDateTime = new Date(activityDatePart);
+        activityDateTime.setHours(hours, minutes, 0, 0);
+
+        const fiveMinutesInMs = 5 * 60 * 1000;
+        const timeDiffMs = activityDateTime.getTime() - now.getTime();
+
+        // Notify if activity is within the next 5 minutes (but not past)
+        if (timeDiffMs > 0 && timeDiffMs <= fiveMinutesInMs) {
+          toast({
+            title: "Activity Starting Soon!",
+            description: `"${activity.title}" is scheduled for ${activity.time}.`
+          });
+          setNotifiedToday(prev => new Set(prev).add(activity.id));
+        }
+      });
+    }, 60000); // Check every minute
+
+    return () => clearInterval(intervalId);
+  }, [activities, isLoading, toast, notifiedToday, lastNotificationCheckDay]);
+
 
   const addActivity = useCallback((
-      activityData: Omit<Activity, 'id' | 'todos' | 'status' | 'createdAt' | 'completed'> & { todos?: Omit<Todo, 'id' | 'completed'>[] },
+      activityData: Omit<Activity, 'id' | 'todos' | 'status' | 'createdAt' | 'completed'> & { 
+        todos?: Omit<Todo, 'id' | 'completed'>[];
+        time?: string;
+      },
       customCreatedAt?: number
     ) => {
     const newActivity: Activity = {
-      ...activityData,
       id: uuidv4(),
+      title: activityData.title,
+      categoryId: activityData.categoryId,
       todos: (activityData.todos || []).map(todo => ({ ...todo, id: uuidv4(), completed: false })),
       status: 'todo',
       createdAt: customCreatedAt !== undefined ? customCreatedAt : Date.now(),
-      completed: false, // Initialize as not completed
+      time: activityData.time || undefined,
+      completed: false,
     };
     setActivities(prev => [...prev, newActivity]);
   }, []);

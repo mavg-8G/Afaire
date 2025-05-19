@@ -1,3 +1,4 @@
+
 import type { LucideIcon } from 'lucide-react';
 
 export interface Todo {
@@ -14,7 +15,8 @@ export interface Activity {
   categoryId: string;
   todos: Todo[];
   status: ActivityStatus;
-  createdAt: number; // Timestamp
+  createdAt: number; // Timestamp for the date
+  time?: string; // Optional time in HH:MM format
   completed?: boolean; // Added for activity completion status
 }
 

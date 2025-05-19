@@ -2,7 +2,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, useFieldArray } from "react-hook-form"; // Added useFieldArray here
+import { useForm, useFieldArray } from "react-hook-form";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,7 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from "@/components/ui/checkbox";
-import { PlusCircle, Trash2, Sparkles, Loader2, CalendarIcon } from 'lucide-react';
+import { PlusCircle, Trash2, Sparkles, Loader2, CalendarIcon, Clock } from 'lucide-react';
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Activity, Todo } from '@/lib/types';
 import CategorySelector from '@/components/shared/category-selector';
@@ -52,6 +52,7 @@ const activityFormSchema = z.object({
   title: z.string().min(1, "Activity title is required."),
   categoryId: z.string().min(1, "Category is required."),
   activityDate: z.date({ required_error: "Activity date is required." }),
+  time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format. Use HH:MM (24-hour).").optional().or(z.literal('')),
   todos: z.array(todoSchema).optional(),
 });
 
@@ -68,6 +69,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
       title: "",
       categoryId: "",
       activityDate: initialDate || new Date(),
+      time: "",
       todos: [],
     },
   });
@@ -84,6 +86,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
           title: activity.title,
           categoryId: activity.categoryId,
           activityDate: new Date(activity.createdAt),
+          time: activity.time || "",
           todos: activity.todos.map(t => ({ id: t.id, text: t.text, completed: t.completed })),
         });
       } else {
@@ -91,6 +94,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
           title: "",
           categoryId: "",
           activityDate: initialDate || new Date(),
+          time: "",
           todos: [],
         });
       }
@@ -98,15 +102,16 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
   }, [activity, form, isOpen, initialDate]);
 
   const onSubmit = (data: ActivityFormData) => {
-    const activityPayload = {
+    const activityPayload: Partial<Activity> & { title: string; categoryId: string; createdAt: number } = {
       title: data.title,
       categoryId: data.categoryId,
       todos: data.todos?.map(t => ({ 
-        id: t.id || undefined, // Ensure ID is passed if it exists
+        id: t.id || undefined, 
         text: t.text, 
         completed: t.completed || false 
       })) || [],
-      createdAt: data.activityDate.getTime(), // Use the selected date
+      createdAt: data.activityDate.getTime(),
+      time: data.time === "" ? undefined : data.time,
     };
 
     if (activity) {
@@ -117,10 +122,13 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
       });
       toast({ title: "Activity Updated", description: "Your activity has been successfully updated." });
     } else {
-      // For new activities, the createdAt is already part of activityPayload
-      // The addActivity function in AppProvider handles the specific logic for new vs existing createdAt
       addActivity(
-        { title: data.title, categoryId: data.categoryId, todos: data.todos?.map(t=>({text: t.text, completed: false})) }, 
+        { 
+          title: data.title, 
+          categoryId: data.categoryId, 
+          todos: data.todos?.map(t=>({text: t.text, completed: false})),
+          time: data.time === "" ? undefined : data.time,
+        }, 
         data.activityDate.getTime()
       );
       toast({ title: "Activity Added", description: "Your new activity has been successfully added." });
@@ -199,47 +207,65 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="activityDate"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Activity Date</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                          )}
-                        >
-                          {field.value ? (
-                            format(field.value, "PPP")
-                          ) : (
-                            <span>Pick a date</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        disabled={(date) =>
-                          date < new Date("1900-01-01") // Example: disable past dates
-                        }
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="activityDate"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Activity Date</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value ? (
+                              format(field.value, "PPP")
+                            ) : (
+                              <span>Pick a date</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          disabled={(date) =>
+                            date < new Date("1900-01-01")
+                          }
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="time"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Activity Time (HH:MM)</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Input type="time" {...field} className="pr-8" />
+                        <Clock className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
             
             <div>
               <div className="flex justify-between items-center mb-2">
@@ -249,13 +275,13 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                   Suggest Todos
                 </Button>
               </div>
-              <div className="space-y-2 max-h-40 overflow-y-auto pr-2"> {/* Adjusted max-h */}
+              <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
                 {fields.map((item, index) => (
                   <div key={item.id} className="flex items-center space-x-2">
                     <FormField
                       control={form.control}
                       name={`todos.${index}.completed`}
-                      render={({ field: todoField }) => ( // Renamed field to avoid conflict
+                      render={({ field: todoField }) => (
                         <FormItem>
                           <FormControl>
                              <Checkbox
@@ -270,7 +296,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                     <FormField
                       control={form.control}
                       name={`todos.${index}.text`}
-                      render={({ field: todoField }) => ( // Renamed field to avoid conflict
+                      render={({ field: todoField }) => (
                         <FormItem className="flex-grow">
                           <FormControl>
                             <Input placeholder="New todo item" {...todoField} />
@@ -295,7 +321,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                 <PlusCircle className="mr-2 h-4 w-4" /> Add Todo
               </Button>
             </div>
-          <DialogFooter className="pt-4 mt-auto"> {/* Ensure footer sticks to bottom */}
+          <DialogFooter className="pt-4 mt-auto">
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
             <Button type="submit">{activity ? "Save Changes" : "Add Activity"}</Button>
           </DialogFooter>
