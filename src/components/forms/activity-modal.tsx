@@ -1,8 +1,8 @@
 
 "use client";
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form"; // Added useFieldArray here
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,12 +24,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from "@/components/ui/checkbox";
-import { PlusCircle, Trash2, Sparkles, Loader2 } from 'lucide-react';
+import { PlusCircle, Trash2, Sparkles, Loader2, CalendarIcon } from 'lucide-react';
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Activity, Todo } from '@/lib/types';
 import CategorySelector from '@/components/shared/category-selector';
 import { suggestTodos, type SuggestTodosInput } from '@/ai/flows/suggest-todos';
 import { useToast } from '@/hooks/use-toast';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
+import { format } from 'date-fns';
 
 interface ActivityModalProps {
   isOpen: boolean;
@@ -47,13 +51,14 @@ const todoSchema = z.object({
 const activityFormSchema = z.object({
   title: z.string().min(1, "Activity title is required."),
   categoryId: z.string().min(1, "Category is required."),
+  activityDate: z.date({ required_error: "Activity date is required." }),
   todos: z.array(todoSchema).optional(),
 });
 
 type ActivityFormData = z.infer<typeof activityFormSchema>;
 
 export default function ActivityModal({ isOpen, onClose, activity, initialDate }: ActivityModalProps) {
-  const { addActivity, updateActivity, getCategoryById } = useAppStore();
+  const { addActivity, updateActivity } = useAppStore();
   const { toast } = useToast();
   const [isSuggestingTodos, setIsSuggestingTodos] = useState(false);
 
@@ -62,54 +67,62 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
     defaultValues: {
       title: "",
       categoryId: "",
+      activityDate: initialDate || new Date(),
       todos: [],
     },
   });
 
-  const { fields, append, remove, update } = useFieldArray({
+  const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "todos",
   });
 
   useEffect(() => {
-    if (activity) {
-      form.reset({
-        title: activity.title,
-        categoryId: activity.categoryId,
-        todos: activity.todos.map(t => ({ id: t.id, text: t.text, completed: t.completed })),
-      });
-    } else {
-      form.reset({ title: "", categoryId: "", todos: [] });
+    if (isOpen) {
+      if (activity) {
+        form.reset({
+          title: activity.title,
+          categoryId: activity.categoryId,
+          activityDate: new Date(activity.createdAt),
+          todos: activity.todos.map(t => ({ id: t.id, text: t.text, completed: t.completed })),
+        });
+      } else {
+        form.reset({
+          title: "",
+          categoryId: "",
+          activityDate: initialDate || new Date(),
+          todos: [],
+        });
+      }
     }
-  }, [activity, form, isOpen]);
+  }, [activity, form, isOpen, initialDate]);
 
   const onSubmit = (data: ActivityFormData) => {
-    const baseActivityData = {
+    const activityPayload = {
       title: data.title,
       categoryId: data.categoryId,
-      todos: data.todos?.map(t => ({ text: t.text })) || [],
+      todos: data.todos?.map(t => ({ 
+        id: t.id || undefined, // Ensure ID is passed if it exists
+        text: t.text, 
+        completed: t.completed || false 
+      })) || [],
+      createdAt: data.activityDate.getTime(), // Use the selected date
     };
 
     if (activity) {
-      const updatedTodos = data.todos?.map(t => ({
-        id: t.id || '', 
-        text: t.text,
-        completed: t.completed || false
-      })) || [];
-      updateActivity(activity.id, { 
-        title: data.title, 
-        categoryId: data.categoryId, 
-        todos: updatedTodos as Todo[] 
+      updateActivity(activity.id, {
+        ...activityPayload,
+        // Ensure todos are correctly cast to Todo[] if they exist
+        todos: activityPayload.todos as Todo[],
       });
       toast({ title: "Activity Updated", description: "Your activity has been successfully updated." });
     } else {
-      let newActivityCreatedAt: number;
-      if (initialDate) {
-        newActivityCreatedAt = initialDate.getTime();
-      } else {
-        newActivityCreatedAt = new Date().getTime();
-      }
-      addActivity(baseActivityData, newActivityCreatedAt);
+      // For new activities, the createdAt is already part of activityPayload
+      // The addActivity function in AppProvider handles the specific logic for new vs existing createdAt
+      addActivity(
+        { title: data.title, categoryId: data.categoryId, todos: data.todos?.map(t=>({text: t.text, completed: false})) }, 
+        data.activityDate.getTime()
+      );
       toast({ title: "Activity Added", description: "Your new activity has been successfully added." });
     }
     onClose();
@@ -144,7 +157,6 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
     }
   };
 
-
   if (!isOpen) return null;
 
   return (
@@ -153,8 +165,8 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
         <DialogHeader>
           <DialogTitle>{activity ? "Edit Activity" : "Add New Activity"}</DialogTitle>
           <DialogDescription>
-            {activity ? "Update the details of your activity." : "Fill in the details for your new activity."}
-            {initialDate && !activity && ` Activity will be for ${format(initialDate, "PPP")}.`}
+            {activity ? "Update the details of your activity." : 
+             `Fill in the details for your new activity. ${initialDate && !activity ? `Defaulting to ${format(initialDate, "PPP")}.` : 'You can change the date below.'}`}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -187,6 +199,47 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                 </FormItem>
               )}
             />
+            <FormField
+              control={form.control}
+              name="activityDate"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Activity Date</FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant={"outline"}
+                          className={cn(
+                            "w-full pl-3 text-left font-normal",
+                            !field.value && "text-muted-foreground"
+                          )}
+                        >
+                          {field.value ? (
+                            format(field.value, "PPP")
+                          ) : (
+                            <span>Pick a date</span>
+                          )}
+                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={field.value}
+                        onSelect={field.onChange}
+                        disabled={(date) =>
+                          date < new Date("1900-01-01") // Example: disable past dates
+                        }
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             
             <div>
               <div className="flex justify-between items-center mb-2">
@@ -196,33 +249,31 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                   Suggest Todos
                 </Button>
               </div>
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+              <div className="space-y-2 max-h-40 overflow-y-auto pr-2"> {/* Adjusted max-h */}
                 {fields.map((item, index) => (
                   <div key={item.id} className="flex items-center space-x-2">
-                    {activity && ( 
-                       <FormField
-                        control={form.control}
-                        name={`todos.${index}.completed`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormControl>
-                               <Checkbox
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                                id={`todo-completed-${index}`}
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                    )}
+                    <FormField
+                      control={form.control}
+                      name={`todos.${index}.completed`}
+                      render={({ field: todoField }) => ( // Renamed field to avoid conflict
+                        <FormItem>
+                          <FormControl>
+                             <Checkbox
+                              checked={todoField.value}
+                              onCheckedChange={todoField.onChange}
+                              id={`todo-completed-${index}`}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
                     <FormField
                       control={form.control}
                       name={`todos.${index}.text`}
-                      render={({ field }) => (
+                      render={({ field: todoField }) => ( // Renamed field to avoid conflict
                         <FormItem className="flex-grow">
                           <FormControl>
-                            <Input placeholder="New todo item" {...field} />
+                            <Input placeholder="New todo item" {...todoField} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -244,7 +295,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                 <PlusCircle className="mr-2 h-4 w-4" /> Add Todo
               </Button>
             </div>
-          <DialogFooter className="pt-4">
+          <DialogFooter className="pt-4 mt-auto"> {/* Ensure footer sticks to bottom */}
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
             <Button type="submit">{activity ? "Save Changes" : "Add Activity"}</Button>
           </DialogFooter>
@@ -254,5 +305,3 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
     </Dialog>
   );
 }
-// Helper function (ensure it's imported or defined if not already)
-import { format } from 'date-fns';
