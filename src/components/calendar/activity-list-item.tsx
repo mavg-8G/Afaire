@@ -1,6 +1,6 @@
 
 "use client";
-import type { Activity, Category } from '@/lib/types';
+import type { Activity, Category, Todo } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Edit3, Trash2 } from 'lucide-react';
@@ -22,7 +22,14 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete 
   const totalTodos = activity.todos.length;
 
   const handleActivityCompletedChange = (completed: boolean) => {
-    updateActivity(activity.id, { completed });
+    if (completed) {
+      const updatedTodos = activity.todos.map(todo => ({ ...todo, completed: true }));
+      updateActivity(activity.id, { completed, todos: updatedTodos as Todo[] });
+    } else {
+      // If unchecking the activity, only update the activity's completed status.
+      // Todos retain their individual completion status.
+      updateActivity(activity.id, { completed });
+    }
   };
 
   return (
