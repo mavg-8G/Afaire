@@ -94,7 +94,12 @@ export default function ActivityCalendarView() {
         if (aHours !== bHours) return aHours - bHours;
         if (aMinutes !== bMinutes) return aMinutes - bMinutes;
       }
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      // For weekly/monthly view, sort by date first then by original logic
+      if (viewMode === 'weekly' || viewMode === 'monthly') {
+        const dateComparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        if (dateComparison !== 0) return dateComparison;
+      }
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(); // Fallback or for daily view
     });
   }, [activities, selectedDate, hasMounted, viewMode, dateLocale]);
 
@@ -266,6 +271,7 @@ export default function ActivityCalendarView() {
                     category={getCategoryById(activity.categoryId)}
                     onEdit={() => handleEditActivity(activity)}
                     onDelete={() => handleOpenDeleteConfirm(activity)}
+                    showDate={viewMode === 'weekly' || viewMode === 'monthly'}
                   />
                 ))}
               </div>
