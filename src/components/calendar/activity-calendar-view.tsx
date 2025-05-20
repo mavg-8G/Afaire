@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Calendar } from '@/components/ui/calendar';
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Activity } from '@/lib/types';
@@ -26,11 +26,16 @@ import { useToast } from '@/hooks/use-toast';
 export default function ActivityCalendarView() {
   const { activities, getCategoryById, deleteActivity } = useAppStore();
   const { toast } = useToast();
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | undefined>(undefined);
   const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
   const [isAddingActivityForSelectedDate, setIsAddingActivityForSelectedDate] = useState(false);
+
+  useEffect(() => {
+    // Set selectedDate on the client side after hydration to avoid mismatch
+    setSelectedDate(new Date());
+  }, []);
 
 
   const eventDays = useMemo(() => {
@@ -94,6 +99,7 @@ export default function ActivityCalendarView() {
             className="rounded-md"
             modifiers={modifiers}
             modifiersClassNames={modifiersClassNames}
+            initialFocus // Add initialFocus to help with client-side rendering consistency
           />
         </CardContent>
       </Card>
@@ -101,11 +107,11 @@ export default function ActivityCalendarView() {
       <Card className="lg:w-1/2 xl:w-1/3 shadow-lg w-full flex flex-col">
         <CardHeader>
           <CardTitle>
-            Activities for {selectedDate ? format(selectedDate, 'PPP') : 'Selected Date'}
+            Activities for {selectedDate ? format(selectedDate, 'PPP') : 'Loading date...'}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-grow">
-          {activitiesForSelectedDay.length > 0 ? (
+          {selectedDate && activitiesForSelectedDay.length > 0 ? (
             <ScrollArea className="h-[calc(100vh-30rem)] sm:h-[calc(100vh-28rem)] pr-1">
               <div className="space-y-3">
                 {activitiesForSelectedDay.map(activity => (
@@ -121,7 +127,7 @@ export default function ActivityCalendarView() {
             </ScrollArea>
           ) : (
             <p className="text-sm text-muted-foreground py-4 text-center">
-              No activities scheduled for this day.
+              {selectedDate ? "No activities scheduled for this day." : "Select a date to see activities."}
             </p>
           )}
         </CardContent>
