@@ -66,8 +66,11 @@ export type Translations = {
 
   // ActivityCalendarView
   activitiesForDate: (params: { date: string }) => string;
+  activitiesForWeek: (params: { startDate: string; endDate: string }) => string;
+  activitiesForMonth: (params: { month: string }) => string;
   loadingDate: string;
-  noActivitiesForDay: string;
+  noActivitiesForDay: string; // Kept for specific daily messages if needed, but new general one below
+  noActivitiesForPeriod: string; // New general message
   selectDateToSeeActivities: string;
   addActivityForDate: (params: { date: string }) => string;
   confirmDeleteActivityTitle: string;
@@ -75,6 +78,9 @@ export type Translations = {
   toastActivityDeletedTitle: string;
   toastActivityDeletedDescription: (params: { activityTitle: string }) => string;
   todayButton: string;
+  viewDaily: string;
+  viewWeekly: string;
+  viewMonthly: string;
 
   // ActivityListItem
   editActivitySr: string; // Sr for Screen Reader
@@ -141,8 +147,11 @@ export const translations: Record<Locale, Translations> = {
     toastSuggestionError: "Suggestion Error",
     toastSuggestionErrorDescription: "Could not fetch todo suggestions.",
     activitiesForDate: (params) => `Activities for ${params.date}`,
+    activitiesForWeek: (params) => `Activities for week: ${params.startDate} - ${params.endDate}`,
+    activitiesForMonth: (params) => `Activities for ${params.month}`,
     loadingDate: "Loading date...",
     noActivitiesForDay: "No activities scheduled for this day.",
+    noActivitiesForPeriod: "No activities scheduled for this period.",
     selectDateToSeeActivities: "Select a date to see activities.",
     addActivityForDate: (params) => `Add Activity for ${params.date}`,
     confirmDeleteActivityTitle: "Are you sure?",
@@ -150,6 +159,9 @@ export const translations: Record<Locale, Translations> = {
     toastActivityDeletedTitle: "Activity Deleted",
     toastActivityDeletedDescription: (params) => `"${params.activityTitle}" has been removed.`,
     todayButton: "Today",
+    viewDaily: "Daily",
+    viewWeekly: "Weekly",
+    viewMonthly: "Monthly",
     editActivitySr: "Edit Activity",
     deleteActivitySr: "Delete Activity",
     todosCompleted: (params) => `${params.completed} / ${params.total} todos completed`,
@@ -211,8 +223,11 @@ export const translations: Record<Locale, Translations> = {
     toastSuggestionError: "Error de Sugerencia",
     toastSuggestionErrorDescription: "No se pudieron obtener sugerencias de tareas.",
     activitiesForDate: (params) => `Actividades para ${params.date}`,
+    activitiesForWeek: (params) => `Actividades para la semana: ${params.startDate} - ${params.endDate}`,
+    activitiesForMonth: (params) => `Actividades para ${params.month}`,
     loadingDate: "Cargando fecha...",
     noActivitiesForDay: "No hay actividades programadas para este día.",
+    noActivitiesForPeriod: "No hay actividades programadas para este período.",
     selectDateToSeeActivities: "Selecciona una fecha para ver actividades.",
     addActivityForDate: (params) => `Añadir Actividad para ${params.date}`,
     confirmDeleteActivityTitle: "¿Estás seguro?",
@@ -220,6 +235,9 @@ export const translations: Record<Locale, Translations> = {
     toastActivityDeletedTitle: "Actividad Eliminada",
     toastActivityDeletedDescription: (params) => `Se ha eliminado "${params.activityTitle}".`,
     todayButton: "Hoy",
+    viewDaily: "Diario",
+    viewWeekly: "Semanal",
+    viewMonthly: "Mensual",
     editActivitySr: "Editar Actividad",
     deleteActivitySr: "Eliminar Actividad",
     todosCompleted: (params) => `${params.completed} / ${params.total} tareas completadas`,
@@ -227,5 +245,4 @@ export const translations: Record<Locale, Translations> = {
     noTodosForThisActivity: "No hay tareas para esta actividad.",
   },
 };
-
     

@@ -4,7 +4,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Calendar } from '@/components/ui/calendar';
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Activity } from '@/lib/types';
-import { isSameDay, format } from 'date-fns';
+import { isSameDay, format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import ActivityModal from '@/components/forms/activity-modal';
 import ActivityListItem from './activity-list-item';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -21,22 +21,26 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from '@/hooks/use-toast';
 import { useTranslations } from '@/contexts/language-context';
 import { enUS, es } from 'date-fns/locale';
 import { Skeleton } from '@/components/ui/skeleton';
+
+type ViewMode = 'daily' | 'weekly' | 'monthly';
 
 export default function ActivityCalendarView() {
   const { activities, getCategoryById, deleteActivity } = useAppStore();
   const { toast } = useToast();
   const { t, locale } = useTranslations();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
-  const [currentDisplayMonth, setCurrentDisplayMonth] = useState<Date | undefined>(undefined); // State for the calendar's displayed month
+  const [currentDisplayMonth, setCurrentDisplayMonth] = useState<Date | undefined>(undefined);
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | undefined>(undefined);
   const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
   const [isAddingActivityForSelectedDate, setIsAddingActivityForSelectedDate] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('daily');
 
   const dateLocale = locale === 'es' ? es : enUS;
 
@@ -44,7 +48,7 @@ export default function ActivityCalendarView() {
     setHasMounted(true);
     const today = new Date();
     setSelectedDate(today);
-    setCurrentDisplayMonth(today); // Initialize currentDisplayMonth
+    setCurrentDisplayMonth(today);
   }, []);
 
 
@@ -53,41 +57,46 @@ export default function ActivityCalendarView() {
     return activities.map(activity => new Date(activity.createdAt));
   }, [activities, hasMounted]);
 
-  const activitiesForSelectedDay = useMemo(() => {
+  const activitiesForView = useMemo(() => {
     if (!selectedDate || !hasMounted) return [];
-    return activities
-      .filter(activity => isSameDay(new Date(activity.createdAt), selectedDate))
-      .sort((a, b) => {
-        // 1. Primary sort: completed activities first (false means not completed, so it comes "before" true in ascending sort)
-        // We want completed (true) to come AFTER not completed (false). So if a.completed is true and b.completed is false, a should be later.
-        if (a.completed && !b.completed) return 1; // a (completed) comes after b (not completed)
-        if (!a.completed && b.completed) return -1; // a (not completed) comes before b (completed)
+    
+    let filteredActivities: Activity[] = [];
 
-        // If both are completed or both are not completed, proceed to time-based sorting
-        const aHasTime = !!a.time;
-        const bHasTime = !!b.time;
+    if (viewMode === 'daily') {
+      filteredActivities = activities.filter(activity => isSameDay(new Date(activity.createdAt), selectedDate));
+    } else if (viewMode === 'weekly') {
+      const weekStart = startOfWeek(selectedDate, { locale: dateLocale });
+      const weekEnd = endOfWeek(selectedDate, { locale: dateLocale });
+      filteredActivities = activities.filter(activity => 
+        isWithinInterval(new Date(activity.createdAt), { start: weekStart, end: weekEnd })
+      );
+    } else if (viewMode === 'monthly') {
+      const monthStart = startOfMonth(selectedDate);
+      const monthEnd = endOfMonth(selectedDate);
+      filteredActivities = activities.filter(activity => 
+        isWithinInterval(new Date(activity.createdAt), { start: monthStart, end: monthEnd })
+      );
+    }
 
-        // 2. Secondary sort: activities with time come before activities without time (within the same completion group)
-        if (aHasTime && !bHasTime) return -1; // a (with time) comes before b (without time)
-        if (!aHasTime && bHasTime) return 1; // a (without time) comes after b (with time)
+    return filteredActivities.sort((a, b) => {
+      if (a.completed && !b.completed) return 1;
+      if (!a.completed && b.completed) return -1;
 
-        // 3. Tertiary sort: if both have time, sort by time ascending
-        if (aHasTime && bHasTime && a.time && b.time) {
-          const [aHours, aMinutes] = a.time.split(':').map(Number);
-          const [bHours, bMinutes] = b.time.split(':').map(Number);
+      const aHasTime = !!a.time;
+      const bHasTime = !!b.time;
 
-          if (aHours !== bHours) {
-            return aHours - bHours;
-          }
-          if (aMinutes !== bMinutes) {
-            return aMinutes - bMinutes;
-          }
-        }
-        
-        // 4. Fallback sort: use original creation time for stability if other criteria are equal
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      });
-  }, [activities, selectedDate, hasMounted]);
+      if (aHasTime && !bHasTime) return -1;
+      if (!aHasTime && bHasTime) return 1;
+
+      if (aHasTime && bHasTime && a.time && b.time) {
+        const [aHours, aMinutes] = a.time.split(':').map(Number);
+        const [bHours, bMinutes] = b.time.split(':').map(Number);
+        if (aHours !== bHours) return aHours - bHours;
+        if (aMinutes !== bMinutes) return aMinutes - bMinutes;
+      }
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+  }, [activities, selectedDate, hasMounted, viewMode, dateLocale]);
 
   const handleEditActivity = (activity: Activity) => {
     setEditingActivity(activity);
@@ -138,9 +147,9 @@ export default function ActivityCalendarView() {
       const newSelectedMonthStart = new Date(date.getFullYear(), date.getMonth(), 1);
       const currentDisplayMonthStart = new Date(currentDisplayMonth.getFullYear(), currentDisplayMonth.getMonth(), 1);
       if (newSelectedMonthStart.getTime() !== currentDisplayMonthStart.getTime()) {
-          setCurrentDisplayMonth(date); // Update display month if selected date is in a different month
+          setCurrentDisplayMonth(date);
       }
-    } else if (date) { // If currentDisplayMonth was undefined but date is not
+    } else if (date) {
         setCurrentDisplayMonth(date);
     }
   };
@@ -148,7 +157,7 @@ export default function ActivityCalendarView() {
   const handleTodayButtonClick = () => {
     const today = new Date();
     setSelectedDate(today);
-    setCurrentDisplayMonth(today); // Explicitly set the calendar to show today's month
+    setCurrentDisplayMonth(today);
   };
 
   const todayButtonFooter = (
@@ -162,6 +171,24 @@ export default function ActivityCalendarView() {
       </Button>
     </div>
   );
+
+  const getCardTitle = () => {
+    if (!selectedDate) return t('loadingDate');
+    if (viewMode === 'daily') {
+      return t('activitiesForDate', { date: format(selectedDate, 'PPP', { locale: dateLocale }) });
+    } else if (viewMode === 'weekly') {
+      const weekStart = startOfWeek(selectedDate, { locale: dateLocale });
+      const weekEnd = endOfWeek(selectedDate, { locale: dateLocale });
+      return t('activitiesForWeek', { 
+        startDate: format(weekStart, 'MMM d', { locale: dateLocale }), 
+        endDate: format(weekEnd, 'MMM d, yyyy', { locale: dateLocale }) 
+      });
+    } else if (viewMode === 'monthly') {
+      return t('activitiesForMonth', { month: format(selectedDate, 'MMMM yyyy', { locale: dateLocale }) });
+    }
+    return t('loadingDate');
+  };
+
 
   if (!hasMounted || !selectedDate || !currentDisplayMonth) { 
     return (
@@ -202,8 +229,8 @@ export default function ActivityCalendarView() {
             mode="single"
             selected={selectedDate}
             onSelect={handleDateSelect}
-            month={currentDisplayMonth} // Control displayed month
-            onMonthChange={setCurrentDisplayMonth} // Sync when user navigates months
+            month={currentDisplayMonth}
+            onMonthChange={setCurrentDisplayMonth}
             className="rounded-md"
             modifiers={modifiers}
             modifiersClassNames={modifiersClassNames}
@@ -216,14 +243,23 @@ export default function ActivityCalendarView() {
       <Card className="lg:w-1/2 xl:w-1/3 shadow-lg w-full flex flex-col">
         <CardHeader>
           <CardTitle>
-            {selectedDate ? t('activitiesForDate', {date: format(selectedDate, 'PPP', { locale: dateLocale })}) : t('loadingDate')}
+            {getCardTitle()}
           </CardTitle>
+          <div className="pt-2">
+            <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)}>
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="daily">{t('viewDaily')}</TabsTrigger>
+                <TabsTrigger value="weekly">{t('viewWeekly')}</TabsTrigger>
+                <TabsTrigger value="monthly">{t('viewMonthly')}</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
         </CardHeader>
         <CardContent className="flex-grow">
-          {selectedDate && activitiesForSelectedDay.length > 0 ? (
-            <ScrollArea className="h-[calc(100vh-30rem)] sm:h-[calc(100vh-28rem)] pr-1">
+          {selectedDate && activitiesForView.length > 0 ? (
+            <ScrollArea className="h-[calc(100vh-34rem)] sm:h-[calc(100vh-32rem)] pr-1">
               <div className="space-y-3">
-                {activitiesForSelectedDay.map(activity => (
+                {activitiesForView.map(activity => (
                   <ActivityListItem 
                     key={activity.id} 
                     activity={activity} 
@@ -236,7 +272,7 @@ export default function ActivityCalendarView() {
             </ScrollArea>
           ) : (
             <p className="text-sm text-muted-foreground py-4 text-center">
-              {selectedDate ? t('noActivitiesForDay') : t('selectDateToSeeActivities')}
+              {selectedDate ? t('noActivitiesForPeriod') : t('selectDateToSeeActivities')}
             </p>
           )}
         </CardContent>
@@ -280,6 +316,4 @@ export default function ActivityCalendarView() {
     </div>
   );
 }
-    
-
     
