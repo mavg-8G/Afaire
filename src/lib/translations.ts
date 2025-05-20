@@ -23,14 +23,14 @@ export type Translations = {
   createCategoryDescription: string;
   categoryName: string;
   iconName: string;
-  iconNameDescriptionLink: string; 
+  iconNameDescriptionLink: string;
   saveChanges: string;
   cancel: string;
   existingCategories: string;
   viewEditManageCategories: string;
   delete: string;
   confirmDelete: string;
-  confirmDeleteCategoryDescription: (params: { categoryName: string }) => string; 
+  confirmDeleteCategoryDescription: (params: { categoryName: string }) => string;
   categoriesCount: (params: { count: number }) => string;
   noCategoriesYet: string;
 
@@ -74,6 +74,7 @@ export type Translations = {
   confirmDeleteActivityDescription: (params: { activityTitle: string }) => string;
   toastActivityDeletedTitle: string;
   toastActivityDeletedDescription: (params: { activityTitle: string }) => string;
+  todayButton: string;
 
   // ActivityListItem
   editActivitySr: string; // Sr for Screen Reader
@@ -148,6 +149,7 @@ export const translations: Record<Locale, Translations> = {
     confirmDeleteActivityDescription: (params) => `This action cannot be undone. This will permanently delete the activity "${params.activityTitle}" and all its associated todos.`,
     toastActivityDeletedTitle: "Activity Deleted",
     toastActivityDeletedDescription: (params) => `"${params.activityTitle}" has been removed.`,
+    todayButton: "Today",
     editActivitySr: "Edit Activity",
     deleteActivitySr: "Delete Activity",
     todosCompleted: (params) => `${params.completed} / ${params.total} todos completed`,
@@ -217,6 +219,7 @@ export const translations: Record<Locale, Translations> = {
     confirmDeleteActivityDescription: (params) => `Esta acción no se puede deshacer. Esto eliminará permanentemente la actividad "${params.activityTitle}" y todas sus tareas asociadas.`,
     toastActivityDeletedTitle: "Actividad Eliminada",
     toastActivityDeletedDescription: (params) => `Se ha eliminado "${params.activityTitle}".`,
+    todayButton: "Hoy",
     editActivitySr: "Editar Actividad",
     deleteActivitySr: "Eliminar Actividad",
     todosCompleted: (params) => `${params.completed} / ${params.total} tareas completadas`,
@@ -224,3 +227,5 @@ export const translations: Record<Locale, Translations> = {
     noTodosForThisActivity: "No hay tareas para esta actividad.",
   },
 };
+
+    

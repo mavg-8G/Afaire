@@ -55,17 +55,18 @@ export default function ActivityCalendarView() {
     return activities
       .filter(activity => isSameDay(new Date(activity.createdAt), selectedDate))
       .sort((a, b) => {
-        // 1. Primary sort: completed activities first
-        if (a.completed && !b.completed) return -1;
-        if (!a.completed && b.completed) return 1;
+        // 1. Primary sort: completed activities first (false means not completed, so it comes "before" true in ascending sort)
+        // We want completed (true) to come AFTER not completed (false). So if a.completed is true and b.completed is false, a should be later.
+        if (a.completed && !b.completed) return 1; // a (completed) comes after b (not completed)
+        if (!a.completed && b.completed) return -1; // a (not completed) comes before b (completed)
 
         // If both are completed or both are not completed, proceed to time-based sorting
         const aHasTime = !!a.time;
         const bHasTime = !!b.time;
 
-        // 2. Secondary sort: activities with time come before activities without time
-        if (aHasTime && !bHasTime) return -1;
-        if (!aHasTime && bHasTime) return 1;
+        // 2. Secondary sort: activities with time come before activities without time (within the same completion group)
+        if (aHasTime && !bHasTime) return -1; // a (with time) comes before b (without time)
+        if (!aHasTime && bHasTime) return 1; // a (without time) comes after b (with time)
 
         // 3. Tertiary sort: if both have time, sort by time ascending
         if (aHasTime && bHasTime && a.time && b.time) {
@@ -128,6 +129,18 @@ export default function ActivityCalendarView() {
     hasEvent: 'day-with-event',
   };
 
+  const todayButtonFooter = (
+    <div className="flex justify-center pt-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setSelectedDate(new Date())}
+      >
+        {t('todayButton')}
+      </Button>
+    </div>
+  );
+
   if (!hasMounted) {
     return (
       <div className="container mx-auto py-6 flex flex-col lg:flex-row gap-6 items-start">
@@ -172,6 +185,7 @@ export default function ActivityCalendarView() {
             modifiersClassNames={modifiersClassNames}
             initialFocus
             locale={dateLocale}
+            footer={todayButtonFooter}
           />
         </CardContent>
       </Card>
@@ -243,3 +257,5 @@ export default function ActivityCalendarView() {
     </div>
   );
 }
+
+    
