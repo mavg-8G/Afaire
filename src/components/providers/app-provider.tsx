@@ -8,11 +8,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import { isSameDay } from 'date-fns';
 import * as Icons from 'lucide-react';
-import { useTranslations } from '@/contexts/language-context'; // Import useTranslations
+import { useTranslations } from '@/contexts/language-context';
 
 export interface AppContextType {
-  activities: Activity[]; // This will be the derived list for the current mode
-  categories: Category[]; // This will also be a derived list for the current mode
+  activities: Activity[];
+  categories: Category[];
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
   addActivity: (
@@ -35,11 +35,12 @@ export interface AppContextType {
   error: string | null;
 
   isAuthenticated: boolean;
-  setIsAuthenticated: (value: boolean) => void;
+  setIsAuthenticated: (value: boolean, rememberMe?: boolean) => void;
   loginAttempts: number;
   setLoginAttempts: (attempts: number) => void;
   lockoutEndTime: number | null;
   setLockoutEndTime: (timestamp: number | null) => void;
+  sessionExpiryTimestamp: number | null;
   logout: () => void;
 }
 
@@ -52,6 +53,10 @@ const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode';
 const LOCAL_STORAGE_KEY_IS_AUTHENTICATED = 'todoFlowIsAuthenticated';
 const LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS = 'todoFlowLoginAttempts';
 const LOCAL_STORAGE_KEY_LOCKOUT_END_TIME = 'todoFlowLockoutEndTime';
+const LOCAL_STORAGE_KEY_SESSION_EXPIRY = 'todoFlowSessionExpiry';
+
+const SESSION_DURATION_24_HOURS_MS = 24 * 60 * 60 * 1000;
+const SESSION_DURATION_30_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 
 const getIconComponent = (iconName: string): Icons.LucideIcon => {
@@ -68,7 +73,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-  const { t } = useTranslations(); // Get the translation function
+  const { t } = useTranslations();
 
   const [lastNotificationCheckDay, setLastNotificationCheckDay] = useState<number | null>(null);
   const [notifiedToday, setNotifiedToday] = useState<Set<string>>(new Set());
@@ -76,6 +81,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isAuthenticated, setIsAuthenticatedState] = useState<boolean>(false);
   const [loginAttempts, setLoginAttemptsState] = useState<number>(0);
   const [lockoutEndTime, setLockoutEndTimeState] = useState<number | null>(null);
+  const [sessionExpiryTimestamp, setSessionExpiryTimestampState] = useState<number | null>(null);
+
 
   const activities = useMemo(() => {
     return appMode === 'work' ? workActivities : personalActivities;
@@ -86,7 +93,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [appMode]);
 
   const filteredCategories = useMemo(() => {
-    if (isLoading) return [];
+    if (isLoading) return []; // Avoid filtering before categories are loaded
     return allCategories.filter(cat =>
       !cat.mode || cat.mode === 'all' || cat.mode === appMode
     );
@@ -125,24 +132,49 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) {
         setAppModeState(storedAppMode);
       }
-      
+
+      // Authentication and Session Expiry Logic
       const storedAuth = localStorage.getItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
-      setIsAuthenticatedState(storedAuth === 'true');
+      const storedExpiry = localStorage.getItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
+
+      if (storedAuth === 'true' && storedExpiry) {
+        const expiryTime = parseInt(storedExpiry, 10);
+        if (Date.now() > expiryTime) {
+          // Session expired
+          setIsAuthenticatedState(false);
+          localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
+          setSessionExpiryTimestampState(null);
+          localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
+          // Optionally clear attempts and lockout if session expires
+          setLoginAttemptsState(0);
+          localStorage.removeItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
+          setLockoutEndTimeState(null);
+          localStorage.removeItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
+        } else {
+          // Session valid
+          setIsAuthenticatedState(true);
+          setSessionExpiryTimestampState(expiryTime);
+        }
+      } else {
+        // Not authenticated or no expiry found
+        setIsAuthenticatedState(false);
+        setSessionExpiryTimestampState(null);
+      }
 
       const storedAttempts = localStorage.getItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
       setLoginAttemptsState(storedAttempts ? parseInt(storedAttempts, 10) : 0);
-      
+
       const storedLockoutTime = localStorage.getItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
       setLockoutEndTimeState(storedLockoutTime ? parseInt(storedLockoutTime, 10) : null);
 
     } catch (err) {
       console.error("Failed to load data from local storage", err);
       setError("Failed to load saved data.");
-      setAllCategories(INITIAL_CATEGORIES); // Fallback in case of parsing error too
+      setAllCategories(INITIAL_CATEGORIES);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, []); // Empty dependency array: runs only on mount
 
   // --- Persistence Effects ---
   useEffect(() => {
@@ -175,7 +207,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     if (!isLoading) {
-      localStorage.setItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED, String(isAuthenticated));
+      if (isAuthenticated) {
+        localStorage.setItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED, 'true');
+      } else {
+        localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
+      }
     }
   }, [isAuthenticated, isLoading]);
 
@@ -194,6 +230,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
   }, [lockoutEndTime, isLoading]);
+
+   useEffect(() => {
+    if (!isLoading) {
+      if (sessionExpiryTimestamp === null) {
+        localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
+      } else {
+        localStorage.setItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY, String(sessionExpiryTimestamp));
+      }
+    }
+  }, [sessionExpiryTimestamp, isLoading]);
 
 
   useEffect(() => {
@@ -221,7 +267,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         activityDateTime.setHours(hours, minutes, 0, 0);
         const fiveMinutesInMs = 5 * 60 * 1000;
         const timeDiffMs = activityDateTime.getTime() - now.getTime();
-        
+
         if (timeDiffMs >= 0 && timeDiffMs <= fiveMinutesInMs) {
           toast({
             title: t('toastActivityStartingSoonTitle'),
@@ -239,8 +285,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setAppModeState(mode);
   }, []);
 
-  const setIsAuthenticated = useCallback((value: boolean) => {
+  const setIsAuthenticated = useCallback((value: boolean, rememberMe: boolean = false) => {
     setIsAuthenticatedState(value);
+    if (value) { // Logging in
+      const now = Date.now();
+      const expiryDuration = rememberMe ? SESSION_DURATION_30_DAYS_MS : SESSION_DURATION_24_HOURS_MS;
+      const newExpiryTimestamp = now + expiryDuration;
+      setSessionExpiryTimestampState(newExpiryTimestamp);
+    } else { // Logging out or session expired
+      setSessionExpiryTimestampState(null);
+    }
   }, []);
 
   const setLoginAttempts = useCallback((attempts: number) => {
@@ -255,9 +309,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setIsAuthenticatedState(false);
     setLoginAttemptsState(0);
     setLockoutEndTimeState(null);
-    // Optionally clear app mode or set to default
-    // setAppModeState('personal'); 
-    // localStorage.removeItem(LOCAL_STORAGE_KEY_APP_MODE);
+    setSessionExpiryTimestampState(null);
   }, []);
 
   const addActivity = useCallback((
@@ -325,7 +377,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       )
     );
   }, [currentActivitySetter]);
-  
+
   const getCategoryById = useCallback(
     (categoryId: string) => allCategories.find(cat => cat.id === categoryId),
     [allCategories]
@@ -341,9 +393,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       mode: mode,
     };
     setAllCategories(prev => [...prev, newCategory]);
-    toast({ 
-      title: t('toastCategoryAddedTitle'), 
-      description: t('toastCategoryAddedDescription', { categoryName: name }) 
+    toast({
+      title: t('toastCategoryAddedTitle'),
+      description: t('toastCategoryAddedDescription', { categoryName: name })
     });
   }, [toast, t]);
 
@@ -365,7 +417,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return cat;
       })
     );
-    toast({ 
+    toast({
       title: t('toastCategoryUpdatedTitle'),
       description: t('toastCategoryUpdatedDescription')
     });
@@ -377,20 +429,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!categoryToDelete) return;
 
     setAllCategories(prev => prev.filter(cat => cat.id !== categoryId));
-    
-    setPersonalActivities(prevActivities => 
-      prevActivities.map(act => 
-        act.categoryId === categoryId ? { ...act, categoryId: '' } : act 
+
+    setPersonalActivities(prevActivities =>
+      prevActivities.map(act =>
+        act.categoryId === categoryId ? { ...act, categoryId: '' } : act
       )
     );
-    setWorkActivities(prevActivities => 
-      prevActivities.map(act => 
-        act.categoryId === categoryId ? { ...act, categoryId: '' } : act 
+    setWorkActivities(prevActivities =>
+      prevActivities.map(act =>
+        act.categoryId === categoryId ? { ...act, categoryId: '' } : act
       )
     );
-    toast({ 
-      title: t('toastCategoryDeletedTitle'), 
-      description: t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name }) 
+    toast({
+      title: t('toastCategoryDeletedTitle'),
+      description: t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name })
     });
   }, [toast, allCategories, t]);
 
@@ -398,7 +450,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   return (
     <AppContext.Provider
       value={{
-        activities, 
+        activities,
         categories: filteredCategories,
         appMode,
         setAppMode,
@@ -420,6 +472,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setLoginAttempts,
         lockoutEndTime,
         setLockoutEndTime,
+        sessionExpiryTimestamp,
         logout,
       }}
     >
@@ -428,3 +481,4 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 };
 
+    

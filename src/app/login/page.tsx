@@ -7,6 +7,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useAppStore } from '@/hooks/use-app-store';
@@ -20,6 +22,7 @@ import { Terminal } from 'lucide-react';
 const loginFormSchema = z.object({
   username: z.string().min(1, 'loginUsernameRequired'),
   password: z.string().min(1, 'loginPasswordRequired'),
+  rememberMe: z.boolean().default(false).optional(),
 });
 
 type LoginFormValues = z.infer<typeof loginFormSchema>;
@@ -47,6 +50,7 @@ export default function LoginPage() {
     defaultValues: {
       username: '',
       password: '',
+      rememberMe: false,
     },
   });
 
@@ -98,7 +102,7 @@ export default function LoginPage() {
     await new Promise(resolve => setTimeout(resolve, 500));
 
     if (data.username === HARDCODED_USERNAME && data.password === HARDCODED_PASSWORD) {
-      setIsAuthenticated(true);
+      setIsAuthenticated(true, data.rememberMe);
       setLoginAttempts(0);
       setLockoutEndTime(null);
       router.replace('/');
@@ -118,7 +122,7 @@ export default function LoginPage() {
     }
     setIsLoading(false);
   };
-  
+
   const isLockedOut = !!(lockoutEndTime && lockoutEndTime > Date.now());
 
   if (isAuthenticated) {
@@ -165,6 +169,27 @@ export default function LoginPage() {
                   </FormItem>
                 )}
               />
+              <FormField
+                control={form.control}
+                name="rememberMe"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={isLockedOut}
+                        id="remember-me"
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <Label htmlFor="remember-me" className="font-normal">
+                        {t('rememberMeLabel')}
+                      </Label>
+                    </div>
+                  </FormItem>
+                )}
+              />
               {errorMessage && !isLockedOut && ( // Show general error message if not specifically a lockout message
                 <Alert variant="destructive">
                   <Terminal className="h-4 w-4" />
@@ -192,3 +217,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+    

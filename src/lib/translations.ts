@@ -12,7 +12,7 @@ export type Translations = {
   lightTheme: string;
   darkTheme: string;
   systemTheme: string;
-  moreOptions: string; 
+  moreOptions: string;
   personalMode: string;
   workMode: string;
   switchToPersonalMode: string;
@@ -81,8 +81,8 @@ export type Translations = {
   activitiesForWeek: (params: { startDate: string; endDate: string }) => string;
   activitiesForMonth: (params: { month: string }) => string;
   loadingDate: string;
-  noActivitiesForDay: string; 
-  noActivitiesForPeriod: string; 
+  noActivitiesForDay: string;
+  noActivitiesForPeriod: string;
   selectDateToSeeActivities: string;
   addActivityForDate: (params: { date: string }) => string;
   confirmDeleteActivityTitle: string;
@@ -95,7 +95,7 @@ export type Translations = {
   viewMonthly: string;
 
   // ActivityListItem
-  editActivitySr: string; 
+  editActivitySr: string;
   deleteActivitySr: string;
   todosCompleted: (params: { completed: number, total: number }) => string;
   noDetailsAvailable: string;
@@ -117,6 +117,7 @@ export type Translations = {
   loginPasswordRequired: string;
   loginSecurityNotice: string;
   loginRedirecting: string;
+  rememberMeLabel: string;
 
   // ChangePasswordModal
   changePasswordModalTitle: string;
@@ -261,6 +262,7 @@ export const translations: Record<Locale, Translations> = {
     loginPasswordRequired: "Password is required.",
     loginSecurityNotice: "This is a prototype. Do not use real credentials.",
     loginRedirecting: "Redirecting...",
+    rememberMeLabel: "Keep me logged in for 30 days",
     changePasswordModalTitle: "Change Password",
     changePasswordModalDescription: "Enter your current password and a new password below.",
     currentPasswordLabel: "Current Password",
@@ -396,6 +398,7 @@ export const translations: Record<Locale, Translations> = {
     loginPasswordRequired: "La contraseña es obligatoria.",
     loginSecurityNotice: "Esto es un prototipo. No uses credenciales reales.",
     loginRedirecting: "Redirigiendo...",
+    rememberMeLabel: "Mantenerme conectado por 30 días",
     changePasswordModalTitle: "Cambiar Contraseña",
     changePasswordModalDescription: "Introduce tu contraseña actual y una nueva contraseña a continuación.",
     currentPasswordLabel: "Contraseña Actual",
@@ -442,3 +445,5 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
+
+    
