@@ -65,6 +65,12 @@ const getIconComponent = (iconName: string): Icons.LucideIcon => {
   return (Icons as any)[pascalCaseIconName] || Icons.Package;
 };
 
+// Initialize BroadcastChannel at the module level
+let logoutChannel: BroadcastChannel | null = null;
+if (typeof window !== 'undefined') {
+  logoutChannel = new BroadcastChannel('todoFlowLogoutChannel');
+}
+
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [personalActivities, setPersonalActivities] = useState<Activity[]>([]);
   const [workActivities, setWorkActivities] = useState<Activity[]>([]);
@@ -93,12 +99,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [appMode]);
 
   const filteredCategories = useMemo(() => {
-    if (isLoading) return []; // Avoid filtering before categories are loaded
+    if (isLoading) return []; 
     return allCategories.filter(cat =>
       !cat.mode || cat.mode === 'all' || cat.mode === appMode
     );
   }, [allCategories, appMode, isLoading]);
 
+
+  const logout = useCallback(() => {
+    setIsAuthenticatedState(false);
+    setLoginAttemptsState(0); 
+    setLockoutEndTimeState(null); 
+    setSessionExpiryTimestampState(null); 
+    
+    if (typeof window !== 'undefined') {
+        localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
+        localStorage.removeItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
+        localStorage.removeItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
+        localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
+    }
+
+    if (logoutChannel) {
+      logoutChannel.postMessage('logout_event');
+    }
+  }, []); 
 
   useEffect(() => {
     setIsLoading(true);
@@ -113,7 +137,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
 
       const storedAllCategories = localStorage.getItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES);
-      if (storedAllCategories) {
+       if (storedAllCategories) {
         const parsedCategories = JSON.parse(storedAllCategories);
         if (Array.isArray(parsedCategories) && parsedCategories.length > 0) {
           setAllCategories(parsedCategories.map((cat: Omit<Category, 'icon'> & { iconName: string }) => ({
@@ -122,10 +146,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             mode: cat.mode || 'all'
           })));
         } else {
-          setAllCategories(INITIAL_CATEGORIES);
+           setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
         }
       } else {
-        setAllCategories(INITIAL_CATEGORIES);
+         setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
       }
 
       const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
@@ -133,30 +157,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setAppModeState(storedAppMode);
       }
 
-      // Authentication and Session Expiry Logic
       const storedAuth = localStorage.getItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
       const storedExpiry = localStorage.getItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
 
       if (storedAuth === 'true' && storedExpiry) {
         const expiryTime = parseInt(storedExpiry, 10);
         if (Date.now() > expiryTime) {
-          // Session expired
-          setIsAuthenticatedState(false);
-          localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
-          setSessionExpiryTimestampState(null);
-          localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
-          // Optionally clear attempts and lockout if session expires
-          setLoginAttemptsState(0);
-          localStorage.removeItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
-          setLockoutEndTimeState(null);
-          localStorage.removeItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
+          logout(); // Session expired, call logout to clean up and broadcast
         } else {
-          // Session valid
           setIsAuthenticatedState(true);
           setSessionExpiryTimestampState(expiryTime);
         }
       } else {
-        // Not authenticated or no expiry found
         setIsAuthenticatedState(false);
         setSessionExpiryTimestampState(null);
       }
@@ -170,11 +182,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (err) {
       console.error("Failed to load data from local storage", err);
       setError("Failed to load saved data.");
-      setAllCategories(INITIAL_CATEGORIES);
+      setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
     } finally {
       setIsLoading(false);
     }
-  }, []); // Empty dependency array: runs only on mount
+  }, [logout]); 
 
   // --- Persistence Effects ---
   useEffect(() => {
@@ -281,18 +293,39 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return () => clearInterval(intervalId);
   }, [activities, isLoading, toast, notifiedToday, lastNotificationCheckDay, isAuthenticated, t]);
 
+  // Effect for listening to logout events from other tabs
+  useEffect(() => {
+    if (!logoutChannel) return;
+
+    const handleLogoutMessage = (event: MessageEvent) => {
+      if (event.data === 'logout_event' && isAuthenticated) {
+        // Another tab logged out or session expired, update this tab's state
+        logout(); 
+      }
+    };
+
+    logoutChannel.addEventListener('message', handleLogoutMessage);
+
+    return () => {
+      if (logoutChannel) {
+        logoutChannel.removeEventListener('message', handleLogoutMessage);
+      }
+    };
+  }, [isAuthenticated, logout]);
+
+
   const setAppMode = useCallback((mode: AppMode) => {
     setAppModeState(mode);
   }, []);
 
   const setIsAuthenticated = useCallback((value: boolean, rememberMe: boolean = false) => {
     setIsAuthenticatedState(value);
-    if (value) { // Logging in
+    if (value) { 
       const now = Date.now();
       const expiryDuration = rememberMe ? SESSION_DURATION_30_DAYS_MS : SESSION_DURATION_24_HOURS_MS;
       const newExpiryTimestamp = now + expiryDuration;
       setSessionExpiryTimestampState(newExpiryTimestamp);
-    } else { // Logging out or session expired
+    } else { 
       setSessionExpiryTimestampState(null);
     }
   }, []);
@@ -303,13 +336,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const setLockoutEndTime = useCallback((timestamp: number | null) => {
     setLockoutEndTimeState(timestamp);
-  }, []);
-
-  const logout = useCallback(() => {
-    setIsAuthenticatedState(false);
-    setLoginAttemptsState(0);
-    setLockoutEndTimeState(null);
-    setSessionExpiryTimestampState(null);
   }, []);
 
   const addActivity = useCallback((
@@ -419,7 +445,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
     toast({
       title: t('toastCategoryUpdatedTitle'),
-      description: t('toastCategoryUpdatedDescription')
+      description: t('toastCategoryUpdatedDescription', { categoryName: updates.name || "" })
     });
   }, [toast, t]);
 
