@@ -10,7 +10,7 @@ import ActivityListItem from './activity-list-item';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, Loader2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +24,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useTranslations } from '@/contexts/language-context';
 import { enUS, es } from 'date-fns/locale';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function ActivityCalendarView() {
   const { activities, getCategoryById, deleteActivity } = useAppStore();
@@ -34,23 +35,26 @@ export default function ActivityCalendarView() {
   const [editingActivity, setEditingActivity] = useState<Activity | undefined>(undefined);
   const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
   const [isAddingActivityForSelectedDate, setIsAddingActivityForSelectedDate] = useState(false);
+  const [hasMounted, setHasMounted] = useState(false);
 
   const dateLocale = locale === 'es' ? es : enUS;
 
   useEffect(() => {
+    setHasMounted(true);
     setSelectedDate(new Date());
   }, []);
 
 
   const eventDays = useMemo(() => {
+    if (!hasMounted) return [];
     return activities.map(activity => new Date(activity.createdAt));
-  }, [activities]);
+  }, [activities, hasMounted]);
 
   const activitiesForSelectedDay = useMemo(() => {
-    if (!selectedDate) return [];
+    if (!selectedDate || !hasMounted) return [];
     return activities.filter(activity => isSameDay(new Date(activity.createdAt), selectedDate))
                      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  }, [activities, selectedDate]);
+  }, [activities, selectedDate, hasMounted]);
 
   const handleEditActivity = (activity: Activity) => {
     setEditingActivity(activity);
@@ -94,6 +98,37 @@ export default function ActivityCalendarView() {
   const modifiersClassNames = {
     hasEvent: 'day-with-event',
   };
+
+  if (!hasMounted) {
+    return (
+      <div className="container mx-auto py-6 flex flex-col lg:flex-row gap-6 items-start">
+        <Card className="lg:w-1/2 xl:w-2/3 shadow-lg w-full">
+          <CardContent className="p-0 sm:p-2 flex justify-center">
+            <Skeleton className="h-[300px] w-[350px] rounded-md" />
+          </CardContent>
+        </Card>
+        <Card className="lg:w-1/2 xl:w-1/3 shadow-lg w-full flex flex-col">
+          <CardHeader>
+            <CardTitle>
+              <Skeleton className="h-6 w-3/4" />
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex-grow">
+            <div className="space-y-3 py-4">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button disabled className="w-full">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              {t('loadingDate')}
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto py-6 flex flex-col lg:flex-row gap-6 items-start">
@@ -179,3 +214,4 @@ export default function ActivityCalendarView() {
     </div>
   );
 }
+
