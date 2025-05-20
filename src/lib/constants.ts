@@ -1,5 +1,5 @@
 
-import type { Category, ActivityStatus } from '@/lib/types';
+import type { Category } from '@/lib/types';
 import { Home, Dumbbell, Briefcase, ShoppingCart, User, Settings, BookOpen } from 'lucide-react';
 
 export const INITIAL_CATEGORIES: Category[] = [
@@ -12,15 +12,8 @@ export const INITIAL_CATEGORIES: Category[] = [
   { id: 'cat_chores', name: 'Chores', icon: Settings, iconName: 'Settings', mode: 'all' },
 ];
 
-export const KANBAN_STATUSES: { id: ActivityStatus; title: string }[] = [
-  { id: 'todo', title: 'To Do' },
-  { id: 'inProgress', title: 'In Progress' },
-  { id: 'completed', title: 'Completed' },
-];
-
 export const APP_NAME = 'TodoFlow';
 
 // Hardcoded credentials for login
 export const HARDCODED_USERNAME = "prueba";
 export const HARDCODED_PASSWORD = "prueba123";
-

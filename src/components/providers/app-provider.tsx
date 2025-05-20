@@ -2,7 +2,7 @@
 "use client";
 import type { ReactNode } from 'react';
 import React, { createContext, useState, useCallback, useEffect, useMemo } from 'react';
-import type { Activity, Todo, Category, ActivityStatus, AppMode } from '@/lib/types';
+import type { Activity, Todo, Category, AppMode } from '@/lib/types';
 import { INITIAL_CATEGORIES } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
@@ -15,7 +15,7 @@ export interface AppContextType {
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
   addActivity: (
-    activityData: Omit<Activity, 'id' | 'todos' | 'status' | 'createdAt' | 'completed'> & {
+    activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed'> & {
       todos?: Omit<Todo, 'id' | 'completed'>[];
       time?: string;
     },
@@ -26,7 +26,6 @@ export interface AppContextType {
   addTodoToActivity: (activityId: string, todoText: string) => void;
   updateTodoInActivity: (activityId: string, todoId: string, updates: Partial<Todo>) => void;
   deleteTodoFromActivity: (activityId: string, todoId: string) => void;
-  moveActivity: (activityId: string, newStatus: ActivityStatus) => void;
   getCategoryById: (categoryId: string) => Category | undefined;
   addCategory: (name: string, iconName: string, mode: AppMode | 'all') => void;
   updateCategory: (categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>) => void;
@@ -260,7 +259,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   const addActivity = useCallback((
-      activityData: Omit<Activity, 'id' | 'todos' | 'status' | 'createdAt' | 'completed'> & {
+      activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed'> & {
         todos?: Omit<Todo, 'id' | 'completed'>[];
         time?: string;
       },
@@ -271,7 +270,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       title: activityData.title,
       categoryId: activityData.categoryId,
       todos: (activityData.todos || []).map(todo => ({ ...todo, id: uuidv4(), completed: false })),
-      status: 'todo',
       createdAt: customCreatedAt !== undefined ? customCreatedAt : Date.now(),
       time: activityData.time || undefined,
       completed: false,
@@ -326,12 +324,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
   }, [currentActivitySetter]);
   
-  const moveActivity = useCallback((activityId: string, newStatus: ActivityStatus) => {
-    currentActivitySetter(prev =>
-      prev.map(act => (act.id === activityId ? { ...act, status: newStatus } : act)
-    ));
-  }, [currentActivitySetter]);
-
   const getCategoryById = useCallback(
     (categoryId: string) => allCategories.find(cat => cat.id === categoryId),
     [allCategories]
@@ -405,7 +397,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addTodoToActivity,
         updateTodoInActivity,
         deleteTodoFromActivity,
-        moveActivity,
         getCategoryById,
         addCategory,
         updateCategory,
@@ -425,6 +416,3 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
-
-
-    
