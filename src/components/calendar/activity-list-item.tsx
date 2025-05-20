@@ -41,20 +41,19 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
       "shadow-sm hover:shadow-md transition-shadow duration-150 ease-in-out",
       activity.completed && "bg-muted/50 opacity-75"
     )}>
-      <CardHeader className="flex flex-row items-start justify-between pb-2 pt-3 px-4 space-y-0">
+      <CardHeader className="flex flex-row items-center justify-between py-2 px-3 space-y-0">
         <div className="flex items-center gap-2 flex-grow min-w-0">
           <Checkbox
             id={`activity-completed-${activity.id}`}
             checked={!!activity.completed}
             onCheckedChange={(checked) => handleActivityCompletedChange(Boolean(checked))}
             aria-labelledby={`activity-title-${activity.id}`}
-            className="mt-1"
           />
           <div className="flex flex-col flex-grow min-w-0">
             <CardTitle
               id={`activity-title-${activity.id}`}
               className={cn(
-                "text-base font-medium leading-tight truncate",
+                "text-sm font-medium leading-tight truncate", // Changed text-base to text-sm
                 activity.completed && "line-through text-muted-foreground"
               )}
               title={activity.title}
@@ -76,7 +75,7 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
                     <div className={cn(
                       "flex items-center text-xs text-muted-foreground",
                       activity.completed && "text-muted-foreground/70",
-                      showDate && "mt-0.5" // Add a little space if date is also shown
+                      showDate && "mt-0.5" 
                     )}>
                       <Clock className="mr-1 h-3 w-3" />
                       {activity.time}
@@ -97,8 +96,8 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="px-4 pb-3 pl-11">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+      <CardContent className="px-3 pt-1 pb-2 pl-9"> 
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
           {category && (
             <Badge variant={activity.completed ? "outline" : "secondary"} className="text-xs py-0.5 px-1.5">
               {category.icon && <category.icon className="mr-1 h-3 w-3" />}
@@ -116,7 +115,7 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
             {t('noDetailsAvailable')}
           </p>
         )}
-         {totalTodos === 0 && (category || activity.time || showDate) && ( // Simplified logic for this message
+         {totalTodos === 0 && (category || activity.time || showDate) && ( 
           <p className={cn("text-xs mt-1", activity.completed ? "text-muted-foreground/80" : "text-muted-foreground")}>
             {t('noTodosForThisActivity')}
           </p>
