@@ -47,7 +47,7 @@ export const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities';
 const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities';
-const LOCAL_STORAGE_KEY_ALL_CATEGORIES = 'todoFlowAllCategories'; // Changed from todoFlowCategories
+const LOCAL_STORAGE_KEY_ALL_CATEGORIES = 'todoFlowAllCategories';
 const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode';
 const LOCAL_STORAGE_KEY_IS_AUTHENTICATED = 'todoFlowIsAuthenticated';
 const LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS = 'todoFlowLoginAttempts';
@@ -63,7 +63,7 @@ const getIconComponent = (iconName: string): Icons.LucideIcon => {
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [personalActivities, setPersonalActivities] = useState<Activity[]>([]);
   const [workActivities, setWorkActivities] = useState<Activity[]>([]);
-  const [allCategories, setAllCategories] = useState<Category[]>([]); // Holds all categories
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [appMode, setAppModeState] = useState<AppMode>('personal');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +76,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [loginAttempts, setLoginAttemptsState] = useState<number>(0);
   const [lockoutEndTime, setLockoutEndTimeState] = useState<number | null>(null);
 
-  // Derived activities based on appMode
   const activities = useMemo(() => {
     return appMode === 'work' ? workActivities : personalActivities;
   }, [appMode, personalActivities, workActivities]);
@@ -85,7 +84,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return appMode === 'work' ? setWorkActivities : setPersonalActivities;
   }, [appMode]);
 
-  // Derived categories based on appMode
   const filteredCategories = useMemo(() => {
     if (isLoading) return [];
     return allCategories.filter(cat =>
@@ -108,11 +106,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       const storedAllCategories = localStorage.getItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES);
       if (storedAllCategories) {
-        setAllCategories(JSON.parse(storedAllCategories).map((cat: Omit<Category, 'icon'> & { iconName: string }) => ({
-          ...cat,
-          icon: getIconComponent(cat.iconName || 'Package'),
-          mode: cat.mode || 'all' // Ensure mode is set, default to 'all' if missing
-        })));
+        const parsedCategories = JSON.parse(storedAllCategories);
+        if (Array.isArray(parsedCategories) && parsedCategories.length > 0) {
+          setAllCategories(parsedCategories.map((cat: Omit<Category, 'icon'> & { iconName: string }) => ({
+            ...cat,
+            icon: getIconComponent(cat.iconName || 'Package'),
+            mode: cat.mode || 'all'
+          })));
+        } else {
+          setAllCategories(INITIAL_CATEGORIES);
+        }
       } else {
         setAllCategories(INITIAL_CATEGORIES);
       }
@@ -134,6 +137,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (err) {
       console.error("Failed to load data from local storage", err);
       setError("Failed to load saved data.");
+      setAllCategories(INITIAL_CATEGORIES); // Fallback in case of parsing error too
     } finally {
       setIsLoading(false);
     }
@@ -154,7 +158,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     if (!isLoading) {
-      // Save all categories, including their mode
       const serializableCategories = allCategories.map(({ icon, ...rest }) => rest);
       localStorage.setItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES, JSON.stringify(serializableCategories));
     }
@@ -251,6 +254,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setIsAuthenticatedState(false);
     setLoginAttemptsState(0);
     setLockoutEndTimeState(null);
+    // Optionally clear app mode or set to default
+    // setAppModeState('personal'); 
+    // localStorage.removeItem(LOCAL_STORAGE_KEY_APP_MODE);
   }, []);
 
   const addActivity = useCallback((
@@ -327,7 +333,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [currentActivitySetter]);
 
   const getCategoryById = useCallback(
-    (categoryId: string) => allCategories.find(cat => cat.id === categoryId), // Search in allCategories
+    (categoryId: string) => allCategories.find(cat => cat.id === categoryId),
     [allCategories]
   );
 
@@ -372,7 +378,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     setAllCategories(prev => prev.filter(cat => cat.id !== categoryId));
     
-    // This logic for updating activities is fine, as categoryId '' is universal
     setPersonalActivities(prevActivities => 
       prevActivities.map(act => 
         act.categoryId === categoryId ? { ...act, categoryId: '' } : act 
@@ -391,7 +396,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     <AppContext.Provider
       value={{
         activities, 
-        categories: filteredCategories, // Expose the derived, mode-specific category list
+        categories: filteredCategories,
         appMode,
         setAppMode,
         addActivity,
@@ -420,3 +425,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+
+
+    
