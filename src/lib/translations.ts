@@ -31,6 +31,10 @@ export type Translations = {
   categoryName: string;
   iconName: string;
   iconNameDescriptionLink: string;
+  categoryMode: string;
+  modePersonal: string;
+  modeWork: string;
+  modeAll: string;
   saveChanges: string;
   cancel: string;
   existingCategories: string;
@@ -161,6 +165,10 @@ export const translations: Record<Locale, Translations> = {
     categoryName: "Category Name",
     iconName: "Icon Name (from Lucide)",
     iconNameDescriptionLink: "Enter a PascalCase icon name from <a>lucide.dev/icons</a>.",
+    categoryMode: "Category Mode",
+    modePersonal: "Personal",
+    modeWork: "Work",
+    modeAll: "All Modes",
     saveChanges: "Save Changes",
     cancel: "Cancel",
     existingCategories: "Existing Categories",
@@ -276,6 +284,10 @@ export const translations: Record<Locale, Translations> = {
     categoryName: "Nombre de la Categoría",
     iconName: "Nombre del Icono (de Lucide)",
     iconNameDescriptionLink: "Introduce un nombre de icono en PascalCase de <a>lucide.dev/icons</a>.",
+    categoryMode: "Modo de Categoría",
+    modePersonal: "Personal",
+    modeWork: "Trabajo",
+    modeAll: "Todos los Modos",
     saveChanges: "Guardar Cambios",
     cancel: "Cancelar",
     existingCategories: "Categorías Existentes",
@@ -366,3 +378,4 @@ export const translations: Record<Locale, Translations> = {
     passwordMinLength: (params) => `La contraseña debe tener al menos ${params.length} caracteres.`,
   },
 };
+

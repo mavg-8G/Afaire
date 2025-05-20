@@ -16,11 +16,10 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useAppStore } from '@/hooks/use-app-store';
-import type { Category } from '@/lib/types';
+import type { Category, AppMode } from '@/lib/types';
 import { Trash2, PlusCircle, Edit3, XCircle, ArrowLeft } from 'lucide-react';
-// AppHeader might be removed if it's global in layout and not specifically needed here
-// import AppHeader from '@/components/layout/app-header'; 
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,7 +29,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslations } from '@/contexts/language-context';
@@ -38,12 +36,13 @@ import { useTranslations } from '@/contexts/language-context';
 const categoryFormSchema = z.object({
   name: z.string().min(1, "Category name is required."),
   iconName: z.string().min(1, "Icon name is required (e.g., Home, Coffee)."),
+  mode: z.enum(['personal', 'work', 'all']).default('all'),
 });
 
 type CategoryFormData = z.infer<typeof categoryFormSchema>;
 
 export default function ManageCategoriesPage() {
-  const { categories, addCategory, updateCategory, deleteCategory } = useAppStore();
+  const { categories: filteredCategories, addCategory, updateCategory, deleteCategory, appMode } = useAppStore();
   const { t } = useTranslations();
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -53,6 +52,7 @@ export default function ManageCategoriesPage() {
     defaultValues: {
       name: "",
       iconName: "",
+      mode: appMode, // Default to current app mode or 'all' if preferred
     },
   });
 
@@ -61,20 +61,21 @@ export default function ManageCategoriesPage() {
       form.reset({
         name: editingCategory.name,
         iconName: editingCategory.iconName,
+        mode: editingCategory.mode || appMode, // Default to current appMode if category.mode is undefined
       });
     } else {
-      form.reset({ name: "", iconName: "" });
+      form.reset({ name: "", iconName: "", mode: appMode });
     }
-  }, [editingCategory, form]);
+  }, [editingCategory, form, appMode]);
 
   const onSubmit = (data: CategoryFormData) => {
     if (editingCategory) {
-      updateCategory(editingCategory.id, { name: data.name, iconName: data.iconName });
+      updateCategory(editingCategory.id, { name: data.name, iconName: data.iconName, mode: data.mode });
       setEditingCategory(null);
     } else {
-      addCategory(data.name, data.iconName);
+      addCategory(data.name, data.iconName, data.mode);
     }
-    form.reset();
+    form.reset({ name: "", iconName: "", mode: appMode });
   };
 
   const handleDeleteCategory = (categoryId: string) => {
@@ -82,7 +83,7 @@ export default function ManageCategoriesPage() {
     setCategoryToDelete(null);
     if (editingCategory?.id === categoryId) {
       setEditingCategory(null);
-      form.reset();
+      form.reset({ name: "", iconName: "", mode: appMode });
     }
   };
 
@@ -92,7 +93,7 @@ export default function ManageCategoriesPage() {
 
   const handleCancelEdit = () => {
     setEditingCategory(null);
-    form.reset();
+    form.reset({ name: "", iconName: "", mode: appMode });
   };
   
   const iconNameDescKey = t('iconNameDescriptionLink');
@@ -101,7 +102,6 @@ export default function ManageCategoriesPage() {
 
   return (
     <div className="flex flex-col flex-grow min-h-screen">
-      {/* <AppHeader /> */}
       <main className="flex-grow container mx-auto py-8">
         <div className="mb-6 flex justify-start">
           <Link href="/" passHref>
@@ -149,6 +149,42 @@ export default function ManageCategoriesPage() {
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={form.control}
+                    name="mode"
+                    render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <FormLabel>{t('categoryMode')}</FormLabel>
+                        <FormControl>
+                          <RadioGroup
+                            onValueChange={field.onChange}
+                            defaultValue={field.value}
+                            className="flex flex-col space-y-1 sm:flex-row sm:space-y-0 sm:space-x-4"
+                          >
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <RadioGroupItem value="personal" />
+                              </FormControl>
+                              <FormLabel className="font-normal">{t('modePersonal')}</FormLabel>
+                            </FormItem>
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <RadioGroupItem value="work" />
+                              </FormControl>
+                              <FormLabel className="font-normal">{t('modeWork')}</FormLabel>
+                            </FormItem>
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <RadioGroupItem value="all" />
+                              </FormControl>
+                              <FormLabel className="font-normal">{t('modeAll')}</FormLabel>
+                            </FormItem>
+                          </RadioGroup>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <div className="flex space-x-2">
                     <Button type="submit" className="flex-grow">
                       {editingCategory ? <Edit3 className="mr-2 h-5 w-5" /> : <PlusCircle className="mr-2 h-5 w-5" />}
@@ -172,14 +208,17 @@ export default function ManageCategoriesPage() {
               <CardDescription>{t('viewEditManageCategories')}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow">
-              {categories.length > 0 ? (
-                <ScrollArea className="h-[calc(100vh-32rem)] sm:h-[calc(100vh-30rem)] pr-1"> 
+              {filteredCategories.length > 0 ? (
+                <ScrollArea className="h-[calc(100vh-36rem)] sm:h-[calc(100vh-34rem)] pr-1"> 
                   <ul className="space-y-3">
-                    {categories.map((category) => (
+                    {filteredCategories.map((category) => (
                       <li key={category.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md shadow-sm">
                         <div className="flex items-center gap-3">
                           <category.icon className="h-6 w-6 text-primary" />
                           <span className="font-medium">{category.name}</span>
+                           <span className="text-xs text-muted-foreground ml-1">
+                            ({category.mode === 'all' ? t('modeAll') : category.mode === 'personal' ? t('modePersonal') : t('modeWork')})
+                          </span>
                         </div>
                         <div className="flex items-center">
                           <Button variant="ghost" size="icon" onClick={() => handleEditCategory(category)} className="text-primary hover:text-primary/80">
@@ -217,9 +256,9 @@ export default function ManageCategoriesPage() {
                 <p className="text-sm text-muted-foreground text-center py-4">{t('noCategoriesYet')}</p>
               )}
             </CardContent>
-             {categories.length > 0 && (
+             {filteredCategories.length > 0 && (
               <CardFooter className="text-sm text-muted-foreground">
-                {t('categoriesCount', { count: categories.length })}
+                {t('categoriesCount', { count: filteredCategories.length })}
               </CardFooter>
             )}
           </Card>
@@ -228,3 +267,4 @@ export default function ManageCategoriesPage() {
     </div>
   );
 }
+

@@ -20,13 +20,15 @@ export interface Activity {
   completed?: boolean; // Added for activity completion status
 }
 
+export type AppMode = 'personal' | 'work';
+
 export interface Category {
   id: string;
   name: string;
   icon: LucideIcon;
   iconName: string; // Added for easier editing and consistent storage
+  mode?: AppMode | 'all'; // Category can be personal, work, or available in all modes
 }
 
 export type ViewMode = 'all' | 'daily' | 'weekly' | 'monthly'; // For potential future filtering
 
-export type AppMode = 'personal' | 'work';

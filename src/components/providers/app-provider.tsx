@@ -11,7 +11,7 @@ import * as Icons from 'lucide-react';
 
 export interface AppContextType {
   activities: Activity[]; // This will be the derived list for the current mode
-  categories: Category[];
+  categories: Category[]; // This will also be a derived list for the current mode
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
   addActivity: (
@@ -28,8 +28,8 @@ export interface AppContextType {
   deleteTodoFromActivity: (activityId: string, todoId: string) => void;
   moveActivity: (activityId: string, newStatus: ActivityStatus) => void;
   getCategoryById: (categoryId: string) => Category | undefined;
-  addCategory: (name: string, iconName: string) => void;
-  updateCategory: (categoryId: string, updates: { name?: string; iconName?: string }) => void;
+  addCategory: (name: string, iconName: string, mode: AppMode | 'all') => void;
+  updateCategory: (categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>) => void;
   deleteCategory: (categoryId: string) => void;
   isLoading: boolean;
   error: string | null;
@@ -47,7 +47,7 @@ export const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities';
 const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities';
-const LOCAL_STORAGE_KEY_CATEGORIES = 'todoFlowCategories';
+const LOCAL_STORAGE_KEY_ALL_CATEGORIES = 'todoFlowAllCategories'; // Changed from todoFlowCategories
 const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode';
 const LOCAL_STORAGE_KEY_IS_AUTHENTICATED = 'todoFlowIsAuthenticated';
 const LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS = 'todoFlowLoginAttempts';
@@ -63,7 +63,7 @@ const getIconComponent = (iconName: string): Icons.LucideIcon => {
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [personalActivities, setPersonalActivities] = useState<Activity[]>([]);
   const [workActivities, setWorkActivities] = useState<Activity[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [allCategories, setAllCategories] = useState<Category[]>([]); // Holds all categories
   const [appMode, setAppModeState] = useState<AppMode>('personal');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +85,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return appMode === 'work' ? setWorkActivities : setPersonalActivities;
   }, [appMode]);
 
+  // Derived categories based on appMode
+  const filteredCategories = useMemo(() => {
+    if (isLoading) return [];
+    return allCategories.filter(cat =>
+      !cat.mode || cat.mode === 'all' || cat.mode === appMode
+    );
+  }, [allCategories, appMode, isLoading]);
+
 
   useEffect(() => {
     setIsLoading(true);
@@ -98,14 +106,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setWorkActivities(JSON.parse(storedWorkActivities));
       }
 
-      const storedCategories = localStorage.getItem(LOCAL_STORAGE_KEY_CATEGORIES);
-      if (storedCategories) {
-        setCategories(JSON.parse(storedCategories).map((cat: Omit<Category, 'icon'> & { iconName: string }) => ({
+      const storedAllCategories = localStorage.getItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES);
+      if (storedAllCategories) {
+        setAllCategories(JSON.parse(storedAllCategories).map((cat: Omit<Category, 'icon'> & { iconName: string }) => ({
           ...cat,
-          icon: getIconComponent(cat.iconName || 'Package')
+          icon: getIconComponent(cat.iconName || 'Package'),
+          mode: cat.mode || 'all' // Ensure mode is set, default to 'all' if missing
         })));
       } else {
-        setCategories(INITIAL_CATEGORIES);
+        setAllCategories(INITIAL_CATEGORIES);
       }
 
       const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
@@ -145,10 +154,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     if (!isLoading) {
-      const serializableCategories = categories.map(({ icon, ...rest }) => rest);
-      localStorage.setItem(LOCAL_STORAGE_KEY_CATEGORIES, JSON.stringify(serializableCategories));
+      // Save all categories, including their mode
+      const serializableCategories = allCategories.map(({ icon, ...rest }) => rest);
+      localStorage.setItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES, JSON.stringify(serializableCategories));
     }
-  }, [categories, isLoading]);
+  }, [allCategories, isLoading]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -194,7 +204,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
       setLastNotificationCheckDay(currentDay);
 
-      // Use the derived 'activities' for the current mode for notifications
       activities.forEach(activity => {
         if (!activity.time || notifiedToday.has(activity.id) || activity.completed) {
           return;
@@ -220,7 +229,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, 60000);
 
     return () => clearInterval(intervalId);
-  }, [activities, isLoading, toast, notifiedToday, lastNotificationCheckDay, isAuthenticated]); // Added 'activities' as dependency
+  }, [activities, isLoading, toast, notifiedToday, lastNotificationCheckDay, isAuthenticated]);
 
   const setAppMode = useCallback((mode: AppMode) => {
     setAppModeState(mode);
@@ -318,33 +327,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [currentActivitySetter]);
 
   const getCategoryById = useCallback(
-    (categoryId: string) => categories.find(cat => cat.id === categoryId),
-    [categories]
+    (categoryId: string) => allCategories.find(cat => cat.id === categoryId), // Search in allCategories
+    [allCategories]
   );
 
-  const addCategory = useCallback((name: string, iconName: string) => {
+  const addCategory = useCallback((name: string, iconName: string, mode: AppMode | 'all') => {
     const IconComponent = getIconComponent(iconName);
     const newCategory: Category = {
       id: `cat_${uuidv4()}`,
       name,
       icon: IconComponent,
       iconName,
+      mode: mode,
     };
-    setCategories(prev => [...prev, newCategory]);
+    setAllCategories(prev => [...prev, newCategory]);
     toast({ title: "Category Added", description: `"${name}" has been added.` });
   }, [toast]);
 
-  const updateCategory = useCallback((categoryId: string, updates: { name?: string; iconName?: string }) => {
-    setCategories(prev =>
+  const updateCategory = useCallback((categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>) => {
+    setAllCategories(prev =>
       prev.map(cat => {
         if (cat.id === categoryId) {
           const newName = updates.name !== undefined ? updates.name : cat.name;
           const newIconName = updates.iconName !== undefined ? updates.iconName : cat.iconName;
+          const newMode = updates.mode !== undefined ? updates.mode : cat.mode;
           return {
             ...cat,
             name: newName,
             iconName: newIconName,
             icon: updates.iconName !== undefined ? getIconComponent(newIconName) : cat.icon,
+            mode: newMode,
           };
         }
         return cat;
@@ -355,12 +367,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
   const deleteCategory = useCallback((categoryId: string) => {
-    const categoryToDelete = categories.find(cat => cat.id === categoryId);
+    const categoryToDelete = allCategories.find(cat => cat.id === categoryId);
     if (!categoryToDelete) return;
 
-    setCategories(prev => prev.filter(cat => cat.id !== categoryId));
+    setAllCategories(prev => prev.filter(cat => cat.id !== categoryId));
     
-    // Update activities in both lists if they used this category
+    // This logic for updating activities is fine, as categoryId '' is universal
     setPersonalActivities(prevActivities => 
       prevActivities.map(act => 
         act.categoryId === categoryId ? { ...act, categoryId: '' } : act 
@@ -372,14 +384,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       )
     );
     toast({ title: "Category Deleted", description: `"${categoryToDelete.name}" has been removed.` });
-  }, [toast, categories]);
+  }, [toast, allCategories]);
 
 
   return (
     <AppContext.Provider
       value={{
-        activities, // Expose the derived, mode-specific list
-        categories,
+        activities, 
+        categories: filteredCategories, // Expose the derived, mode-specific category list
         appMode,
         setAppMode,
         addActivity,
@@ -408,6 +420,3 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
-
-
-    
