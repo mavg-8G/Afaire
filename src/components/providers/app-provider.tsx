@@ -7,6 +7,7 @@ import { INITIAL_CATEGORIES } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs
 import { useToast } from '@/hooks/use-toast';
 import { isSameDay } from 'date-fns';
+import * as Icons from 'lucide-react'; // Import all lucide-react icons
 
 export interface AppContextType {
   activities: Activity[];
@@ -25,6 +26,8 @@ export interface AppContextType {
   deleteTodoFromActivity: (activityId: string, todoId: string) => void;
   moveActivity: (activityId: string, newStatus: ActivityStatus) => void;
   getCategoryById: (categoryId: string) => Category | undefined;
+  addCategory: (name: string, iconName: string) => void;
+  deleteCategory: (categoryId: string) => void;
   isLoading: boolean;
   error: string | null;
 }
@@ -32,10 +35,19 @@ export interface AppContextType {
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEY_ACTIVITIES = 'todoFlowActivities';
+const LOCAL_STORAGE_KEY_CATEGORIES = 'todoFlowCategories';
+
+// Helper to get icon component by name
+const getIconComponent = (iconName: string): Icons.LucideIcon => {
+  const capitalizedIconName = iconName.charAt(0).toUpperCase() + iconName.slice(1);
+  // Ensure it's a valid Lucide icon name (PascalCase)
+  const pascalCaseIconName = capitalizedIconName.replace(/[^A-Za-z0-9]/g, '');
+  return (Icons as any)[pascalCaseIconName] || Icons.Package; // Default to Package icon if not found
+};
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [categories] = useState<Category[]>(INITIAL_CATEGORIES);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
@@ -45,14 +57,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
   useEffect(() => {
+    setIsLoading(true);
     try {
       const storedActivities = localStorage.getItem(LOCAL_STORAGE_KEY_ACTIVITIES);
       if (storedActivities) {
         setActivities(JSON.parse(storedActivities));
       }
+
+      const storedCategories = localStorage.getItem(LOCAL_STORAGE_KEY_CATEGORIES);
+      if (storedCategories) {
+        setCategories(JSON.parse(storedCategories).map((cat: any) => ({
+          ...cat,
+          icon: getIconComponent(cat.iconName || 'Package') // Rehydrate icon component
+        })));
+      } else {
+        setCategories(INITIAL_CATEGORIES);
+      }
+
     } catch (err) {
-      console.error("Failed to load activities from local storage", err);
-      setError("Failed to load saved activities.");
+      console.error("Failed to load data from local storage", err);
+      setError("Failed to load saved data.");
     } finally {
       setIsLoading(false);
     }
@@ -69,16 +93,33 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [activities, isLoading]);
 
+  useEffect(() => {
+    if (!isLoading) {
+      try {
+        // Store icon name instead of the component itself for serialization
+        const serializableCategories = categories.map(cat => ({
+          id: cat.id,
+          name: cat.name,
+          iconName: Object.keys(Icons).find(key => (Icons as any)[key] === cat.icon) || 'Package'
+        }));
+        localStorage.setItem(LOCAL_STORAGE_KEY_CATEGORIES, JSON.stringify(serializableCategories));
+      } catch (err) {
+        console.error("Failed to save categories to local storage", err);
+        setError("Failed to save categories. Changes might not persist.");
+      }
+    }
+  }, [categories, isLoading]);
+
   // Effect for activity notifications
   useEffect(() => {
-    if (isLoading) return; // Don't run notifications while loading
+    if (isLoading) return; 
 
     const intervalId = setInterval(() => {
       const now = new Date();
       const currentDay = now.getDate();
 
       if (lastNotificationCheckDay !== null && lastNotificationCheckDay !== currentDay) {
-        setNotifiedToday(new Set()); // Reset for the new day
+        setNotifiedToday(new Set()); 
       }
       setLastNotificationCheckDay(currentDay);
 
@@ -89,7 +130,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const activityDatePart = new Date(activity.createdAt);
         if (!isSameDay(activityDatePart, now)) {
-          return; // Activity is not for today
+          return; 
         }
 
         const [hours, minutes] = activity.time.split(':').map(Number);
@@ -98,8 +139,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         const fiveMinutesInMs = 5 * 60 * 1000;
         const timeDiffMs = activityDateTime.getTime() - now.getTime();
-
-        // Notify if activity is scheduled for now or within the next 5 minutes (but not past 5 min window)
+        
         if (timeDiffMs >= 0 && timeDiffMs <= fiveMinutesInMs) {
           toast({
             title: "Activity Starting Soon!",
@@ -108,7 +148,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           setNotifiedToday(prev => new Set(prev).add(activity.id));
         }
       });
-    }, 60000); // Check every minute
+    }, 60000); 
 
     return () => clearInterval(intervalId);
   }, [activities, isLoading, toast, notifiedToday, lastNotificationCheckDay]);
@@ -192,6 +232,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     [categories]
   );
 
+  const addCategory = useCallback((name: string, iconName: string) => {
+    const IconComponent = getIconComponent(iconName);
+    const newCategory: Category = {
+      id: `cat_${uuidv4()}`,
+      name,
+      icon: IconComponent,
+    };
+    setCategories(prev => [...prev, newCategory]);
+    toast({ title: "Category Added", description: `"${name}" has been added.` });
+  }, [toast]);
+
+  const deleteCategory = useCallback((categoryId: string) => {
+    setCategories(prev => prev.filter(cat => cat.id !== categoryId));
+    // Optionally, update activities that used this category
+    setActivities(prevActivities => 
+      prevActivities.map(act => 
+        act.categoryId === categoryId ? { ...act, categoryId: '' } : act // Set to empty or a default categoryId
+      )
+    );
+    toast({ title: "Category Deleted", description: "The category has been removed." });
+  }, [toast]);
+
+
   return (
     <AppContext.Provider
       value={{
@@ -205,6 +268,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         deleteTodoFromActivity,
         moveActivity,
         getCategoryById,
+        addCategory,
+        deleteCategory,
         isLoading,
         error
       }}
