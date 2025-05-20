@@ -8,87 +8,151 @@ body {
 }
 
 @layer base {
-  :root {
-    --background: 210 25% 96.5%; /* #F0F4F8 Light Gray */
-    --foreground: 222.2 84% 4.9%; /* Dark text for contrast */
-
-    --card: 0 0% 100%; /* White cards */
-    --card-foreground: 222.2 84% 4.9%;
-
+  /* --- PERSONAL MODE --- */
+  /* Personal Light (Default if no .mode-work and not .dark) */
+  :root, html.mode-personal, html.mode-personal.light {
+    --background: 210 60% 97%; /* Softer, lighter blue/gray */
+    --foreground: 215 25% 25%; /* Dark gray, less harsh */
+    --card: 0 0% 100%;
+    --card-foreground: 215 25% 25%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-
-    --primary: 207 88% 68%; /* #64B5F6 Calm Blue */
-    --primary-foreground: 0 0% 98%; /* White text on blue */
-
-    --secondary: 210 30% 90%; /* Lighter gray for secondary elements */
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --muted: 210 30% 85%; /* Even lighter gray for muted text/elements */
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    --accent: 123 39% 64%; /* #81C784 Soft Green */
-    --accent-foreground: 0 0% 98%; /* White text on green */
-
+    --popover-foreground: 215 25% 25%;
+    --primary: 190 70% 65%; /* Soft Teal */
+    --primary-foreground: 210 40% 98%; /* White text on soft teal */
+    --secondary: 210 40% 92%; /* Lighter gray for secondary elements */
+    --secondary-foreground: 215 25% 35%;
+    --muted: 210 40% 88%; /* Even lighter gray for muted text/elements */
+    --muted-foreground: 215 20% 55%;
+    --accent: 140 55% 70%; /* Soft Green */
+    --accent-foreground: 210 40% 98%; /* White text on soft green */
     --destructive: 0 84.2% 60.2%; /* Default red */
     --destructive-foreground: 0 0% 98%;
-
-    --border: 214.3 31.8% 88%; /* Adjusted border for better visibility on light gray */
-    --input: 214.3 31.8% 88%;  /* Adjusted input border */
-    --ring: 207 88% 68%; /* Primary color for rings */
+    --border: 210 30% 88%; /* Adjusted border for better visibility */
+    --input: 210 30% 88%;  /* Adjusted input border */
+    --ring: 190 70% 65%; /* Primary color for rings */
+    --radius: 0.5rem;
 
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
 
-    /* Sidebar theme (can be same as main if not explicitly different) */
-    --sidebar-background: 210 25% 94.5%;
-    --sidebar-foreground: 222.2 84% 4.9%;
-    --sidebar-primary: 207 88% 68%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 123 39% 64%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 214.3 31.8% 85%;
-    --sidebar-ring: 207 88% 68%;
+    /* Sidebar for Personal Light */
+    --sidebar-background: 210 50% 95%;
+    --sidebar-foreground: 215 25% 25%;
+    --sidebar-primary: 190 70% 65%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 140 55% 70%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 210 30% 85%;
+    --sidebar-ring: 190 70% 65%;
   }
 
-  .dark {
-    /* Keeping dark mode defaults for now, can be customized later if needed */
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+  /* Personal Dark (Default .dark if no .mode-work) */
+  .dark:not(.mode-work), html.mode-personal.dark {
+    --background: 210 20% 12%; /* Softer dark, less black */
+    --foreground: 210 40% 90%; /* Light gray for text */
+    --card: 210 20% 15%;
+    --card-foreground: 210 40% 90%;
+    --popover: 210 20% 15%;
+    --popover-foreground: 210 40% 90%;
+    --primary: 190 60% 55%; /* Muted Teal */
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 18% 20%;
+    --secondary-foreground: 210 40% 85%;
+    --muted: 210 15% 25%;
+    --muted-foreground: 210 30% 65%;
+    --accent: 140 45% 60%; /* Muted Green */
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 70% 50%; /* Slightly softer red for dark */
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
+    --border: 210 15% 25%;
+    --input: 210 15% 25%;
+    --ring: 190 60% 55%;
+    
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+
+    /* Sidebar for Personal Dark */
+    --sidebar-background: 210 18% 10%;
+    --sidebar-foreground: 210 40% 90%;
+    --sidebar-primary: 190 60% 55%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 140 45% 60%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 210 15% 22%;
+    --sidebar-ring: 190 60% 55%;
+  }
+
+  /* --- WORK MODE --- */
+  /* Work Light */
+  html.mode-work, html.mode-work.light {
+    --background: 220 30% 96%; /* Very Light Gray/Blue */
+    --foreground: 220 25% 20%; /* Dark Slate Blue */
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 20%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 20%;
+    --primary: 205 75% 55%; /* Professional Blue */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 25% 90%; /* Light Steel Blue */
+    --secondary-foreground: 220 25% 30%;
+    --muted: 220 25% 85%; /* Very Light Steel Blue */
+    --muted-foreground: 220 20% 50%;
+    --accent: 170 60% 45%; /* Professional Teal */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 25% 85%;
+    --input: 220 25% 85%;
+    --ring: 205 75% 55%;
+
+    /* Sidebar for Work Light */
+    --sidebar-background: 220 20% 92%;
+    --sidebar-foreground: 220 25% 20%;
+    --sidebar-primary: 205 75% 55%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 170 60% 45%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 25% 82%;
+    --sidebar-ring: 205 75% 55%;
+  }
+
+  /* Work Dark */
+  html.mode-work.dark {
+    --background: 220 15% 10%; /* Dark Slate background */
+    --foreground: 220 20% 85%; /* Light Gray-Blue */
+    --card: 220 15% 13%;
+    --card-foreground: 220 20% 85%;
+    --popover: 220 15% 13%;
+    --popover-foreground: 220 20% 85%;
+    --primary: 205 65% 50%; /* Muted Professional Blue for dark mode */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 12% 18%; /* Darker Slate */
+    --secondary-foreground: 220 20% 75%;
+    --muted: 220 10% 22%; /* Very Dark Slate */
+    --muted-foreground: 220 15% 60%;
+    --accent: 170 50% 40%; /* Muted Professional Teal for dark mode */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 10% 22%;
+    --input: 220 10% 22%;
+    --ring: 205 65% 50%;
+
+    /* Sidebar for Work Dark */
+    --sidebar-background: 220 12% 8%;
+    --sidebar-foreground: 220 20% 85%;
+    --sidebar-primary: 205 65% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 170 50% 40%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 10% 19%;
+    --sidebar-ring: 205 65% 50%;
   }
 }
 
@@ -116,24 +180,22 @@ body {
   width: 6px; /* Size of the dot */
   height: 6px; /* Size of the dot */
   border-radius: 50%;
-  background-color: hsl(var(--accent)); /* Default dot color (green) */
+  background-color: hsl(var(--accent)); /* Default dot color */
   z-index: 1; /* Ensure dot is above other button content if any */
 }
 
 /* Dot color for selected day with event */
-/* .day_selected is on the button, .day-with-event is on the cell */
 .day-with-event button.day_selected::after {
-  background-color: hsl(var(--accent-foreground)); /* White dot on blue selected day */
+  background-color: hsl(var(--accent-foreground)); /* Contrasting dot on selected day */
 }
 
 /* Dot color for today with event */
-/* .day_today is on the button, .day-with-event is on the cell */
 .day-with-event button.day_today::after {
-   background-color: hsl(var(--primary)); /* Blue dot on accent (today) background */
+   background-color: hsl(var(--primary)); /* Primary color dot on today (accent) background */
 }
 
 /* Dot color for today that is also selected and has an event */
-/* .day_today and .day_selected are on the button, .day-with-event is on the cell */
 .day-with-event button.day_today.day_selected::after {
-  background-color: hsl(var(--accent-foreground)); /* Keep it white if today is also selected */
+  background-color: hsl(var(--accent-foreground)); /* Keep it contrasting if today is also selected */
 }
+

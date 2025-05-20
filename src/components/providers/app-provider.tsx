@@ -128,6 +128,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [appMode, isLoading]);
 
+  // Effect to apply mode-specific class to HTML element
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('mode-personal', 'mode-work'); // Clean up previous mode classes
+
+    if (appMode === 'work') {
+      root.classList.add('mode-work');
+    } else {
+      root.classList.add('mode-personal'); // Default to personal
+    }
+  }, [appMode]);
+
 
   // Effect for activity notifications
   useEffect(() => {
