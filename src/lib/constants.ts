@@ -19,3 +19,7 @@ export const KANBAN_STATUSES: { id: ActivityStatus; title: string }[] = [
 ];
 
 export const APP_NAME = 'TodoFlow';
+
+// Hardcoded credentials for login
+export const HARDCODED_USERNAME = "prueba";
+export const HARDCODED_PASSWORD = "prueba123";

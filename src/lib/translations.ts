@@ -17,6 +17,8 @@ export type Translations = {
   workMode: string;
   switchToPersonalMode: string;
   switchToWorkMode: string;
+  logout: string;
+  changePassword: string;
 
 
   // CategoriesPage
@@ -98,6 +100,8 @@ export type Translations = {
   loginWelcomeMessage: string;
   loginUsernameLabel: string;
   loginPasswordLabel: string;
+  loginUsernamePlaceholder: string;
+  loginPasswordPlaceholder: string;
   loginButtonText: string;
   loginLoggingIn: string;
   loginInvalidCredentials: string;
@@ -108,6 +112,26 @@ export type Translations = {
   loginPasswordRequired: string;
   loginSecurityNotice: string;
   loginRedirecting: string;
+
+  // ChangePasswordModal
+  changePasswordModalTitle: string;
+  changePasswordModalDescription: string;
+  currentPasswordLabel: string;
+  newPasswordLabel: string;
+  confirmNewPasswordLabel: string;
+  currentPasswordPlaceholder: string;
+  newPasswordPlaceholder: string;
+  confirmNewPasswordPlaceholder: string;
+  updatePasswordButton: string;
+  passwordUpdateSuccessTitle: string;
+  passwordUpdateSuccessDescription: string;
+  passwordUpdateErrorIncorrectCurrent: string;
+  passwordUpdateErrorNewPasswordRequired: string;
+  passwordUpdateErrorConfirmPasswordRequired: string;
+  passwordUpdateErrorPasswordsDoNotMatch: string;
+  passwordUpdateErrorCurrentEqualsNew: string;
+  passwordMinLength: (params: { length: number }) => string;
+
 };
 
 export const translations: Record<Locale, Translations> = {
@@ -126,6 +150,8 @@ export const translations: Record<Locale, Translations> = {
     workMode: "Work",
     switchToPersonalMode: "Switch to Personal Mode",
     switchToWorkMode: "Switch to Work Mode",
+    logout: "Logout",
+    changePassword: "Change Password",
     backToCalendar: "Back to Calendar",
     addCategory: "Add Category",
     editCategory: "Edit Category",
@@ -191,10 +217,11 @@ export const translations: Record<Locale, Translations> = {
     todosCompleted: (params) => `${params.completed} / ${params.total} todos completed`,
     noDetailsAvailable: "No details available.",
     noTodosForThisActivity: "No todos for this activity.",
-    // Login Page
     loginWelcomeMessage: "Log in to manage your activities.",
     loginUsernameLabel: "Username",
     loginPasswordLabel: "Password",
+    loginUsernamePlaceholder: "Enter your username",
+    loginPasswordPlaceholder: "Enter your password",
     loginButtonText: "Login",
     loginLoggingIn: "Logging in...",
     loginInvalidCredentials: "Invalid username or password.",
@@ -205,6 +232,23 @@ export const translations: Record<Locale, Translations> = {
     loginPasswordRequired: "Password is required.",
     loginSecurityNotice: "This is a prototype. Do not use real credentials.",
     loginRedirecting: "Redirecting...",
+    changePasswordModalTitle: "Change Password",
+    changePasswordModalDescription: "Enter your current password and a new password below.",
+    currentPasswordLabel: "Current Password",
+    newPasswordLabel: "New Password",
+    confirmNewPasswordLabel: "Confirm New Password",
+    currentPasswordPlaceholder: "Your current password",
+    newPasswordPlaceholder: "Your new password",
+    confirmNewPasswordPlaceholder: "Confirm your new password",
+    updatePasswordButton: "Update Password",
+    passwordUpdateSuccessTitle: "Password Updated",
+    passwordUpdateSuccessDescription: "Your password has been successfully updated. (Prototype: Not actually changed)",
+    passwordUpdateErrorIncorrectCurrent: "Incorrect current password.",
+    passwordUpdateErrorNewPasswordRequired: "New password is required.",
+    passwordUpdateErrorConfirmPasswordRequired: "Confirm new password is required.",
+    passwordUpdateErrorPasswordsDoNotMatch: "New passwords do not match.",
+    passwordUpdateErrorCurrentEqualsNew: "New password must be different from the current password.",
+    passwordMinLength: (params) => `Password must be at least ${params.length} characters.`,
   },
   es: {
     addActivity: "Añadir Actividad",
@@ -221,6 +265,8 @@ export const translations: Record<Locale, Translations> = {
     workMode: "Trabajo",
     switchToPersonalMode: "Cambiar a Modo Personal",
     switchToWorkMode: "Cambiar a Modo Trabajo",
+    logout: "Cerrar Sesión",
+    changePassword: "Cambiar Contraseña",
     backToCalendar: "Volver al Calendario",
     addCategory: "Añadir Categoría",
     editCategory: "Editar Categoría",
@@ -286,10 +332,11 @@ export const translations: Record<Locale, Translations> = {
     todosCompleted: (params) => `${params.completed} / ${params.total} tareas completadas`,
     noDetailsAvailable: "No hay detalles disponibles.",
     noTodosForThisActivity: "No hay tareas para esta actividad.",
-    // Login Page
     loginWelcomeMessage: "Inicia sesión para gestionar tus actividades.",
     loginUsernameLabel: "Usuario",
     loginPasswordLabel: "Contraseña",
+    loginUsernamePlaceholder: "Introduce tu usuario",
+    loginPasswordPlaceholder: "Introduce tu contraseña",
     loginButtonText: "Iniciar Sesión",
     loginLoggingIn: "Iniciando sesión...",
     loginInvalidCredentials: "Usuario o contraseña incorrectos.",
@@ -300,5 +347,22 @@ export const translations: Record<Locale, Translations> = {
     loginPasswordRequired: "La contraseña es obligatoria.",
     loginSecurityNotice: "Esto es un prototipo. No uses credenciales reales.",
     loginRedirecting: "Redirigiendo...",
+    changePasswordModalTitle: "Cambiar Contraseña",
+    changePasswordModalDescription: "Introduce tu contraseña actual y una nueva contraseña a continuación.",
+    currentPasswordLabel: "Contraseña Actual",
+    newPasswordLabel: "Nueva Contraseña",
+    confirmNewPasswordLabel: "Confirmar Nueva Contraseña",
+    currentPasswordPlaceholder: "Tu contraseña actual",
+    newPasswordPlaceholder: "Tu nueva contraseña",
+    confirmNewPasswordPlaceholder: "Confirma tu nueva contraseña",
+    updatePasswordButton: "Actualizar Contraseña",
+    passwordUpdateSuccessTitle: "Contraseña Actualizada",
+    passwordUpdateSuccessDescription: "Tu contraseña ha sido actualizada exitosamente. (Prototipo: No cambiada realmente)",
+    passwordUpdateErrorIncorrectCurrent: "Contraseña actual incorrecta.",
+    passwordUpdateErrorNewPasswordRequired: "La nueva contraseña es obligatoria.",
+    passwordUpdateErrorConfirmPasswordRequired: "Confirmar la nueva contraseña es obligatorio.",
+    passwordUpdateErrorPasswordsDoNotMatch: "Las nuevas contraseñas no coinciden.",
+    passwordUpdateErrorCurrentEqualsNew: "La nueva contraseña debe ser diferente a la actual.",
+    passwordMinLength: (params) => `La contraseña debe tener al menos ${params.length} caracteres.`,
   },
 };

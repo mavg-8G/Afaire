@@ -12,7 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useAppStore } from '@/hooks/use-app-store';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from '@/contexts/language-context';
-import { APP_NAME } from '@/lib/constants';
+import { APP_NAME, HARDCODED_USERNAME, HARDCODED_PASSWORD } from '@/lib/constants';
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Terminal } from 'lucide-react';
@@ -24,8 +24,6 @@ const loginFormSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginFormSchema>;
 
-const HARDCODED_USERNAME = "prueba";
-const HARDCODED_PASSWORD = "prueba123";
 const MAX_ATTEMPTS_BEFORE_LOCKOUT = 2;
 const BASE_LOCKOUT_DURATION_SECONDS = 30;
 
@@ -148,7 +146,7 @@ export default function LoginPage() {
                   <FormItem>
                     <FormLabel>{t('loginUsernameLabel')}</FormLabel>
                     <FormControl>
-                      <Input placeholder="prueba" {...field} disabled={isLockedOut} />
+                      <Input placeholder={t('loginUsernamePlaceholder')} {...field} disabled={isLockedOut} />
                     </FormControl>
                     <FormMessage>{form.formState.errors.username && t(form.formState.errors.username.message as any)}</FormMessage>
                   </FormItem>
@@ -161,7 +159,7 @@ export default function LoginPage() {
                   <FormItem>
                     <FormLabel>{t('loginPasswordLabel')}</FormLabel>
                     <FormControl>
-                      <Input type="password" placeholder="prueba123" {...field} disabled={isLockedOut} />
+                      <Input type="password" placeholder={t('loginPasswordPlaceholder')} {...field} disabled={isLockedOut} />
                     </FormControl>
                      <FormMessage>{form.formState.errors.password && t(form.formState.errors.password.message as any)}</FormMessage>
                   </FormItem>

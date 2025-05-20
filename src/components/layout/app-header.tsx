@@ -3,10 +3,11 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Settings, Languages, Sun, Moon, Laptop, MoreVertical, User, Briefcase } from 'lucide-react'; 
+import { PlusCircle, Settings, Languages, Sun, Moon, Laptop, MoreVertical, User, Briefcase, LogOut, KeyRound } from 'lucide-react'; 
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { APP_NAME } from '@/lib/constants';
 import ActivityModal from '@/components/forms/activity-modal'; 
+import ChangePasswordModal from '@/components/forms/change-password-modal';
 import { useTranslations } from '@/contexts/language-context';
 import { useTheme } from 'next-themes';
 import {
@@ -21,15 +22,23 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useAppStore } from '@/hooks/use-app-store';
 import type { AppMode } from '@/lib/types';
+import { useRouter } from 'next/navigation';
 
 export default function AppHeader() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
+  const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
   const { t, setLocale, locale } = useTranslations();
   const { setTheme, theme } = useTheme();
-  const { appMode, setAppMode } = useAppStore();
+  const { appMode, setAppMode, logout } = useAppStore();
+  const router = useRouter();
 
   const handleModeToggle = (isWorkMode: boolean) => {
     setAppMode(isWorkMode ? 'work' : 'personal');
+  };
+
+  const handleLogout = () => {
+    logout();
+    router.push('/login');
   };
 
   const appModeToggleSwitch = (
@@ -70,13 +79,13 @@ export default function AppHeader() {
 
           {/* Right Section: Action Buttons */}
           <div className="flex items-center gap-x-1 sm:gap-x-2">
-            <Button onClick={() => setIsModalOpen(true)} variant="default" size="sm" className="text-xs sm:text-sm sm:h-10 sm:px-4 sm:py-2">
+            <Button onClick={() => setIsActivityModalOpen(true)} variant="default" size="sm" className="text-xs sm:text-sm sm:h-10 sm:px-4 sm:py-2">
               <PlusCircle className="mr-1 h-4 w-4 sm:mr-2 sm:h-5 sm:w-5" />
               {t('addActivity')}
             </Button>
             
-            {/* Desktop Specific Actions (Settings, Theme, Language) */}
-            <div className="hidden md:flex items-center gap-x-1"> {/* Adjusted gap for tighter fit if needed */}
+            {/* Desktop Specific Actions */}
+            <div className="hidden md:flex items-center gap-x-1">
               <Link href="/categories" passHref>
                 <Button variant="outline" size="icon" aria-label={t('manageCategories')}>
                   <Settings className="h-5 w-5" />
@@ -123,6 +132,14 @@ export default function AppHeader() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+
+              <Button variant="outline" size="icon" aria-label={t('changePassword')} onClick={() => setIsChangePasswordModalOpen(true)}>
+                <KeyRound className="h-5 w-5" />
+              </Button>
+
+              <Button variant="outline" size="icon" aria-label={t('logout')} onClick={handleLogout}>
+                <LogOut className="h-5 w-5" />
+              </Button>
             </div>
 
             {/* Mobile Actions (MoreVertical Dropdown) */}
@@ -144,6 +161,10 @@ export default function AppHeader() {
                       <Settings className="mr-2 h-4 w-4" />
                       {t('manageCategories')}
                     </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setIsChangePasswordModalOpen(true)}>
+                    <KeyRound className="mr-2 h-4 w-4" />
+                    {t('changePassword')}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuLabel>{t('theme')}</DropdownMenuLabel>
@@ -167,6 +188,11 @@ export default function AppHeader() {
                   <DropdownMenuItem onClick={() => setLocale('es')} disabled={locale === 'es'}>
                     {t('spanish')}
                   </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    {t('logout')}
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -174,7 +200,8 @@ export default function AppHeader() {
           </div>
         </div>
       </header>
-      <ActivityModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <ActivityModal isOpen={isActivityModalOpen} onClose={() => setIsActivityModalOpen(false)} />
+      <ChangePasswordModal isOpen={isChangePasswordModalOpen} onClose={() => setIsChangePasswordModalOpen(false)} />
     </>
   );
 }

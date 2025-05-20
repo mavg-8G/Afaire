@@ -31,7 +31,7 @@ export interface AppContextType {
   addCategory: (name: string, iconName: string) => void;
   updateCategory: (categoryId: string, updates: { name?: string; iconName?: string }) => void;
   deleteCategory: (categoryId: string) => void;
-  isLoading: boolean; // Renamed from initialIsLoading to global isLoading
+  isLoading: boolean; 
   error: string | null;
 
   // Authentication and Login Security
@@ -41,6 +41,7 @@ export interface AppContextType {
   setLoginAttempts: (attempts: number) => void;
   lockoutEndTime: number | null;
   setLockoutEndTime: (timestamp: number | null) => void;
+  logout: () => void;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -63,7 +64,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [activities, setActivities] = useState<Activity[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [appMode, setAppModeState] = useState<AppMode>('personal');
-  const [isLoading, setIsLoading] = useState<boolean>(true); // Global loading state
+  const [isLoading, setIsLoading] = useState<boolean>(true); 
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -77,7 +78,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
   useEffect(() => {
-    setIsLoading(true); // Start loading
+    setIsLoading(true); 
     try {
       // Load activities
       const storedActivities = localStorage.getItem(LOCAL_STORAGE_KEY_ACTIVITIES);
@@ -118,7 +119,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       console.error("Failed to load data from local storage", err);
       setError("Failed to load saved data.");
     } finally {
-      setIsLoading(false); // Finish loading
+      setIsLoading(false); 
     }
   }, []);
 
@@ -223,6 +224,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const setLockoutEndTime = useCallback((timestamp: number | null) => {
     setLockoutEndTimeState(timestamp);
+  }, []);
+
+  const logout = useCallback(() => {
+    setIsAuthenticatedState(false);
+    setLoginAttemptsState(0); // Reset attempts on logout
+    setLockoutEndTimeState(null); // Clear lockout on logout
   }, []);
 
   const addActivity = useCallback((
@@ -375,6 +382,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setLoginAttempts,
         lockoutEndTime,
         setLockoutEndTime,
+        logout,
       }}
     >
       {children}
