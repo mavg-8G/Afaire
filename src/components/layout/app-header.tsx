@@ -3,21 +3,25 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Settings, Languages } from 'lucide-react'; 
+import { PlusCircle, Settings, Languages, Sun, Moon, Laptop } from 'lucide-react'; 
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { APP_NAME } from '@/lib/constants';
 import ActivityModal from '@/components/forms/activity-modal'; 
 import { useTranslations } from '@/contexts/language-context';
+import { useTheme } from 'next-themes';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 
 export default function AppHeader() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { t, setLocale, locale } = useTranslations();
+  const { setTheme } = useTheme();
 
   return (
     <>
@@ -40,6 +44,31 @@ export default function AppHeader() {
                 <span className="sr-only sm:not-sr-only sm:ml-2">{t('manageCategories')}</span>
               </Button>
             </Link>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                  <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                  <span className="sr-only">{t('theme')}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setTheme('light')}>
+                  <Sun className="mr-2 h-4 w-4" />
+                  {t('lightTheme')}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setTheme('dark')}>
+                  <Moon className="mr-2 h-4 w-4" />
+                  {t('darkTheme')}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setTheme('system')}>
+                  <Laptop className="mr-2 h-4 w-4" />
+                  {t('systemTheme')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon">

@@ -8,6 +8,11 @@ export type Translations = {
   language: string;
   english: string;
   spanish: string;
+  theme: string;
+  lightTheme: string;
+  darkTheme: string;
+  systemTheme: string;
+
 
   // CategoriesPage
   backToCalendar: string;
@@ -86,6 +91,10 @@ export const translations: Record<Locale, Translations> = {
     language: "Language",
     english: "English",
     spanish: "Spanish",
+    theme: "Theme",
+    lightTheme: "Light",
+    darkTheme: "Dark",
+    systemTheme: "System",
     backToCalendar: "Back to Calendar",
     addCategory: "Add Category",
     editCategory: "Edit Category",
@@ -107,7 +116,7 @@ export const translations: Record<Locale, Translations> = {
     editActivityTitle: "Edit Activity",
     addActivityTitle: "Add New Activity",
     editActivityDescription: "Update the details of your activity.",
-    addActivityDescription: (params) => `Fill in the details for your new activity. ${params.initialDateMsg}`,
+    addActivityDescription: (params) => `Fill in the details for your new activity.${params.initialDateMsg}`,
     activityTitleLabel: "Activity Title",
     categoryLabel: "Category",
     selectCategoryPlaceholder: "Select a category",
@@ -151,6 +160,10 @@ export const translations: Record<Locale, Translations> = {
     language: "Idioma",
     english: "Inglés",
     spanish: "Español",
+    theme: "Tema",
+    lightTheme: "Claro",
+    darkTheme: "Oscuro",
+    systemTheme: "Sistema",
     backToCalendar: "Volver al Calendario",
     addCategory: "Añadir Categoría",
     editCategory: "Editar Categoría",
@@ -172,7 +185,7 @@ export const translations: Record<Locale, Translations> = {
     editActivityTitle: "Editar Actividad",
     addActivityTitle: "Añadir Nueva Actividad",
     editActivityDescription: "Actualiza los detalles de tu actividad.",
-    addActivityDescription: (params) => `Completa los detalles de tu nueva actividad. ${params.initialDateMsg}`,
+    addActivityDescription: (params) => `Completa los detalles de tu nueva actividad.${params.initialDateMsg}`,
     activityTitleLabel: "Título de la Actividad",
     categoryLabel: "Categoría",
     selectCategoryPlaceholder: "Selecciona una categoría",
@@ -211,4 +224,3 @@ export const translations: Record<Locale, Translations> = {
     noTodosForThisActivity: "No hay tareas para esta actividad.",
   },
 };
-

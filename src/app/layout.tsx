@@ -5,6 +5,7 @@ import './globals.css';
 import { AppProvider } from '@/components/providers/app-provider';
 import { Toaster } from '@/components/ui/toaster';
 import { LanguageProvider } from '@/contexts/language-context';
+import { ThemeProvider } from '@/contexts/theme-provider';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -29,12 +30,19 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}>
-        <LanguageProvider>
-          <AppProvider>
-            {children}
-            <Toaster />
-          </AppProvider>
-        </LanguageProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <LanguageProvider>
+            <AppProvider>
+              {children}
+              <Toaster />
+            </AppProvider>
+          </LanguageProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
