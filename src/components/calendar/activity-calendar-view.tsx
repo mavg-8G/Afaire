@@ -31,6 +31,7 @@ export default function ActivityCalendarView() {
   const { toast } = useToast();
   const { t, locale } = useTranslations();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [currentDisplayMonth, setCurrentDisplayMonth] = useState<Date | undefined>(undefined); // State for the calendar's displayed month
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | undefined>(undefined);
   const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
@@ -41,7 +42,9 @@ export default function ActivityCalendarView() {
 
   useEffect(() => {
     setHasMounted(true);
-    setSelectedDate(new Date());
+    const today = new Date();
+    setSelectedDate(today);
+    setCurrentDisplayMonth(today); // Initialize currentDisplayMonth
   }, []);
 
 
@@ -129,19 +132,38 @@ export default function ActivityCalendarView() {
     hasEvent: 'day-with-event',
   };
 
+  const handleDateSelect = (date: Date | undefined) => {
+    setSelectedDate(date);
+    if (date && currentDisplayMonth) {
+      const newSelectedMonthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+      const currentDisplayMonthStart = new Date(currentDisplayMonth.getFullYear(), currentDisplayMonth.getMonth(), 1);
+      if (newSelectedMonthStart.getTime() !== currentDisplayMonthStart.getTime()) {
+          setCurrentDisplayMonth(date); // Update display month if selected date is in a different month
+      }
+    } else if (date) { // If currentDisplayMonth was undefined but date is not
+        setCurrentDisplayMonth(date);
+    }
+  };
+
+  const handleTodayButtonClick = () => {
+    const today = new Date();
+    setSelectedDate(today);
+    setCurrentDisplayMonth(today); // Explicitly set the calendar to show today's month
+  };
+
   const todayButtonFooter = (
     <div className="flex justify-center pt-2">
       <Button
         variant="outline"
         size="sm"
-        onClick={() => setSelectedDate(new Date())}
+        onClick={handleTodayButtonClick}
       >
         {t('todayButton')}
       </Button>
     </div>
   );
 
-  if (!hasMounted) {
+  if (!hasMounted || !selectedDate || !currentDisplayMonth) { 
     return (
       <div className="container mx-auto py-6 flex flex-col lg:flex-row gap-6 items-start">
         <Card className="lg:w-1/2 xl:w-2/3 shadow-lg w-full">
@@ -179,11 +201,12 @@ export default function ActivityCalendarView() {
           <Calendar
             mode="single"
             selected={selectedDate}
-            onSelect={setSelectedDate}
+            onSelect={handleDateSelect}
+            month={currentDisplayMonth} // Control displayed month
+            onMonthChange={setCurrentDisplayMonth} // Sync when user navigates months
             className="rounded-md"
             modifiers={modifiers}
             modifiersClassNames={modifiersClassNames}
-            initialFocus
             locale={dateLocale}
             footer={todayButtonFooter}
           />
@@ -257,5 +280,6 @@ export default function ActivityCalendarView() {
     </div>
   );
 }
+    
 
     
