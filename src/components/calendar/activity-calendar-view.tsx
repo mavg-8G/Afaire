@@ -52,8 +52,37 @@ export default function ActivityCalendarView() {
 
   const activitiesForSelectedDay = useMemo(() => {
     if (!selectedDate || !hasMounted) return [];
-    return activities.filter(activity => isSameDay(new Date(activity.createdAt), selectedDate))
-                     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return activities
+      .filter(activity => isSameDay(new Date(activity.createdAt), selectedDate))
+      .sort((a, b) => {
+        // 1. Primary sort: completed activities first
+        if (a.completed && !b.completed) return -1;
+        if (!a.completed && b.completed) return 1;
+
+        // If both are completed or both are not completed, proceed to time-based sorting
+        const aHasTime = !!a.time;
+        const bHasTime = !!b.time;
+
+        // 2. Secondary sort: activities with time come before activities without time
+        if (aHasTime && !bHasTime) return -1;
+        if (!aHasTime && bHasTime) return 1;
+
+        // 3. Tertiary sort: if both have time, sort by time ascending
+        if (aHasTime && bHasTime && a.time && b.time) {
+          const [aHours, aMinutes] = a.time.split(':').map(Number);
+          const [bHours, bMinutes] = b.time.split(':').map(Number);
+
+          if (aHours !== bHours) {
+            return aHours - bHours;
+          }
+          if (aMinutes !== bMinutes) {
+            return aMinutes - bMinutes;
+          }
+        }
+        
+        // 4. Fallback sort: use original creation time for stability if other criteria are equal
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      });
   }, [activities, selectedDate, hasMounted]);
 
   const handleEditActivity = (activity: Activity) => {
@@ -214,4 +243,3 @@ export default function ActivityCalendarView() {
     </div>
   );
 }
-
