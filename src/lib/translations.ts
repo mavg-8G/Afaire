@@ -19,6 +19,7 @@ export type Translations = {
   switchToWorkMode: string;
   logout: string;
   changePassword: string;
+  dashboard: string;
 
 
   // CategoriesPage
@@ -146,6 +147,15 @@ export type Translations = {
   toastActivityStartingSoonTitle: string;
   toastActivityStartingSoonDescription: (params: { activityTitle: string, activityTime: string }) => string;
 
+  // Dashboard Page
+  dashboardTitle: string;
+  dashboardViewWeekly: string;
+  dashboardViewMonthly: string;
+  dashboardChartTotalActivities: string;
+  dashboardChartCompletedActivities: string;
+  dashboardWeekLabel: string;
+  dashboardNoData: string;
+
 };
 
 export const translations: Record<Locale, Translations> = {
@@ -166,6 +176,7 @@ export const translations: Record<Locale, Translations> = {
     switchToWorkMode: "Switch to Work Mode",
     logout: "Logout",
     changePassword: "Change Password",
+    dashboard: "Dashboard",
     backToCalendar: "Back to Calendar",
     addCategory: "Add Category",
     editCategory: "Edit Category",
@@ -267,7 +278,6 @@ export const translations: Record<Locale, Translations> = {
     passwordUpdateErrorPasswordsDoNotMatch: "New passwords do not match.",
     passwordUpdateErrorCurrentEqualsNew: "New password must be different from the current password.",
     passwordMinLength: (params) => `Password must be at least ${params.length} characters.`,
-    // AppProvider Toasts
     toastCategoryAddedTitle: "Category Added",
     toastCategoryAddedDescription: (params) => `Category "${params.categoryName}" has been added.`,
     toastCategoryUpdatedTitle: "Category Updated",
@@ -276,6 +286,13 @@ export const translations: Record<Locale, Translations> = {
     toastCategoryDeletedDescription: (params) => `Category "${params.categoryName}" has been removed.`,
     toastActivityStartingSoonTitle: "Activity Starting Soon!",
     toastActivityStartingSoonDescription: (params) => `"${params.activityTitle}" is scheduled for ${params.activityTime}.`,
+    dashboardTitle: "Activity Dashboard",
+    dashboardViewWeekly: "Last 7 Days",
+    dashboardViewMonthly: "Current Month (by Week)",
+    dashboardChartTotalActivities: "Total Activities",
+    dashboardChartCompletedActivities: "Completed Activities",
+    dashboardWeekLabel: "W",
+    dashboardNoData: "No activity data available for the selected period.",
   },
   es: {
     addActivity: "Añadir Actividad",
@@ -294,6 +311,7 @@ export const translations: Record<Locale, Translations> = {
     switchToWorkMode: "Cambiar a Modo Trabajo",
     logout: "Cerrar Sesión",
     changePassword: "Cambiar Contraseña",
+    dashboard: "Panel de Control",
     backToCalendar: "Volver al Calendario",
     addCategory: "Añadir Categoría",
     editCategory: "Editar Categoría",
@@ -395,7 +413,6 @@ export const translations: Record<Locale, Translations> = {
     passwordUpdateErrorPasswordsDoNotMatch: "Las nuevas contraseñas no coinciden.",
     passwordUpdateErrorCurrentEqualsNew: "La nueva contraseña debe ser diferente a la actual.",
     passwordMinLength: (params) => `La contraseña debe tener al menos ${params.length} caracteres.`,
-    // AppProvider Toasts
     toastCategoryAddedTitle: "Categoría Añadida",
     toastCategoryAddedDescription: (params) => `La categoría "${params.categoryName}" ha sido añadida.`,
     toastCategoryUpdatedTitle: "Categoría Actualizada",
@@ -404,6 +421,24 @@ export const translations: Record<Locale, Translations> = {
     toastCategoryDeletedDescription: (params) => `La categoría "${params.categoryName}" ha sido eliminada.`,
     toastActivityStartingSoonTitle: "¡Actividad Comienza Pronto!",
     toastActivityStartingSoonDescription: (params) => `"${params.activityTitle}" está programada para las ${params.activityTime}.`,
+    dashboardTitle: "Panel de Actividades",
+    dashboardViewWeekly: "Últimos 7 Días",
+    dashboardViewMonthly: "Mes Actual (por Semana)",
+    dashboardChartTotalActivities: "Actividades Totales",
+    dashboardChartCompletedActivities: "Actividades Completadas",
+    dashboardWeekLabel: "S", // Semana
+    dashboardNoData: "No hay datos de actividad disponibles para el período seleccionado.",
   },
 };
 
+type PathImpl<T, Key extends keyof T> =
+  Key extends string
+  ? T[Key] extends Record<string, any>
+    ? | `${Key}.${PathImpl<T[Key], Exclude<keyof T[Key], keyof any[]>> & string}`
+      | `${Key}.${Exclude<keyof T[Key], keyof any[]> & string}`
+    : never
+  : never;
+
+type Path<T> = PathImpl<T, keyof T> | keyof T;
+
+export type TranslationKey = Path<Translations['en']>;

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Settings, Languages, Sun, Moon, Laptop, MoreVertical, User, Briefcase, LogOut, KeyRound } from 'lucide-react'; 
+import { PlusCircle, Settings, Languages, Sun, Moon, Laptop, MoreVertical, User, Briefcase, LogOut, KeyRound, LayoutDashboard } from 'lucide-react'; 
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { APP_NAME } from '@/lib/constants';
 import ActivityModal from '@/components/forms/activity-modal'; 
@@ -86,6 +86,11 @@ export default function AppHeader() {
             
             {/* Desktop Specific Actions */}
             <div className="hidden md:flex items-center gap-x-1">
+               <Link href="/dashboard" passHref>
+                <Button variant="outline" size="icon" aria-label={t('dashboard')}>
+                  <LayoutDashboard className="h-5 w-5" />
+                </Button>
+              </Link>
               <Link href="/categories" passHref>
                 <Button variant="outline" size="icon" aria-label={t('manageCategories')}>
                   <Settings className="h-5 w-5" />
@@ -156,6 +161,12 @@ export default function AppHeader() {
                     {appModeToggleSwitch}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
+                   <DropdownMenuItem asChild>
+                    <Link href="/dashboard" className="flex items-center w-full">
+                      <LayoutDashboard className="mr-2 h-4 w-4" />
+                      {t('dashboard')}
+                    </Link>
+                  </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/categories" className="flex items-center w-full">
                       <Settings className="mr-2 h-4 w-4" />
