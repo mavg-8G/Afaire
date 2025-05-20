@@ -262,7 +262,7 @@ export default function ActivityCalendarView() {
         </CardHeader>
         <CardContent className="flex-grow">
           {selectedDate && activitiesForView.length > 0 ? (
-            <ScrollArea className="h-[calc(100vh-34rem)] sm:h-[calc(100vh-32rem)] pr-1">
+            <ScrollArea className="h-[calc(100vh-30rem)] sm:h-[calc(100vh-28rem)] pr-1">
               <div className="space-y-3">
                 {activitiesForView.map(activity => (
                   <ActivityListItem 
