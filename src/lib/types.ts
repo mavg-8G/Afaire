@@ -24,6 +24,7 @@ export interface Category {
   id: string;
   name: string;
   icon: LucideIcon;
+  iconName: string; // Added for easier editing and consistent storage
 }
 
 export type ViewMode = 'all' | 'daily' | 'weekly' | 'monthly'; // For potential future filtering

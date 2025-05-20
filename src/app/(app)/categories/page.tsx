@@ -1,6 +1,6 @@
 
 "use client";
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -17,8 +17,9 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useAppStore } from '@/hooks/use-app-store';
-import { Trash2, PlusCircle } from 'lucide-react';
-import AppHeader from '@/components/layout/app-header'; // Assuming AppHeader is generic enough or you might want a specific one
+import type { Category } from '@/lib/types';
+import { Trash2, PlusCircle, Edit3, XCircle } from 'lucide-react';
+import AppHeader from '@/components/layout/app-header';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,7 +33,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-
 const categoryFormSchema = z.object({
   name: z.string().min(1, "Category name is required."),
   iconName: z.string().min(1, "Icon name is required (e.g., Home, Coffee)."),
@@ -41,8 +41,9 @@ const categoryFormSchema = z.object({
 type CategoryFormData = z.infer<typeof categoryFormSchema>;
 
 export default function ManageCategoriesPage() {
-  const { categories, addCategory, deleteCategory } = useAppStore();
-  const [categoryToDelete, setCategoryToDelete] = React.useState<string | null>(null);
+  const { categories, addCategory, updateCategory, deleteCategory } = useAppStore();
+  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
   const form = useForm<CategoryFormData>({
     resolver: zodResolver(categoryFormSchema),
@@ -52,14 +53,43 @@ export default function ManageCategoriesPage() {
     },
   });
 
+  useEffect(() => {
+    if (editingCategory) {
+      form.reset({
+        name: editingCategory.name,
+        iconName: editingCategory.iconName,
+      });
+    } else {
+      form.reset({ name: "", iconName: "" });
+    }
+  }, [editingCategory, form]);
+
   const onSubmit = (data: CategoryFormData) => {
-    addCategory(data.name, data.iconName);
+    if (editingCategory) {
+      updateCategory(editingCategory.id, { name: data.name, iconName: data.iconName });
+      setEditingCategory(null);
+    } else {
+      addCategory(data.name, data.iconName);
+    }
     form.reset();
   };
 
   const handleDeleteCategory = (categoryId: string) => {
     deleteCategory(categoryId);
     setCategoryToDelete(null);
+    if (editingCategory?.id === categoryId) {
+      setEditingCategory(null);
+      form.reset();
+    }
+  };
+
+  const handleEditCategory = (category: Category) => {
+    setEditingCategory(category);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingCategory(null);
+    form.reset();
   };
 
   return (
@@ -69,8 +99,10 @@ export default function ManageCategoriesPage() {
         <div className="grid gap-8 md:grid-cols-2">
           <Card className="shadow-lg">
             <CardHeader>
-              <CardTitle>Add New Category</CardTitle>
-              <CardDescription>Create a new category for your activities.</CardDescription>
+              <CardTitle>{editingCategory ? "Edit Category" : "Add New Category"}</CardTitle>
+              <CardDescription>
+                {editingCategory ? "Update the details of your category." : "Create a new category for your activities."}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Form {...form}>
@@ -104,10 +136,18 @@ export default function ManageCategoriesPage() {
                       </FormItem>
                     )}
                   />
-                  <Button type="submit" className="w-full">
-                    <PlusCircle className="mr-2 h-5 w-5" />
-                    Add Category
-                  </Button>
+                  <div className="flex space-x-2">
+                    <Button type="submit" className="flex-grow">
+                      {editingCategory ? <Edit3 className="mr-2 h-5 w-5" /> : <PlusCircle className="mr-2 h-5 w-5" />}
+                      {editingCategory ? "Save Changes" : "Add Category"}
+                    </Button>
+                    {editingCategory && (
+                      <Button type="button" variant="outline" onClick={handleCancelEdit}>
+                        <XCircle className="mr-2 h-5 w-5" />
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
                 </form>
               </Form>
             </CardContent>
@@ -116,11 +156,11 @@ export default function ManageCategoriesPage() {
           <Card className="shadow-lg flex flex-col">
             <CardHeader>
               <CardTitle>Existing Categories</CardTitle>
-              <CardDescription>View and manage your current categories.</CardDescription>
+              <CardDescription>View, edit, and manage your current categories.</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow">
               {categories.length > 0 ? (
-                <ScrollArea className="h-[calc(100vh-26rem)] sm:h-[calc(100vh-24rem)] pr-1">
+                <ScrollArea className="h-[calc(100vh-28rem)] sm:h-[calc(100vh-26rem)] pr-1">
                   <ul className="space-y-3">
                     {categories.map((category) => (
                       <li key={category.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md shadow-sm">
@@ -128,29 +168,34 @@ export default function ManageCategoriesPage() {
                           <category.icon className="h-6 w-6 text-primary" />
                           <span className="font-medium">{category.name}</span>
                         </div>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
-                              <Trash2 className="h-5 w-5" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This action will delete the category "{category.name}". 
-                                Activities using this category will no longer be associated with it.
-                                This cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDeleteCategory(category.id)}>
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                        <div className="flex items-center">
+                          <Button variant="ghost" size="icon" onClick={() => handleEditCategory(category)} className="text-primary hover:text-primary/80">
+                            <Edit3 className="h-5 w-5" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive/80">
+                                <Trash2 className="h-5 w-5" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This action will delete the category "{category.name}". 
+                                  Activities using this category will no longer be associated with it.
+                                  This cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel onClick={() => setCategoryToDelete(null)}>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteCategory(category.id)}>
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
                       </li>
                     ))}
                   </ul>

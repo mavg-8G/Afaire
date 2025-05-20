@@ -27,6 +27,7 @@ export interface AppContextType {
   moveActivity: (activityId: string, newStatus: ActivityStatus) => void;
   getCategoryById: (categoryId: string) => Category | undefined;
   addCategory: (name: string, iconName: string) => void;
+  updateCategory: (categoryId: string, updates: { name?: string; iconName?: string }) => void;
   deleteCategory: (categoryId: string) => void;
   isLoading: boolean;
   error: string | null;
@@ -66,9 +67,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       const storedCategories = localStorage.getItem(LOCAL_STORAGE_KEY_CATEGORIES);
       if (storedCategories) {
-        setCategories(JSON.parse(storedCategories).map((cat: any) => ({
+        setCategories(JSON.parse(storedCategories).map((cat: Omit<Category, 'icon'> & { iconName: string }) => ({
           ...cat,
-          icon: getIconComponent(cat.iconName || 'Package') // Rehydrate icon component
+          icon: getIconComponent(cat.iconName || 'Package') 
         })));
       } else {
         setCategories(INITIAL_CATEGORIES);
@@ -96,12 +97,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     if (!isLoading) {
       try {
-        // Store icon name instead of the component itself for serialization
-        const serializableCategories = categories.map(cat => ({
-          id: cat.id,
-          name: cat.name,
-          iconName: Object.keys(Icons).find(key => (Icons as any)[key] === cat.icon) || 'Package'
-        }));
+        // Store iconName directly as it's part of the Category type now
+        const serializableCategories = categories.map(({ icon, ...rest }) => rest);
         localStorage.setItem(LOCAL_STORAGE_KEY_CATEGORIES, JSON.stringify(serializableCategories));
       } catch (err) {
         console.error("Failed to save categories to local storage", err);
@@ -238,21 +235,44 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       id: `cat_${uuidv4()}`,
       name,
       icon: IconComponent,
+      iconName,
     };
     setCategories(prev => [...prev, newCategory]);
     toast({ title: "Category Added", description: `"${name}" has been added.` });
   }, [toast]);
 
+  const updateCategory = useCallback((categoryId: string, updates: { name?: string; iconName?: string }) => {
+    setCategories(prev =>
+      prev.map(cat => {
+        if (cat.id === categoryId) {
+          const newName = updates.name !== undefined ? updates.name : cat.name;
+          const newIconName = updates.iconName !== undefined ? updates.iconName : cat.iconName;
+          return {
+            ...cat,
+            name: newName,
+            iconName: newIconName,
+            icon: updates.iconName !== undefined ? getIconComponent(newIconName) : cat.icon,
+          };
+        }
+        return cat;
+      })
+    );
+    toast({ title: "Category Updated", description: "The category has been updated." });
+  }, [toast]);
+
+
   const deleteCategory = useCallback((categoryId: string) => {
+    const categoryToDelete = categories.find(cat => cat.id === categoryId);
+    if (!categoryToDelete) return;
+
     setCategories(prev => prev.filter(cat => cat.id !== categoryId));
-    // Optionally, update activities that used this category
     setActivities(prevActivities => 
       prevActivities.map(act => 
-        act.categoryId === categoryId ? { ...act, categoryId: '' } : act // Set to empty or a default categoryId
+        act.categoryId === categoryId ? { ...act, categoryId: '' } : act 
       )
     );
-    toast({ title: "Category Deleted", description: "The category has been removed." });
-  }, [toast]);
+    toast({ title: "Category Deleted", description: `"${categoryToDelete.name}" has been removed.` });
+  }, [toast, categories]);
 
 
   return (
@@ -269,6 +289,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         moveActivity,
         getCategoryById,
         addCategory,
+        updateCategory,
         deleteCategory,
         isLoading,
         error
@@ -278,4 +299,3 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
-
