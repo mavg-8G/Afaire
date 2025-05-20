@@ -1,6 +1,7 @@
 
 "use client";
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -18,7 +19,7 @@ import {
 } from "@/components/ui/form";
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Category } from '@/lib/types';
-import { Trash2, PlusCircle, Edit3, XCircle } from 'lucide-react';
+import { Trash2, PlusCircle, Edit3, XCircle, ArrowLeft } from 'lucide-react';
 import AppHeader from '@/components/layout/app-header';
 import {
   AlertDialog,
@@ -96,6 +97,14 @@ export default function ManageCategoriesPage() {
     <div className="flex flex-col flex-grow min-h-screen">
       <AppHeader />
       <main className="flex-grow container mx-auto py-8">
+        <div className="mb-6 flex justify-start">
+          <Link href="/" passHref>
+            <Button variant="outline">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Volver al Calendario
+            </Button>
+          </Link>
+        </div>
         <div className="grid gap-8 md:grid-cols-2">
           <Card className="shadow-lg">
             <CardHeader>
@@ -160,7 +169,7 @@ export default function ManageCategoriesPage() {
             </CardHeader>
             <CardContent className="flex-grow">
               {categories.length > 0 ? (
-                <ScrollArea className="h-[calc(100vh-28rem)] sm:h-[calc(100vh-26rem)] pr-1">
+                <ScrollArea className="h-[calc(100vh-32rem)] sm:h-[calc(100vh-30rem)] pr-1"> {/* Adjusted height */}
                   <ul className="space-y-3">
                     {categories.map((category) => (
                       <li key={category.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md shadow-sm">
@@ -215,3 +224,4 @@ export default function ManageCategoriesPage() {
     </div>
   );
 }
+
