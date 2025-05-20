@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import { isSameDay } from 'date-fns';
 import * as Icons from 'lucide-react';
+import { useTranslations } from '@/contexts/language-context'; // Import useTranslations
 
 export interface AppContextType {
   activities: Activity[]; // This will be the derived list for the current mode
@@ -67,6 +68,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  const { t } = useTranslations(); // Get the translation function
 
   const [lastNotificationCheckDay, setLastNotificationCheckDay] = useState<number | null>(null);
   const [notifiedToday, setNotifiedToday] = useState<Set<string>>(new Set());
@@ -222,8 +224,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         
         if (timeDiffMs >= 0 && timeDiffMs <= fiveMinutesInMs) {
           toast({
-            title: "Activity Starting Soon!",
-            description: `"${activity.title}" is scheduled for ${activity.time}.`
+            title: t('toastActivityStartingSoonTitle'),
+            description: t('toastActivityStartingSoonDescription', { activityTitle: activity.title, activityTime: activity.time })
           });
           setNotifiedToday(prev => new Set(prev).add(activity.id));
         }
@@ -231,7 +233,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, 60000);
 
     return () => clearInterval(intervalId);
-  }, [activities, isLoading, toast, notifiedToday, lastNotificationCheckDay, isAuthenticated]);
+  }, [activities, isLoading, toast, notifiedToday, lastNotificationCheckDay, isAuthenticated, t]);
 
   const setAppMode = useCallback((mode: AppMode) => {
     setAppModeState(mode);
@@ -339,8 +341,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       mode: mode,
     };
     setAllCategories(prev => [...prev, newCategory]);
-    toast({ title: "Category Added", description: `"${name}" has been added.` });
-  }, [toast]);
+    toast({ 
+      title: t('toastCategoryAddedTitle'), 
+      description: t('toastCategoryAddedDescription', { categoryName: name }) 
+    });
+  }, [toast, t]);
 
   const updateCategory = useCallback((categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>) => {
     setAllCategories(prev =>
@@ -360,8 +365,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return cat;
       })
     );
-    toast({ title: "Category Updated", description: "The category has been updated." });
-  }, [toast]);
+    toast({ 
+      title: t('toastCategoryUpdatedTitle'),
+      description: t('toastCategoryUpdatedDescription')
+    });
+  }, [toast, t]);
 
 
   const deleteCategory = useCallback((categoryId: string) => {
@@ -380,8 +388,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         act.categoryId === categoryId ? { ...act, categoryId: '' } : act 
       )
     );
-    toast({ title: "Category Deleted", description: `"${categoryToDelete.name}" has been removed.` });
-  }, [toast, allCategories]);
+    toast({ 
+      title: t('toastCategoryDeletedTitle'), 
+      description: t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name }) 
+    });
+  }, [toast, allCategories, t]);
 
 
   return (
@@ -416,3 +427,4 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+

@@ -136,6 +136,16 @@ export type Translations = {
   passwordUpdateErrorCurrentEqualsNew: string;
   passwordMinLength: (params: { length: number }) => string;
 
+  // AppProvider Toasts
+  toastCategoryAddedTitle: string;
+  toastCategoryAddedDescription: (params: { categoryName: string }) => string;
+  toastCategoryUpdatedTitle: string;
+  toastCategoryUpdatedDescription: string;
+  toastCategoryDeletedTitle: string;
+  toastCategoryDeletedDescription: (params: { categoryName: string }) => string;
+  toastActivityStartingSoonTitle: string;
+  toastActivityStartingSoonDescription: (params: { activityTitle: string, activityTime: string }) => string;
+
 };
 
 export const translations: Record<Locale, Translations> = {
@@ -257,6 +267,15 @@ export const translations: Record<Locale, Translations> = {
     passwordUpdateErrorPasswordsDoNotMatch: "New passwords do not match.",
     passwordUpdateErrorCurrentEqualsNew: "New password must be different from the current password.",
     passwordMinLength: (params) => `Password must be at least ${params.length} characters.`,
+    // AppProvider Toasts
+    toastCategoryAddedTitle: "Category Added",
+    toastCategoryAddedDescription: (params) => `Category "${params.categoryName}" has been added.`,
+    toastCategoryUpdatedTitle: "Category Updated",
+    toastCategoryUpdatedDescription: "The category details have been updated.",
+    toastCategoryDeletedTitle: "Category Deleted",
+    toastCategoryDeletedDescription: (params) => `Category "${params.categoryName}" has been removed.`,
+    toastActivityStartingSoonTitle: "Activity Starting Soon!",
+    toastActivityStartingSoonDescription: (params) => `"${params.activityTitle}" is scheduled for ${params.activityTime}.`,
   },
   es: {
     addActivity: "Añadir Actividad",
@@ -376,6 +395,15 @@ export const translations: Record<Locale, Translations> = {
     passwordUpdateErrorPasswordsDoNotMatch: "Las nuevas contraseñas no coinciden.",
     passwordUpdateErrorCurrentEqualsNew: "La nueva contraseña debe ser diferente a la actual.",
     passwordMinLength: (params) => `La contraseña debe tener al menos ${params.length} caracteres.`,
+    // AppProvider Toasts
+    toastCategoryAddedTitle: "Categoría Añadida",
+    toastCategoryAddedDescription: (params) => `La categoría "${params.categoryName}" ha sido añadida.`,
+    toastCategoryUpdatedTitle: "Categoría Actualizada",
+    toastCategoryUpdatedDescription: "Los detalles de la categoría han sido actualizados.",
+    toastCategoryDeletedTitle: "Categoría Eliminada",
+    toastCategoryDeletedDescription: (params) => `La categoría "${params.categoryName}" ha sido eliminada.`,
+    toastActivityStartingSoonTitle: "¡Actividad Comienza Pronto!",
+    toastActivityStartingSoonDescription: (params) => `"${params.activityTitle}" está programada para las ${params.activityTime}.`,
   },
 };
 
