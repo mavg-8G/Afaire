@@ -4,10 +4,10 @@ import type { ReactNode } from 'react';
 import React, { createContext, useState, useCallback, useEffect } from 'react';
 import type { Activity, Todo, Category, ActivityStatus, AppMode } from '@/lib/types';
 import { INITIAL_CATEGORIES } from '@/lib/constants';
-import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs
+import { v4 as uuidv4 } from 'uuid'; 
 import { useToast } from '@/hooks/use-toast';
 import { isSameDay } from 'date-fns';
-import * as Icons from 'lucide-react'; // Import all lucide-react icons
+import * as Icons from 'lucide-react'; 
 
 export interface AppContextType {
   activities: Activity[];
@@ -31,8 +31,16 @@ export interface AppContextType {
   addCategory: (name: string, iconName: string) => void;
   updateCategory: (categoryId: string, updates: { name?: string; iconName?: string }) => void;
   deleteCategory: (categoryId: string) => void;
-  isLoading: boolean;
+  isLoading: boolean; // Renamed from initialIsLoading to global isLoading
   error: string | null;
+
+  // Authentication and Login Security
+  isAuthenticated: boolean;
+  setIsAuthenticated: (value: boolean) => void;
+  loginAttempts: number;
+  setLoginAttempts: (attempts: number) => void;
+  lockoutEndTime: number | null;
+  setLockoutEndTime: (timestamp: number | null) => void;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -40,36 +48,44 @@ export const AppContext = createContext<AppContextType | undefined>(undefined);
 const LOCAL_STORAGE_KEY_ACTIVITIES = 'todoFlowActivities';
 const LOCAL_STORAGE_KEY_CATEGORIES = 'todoFlowCategories';
 const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode';
+const LOCAL_STORAGE_KEY_IS_AUTHENTICATED = 'todoFlowIsAuthenticated';
+const LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS = 'todoFlowLoginAttempts';
+const LOCAL_STORAGE_KEY_LOCKOUT_END_TIME = 'todoFlowLockoutEndTime';
 
 
-// Helper to get icon component by name
 const getIconComponent = (iconName: string): Icons.LucideIcon => {
   const capitalizedIconName = iconName.charAt(0).toUpperCase() + iconName.slice(1);
-  // Ensure it's a valid Lucide icon name (PascalCase)
   const pascalCaseIconName = capitalizedIconName.replace(/[^A-Za-z0-9]/g, '');
-  return (Icons as any)[pascalCaseIconName] || Icons.Package; // Default to Package icon if not found
+  return (Icons as any)[pascalCaseIconName] || Icons.Package; 
 };
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [appMode, setAppModeState] = useState<AppMode>('personal');
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true); // Global loading state
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const [lastNotificationCheckDay, setLastNotificationCheckDay] = useState<number | null>(null);
   const [notifiedToday, setNotifiedToday] = useState<Set<string>>(new Set());
 
+  // Authentication and Login Security State
+  const [isAuthenticated, setIsAuthenticatedState] = useState<boolean>(false);
+  const [loginAttempts, setLoginAttemptsState] = useState<number>(0);
+  const [lockoutEndTime, setLockoutEndTimeState] = useState<number | null>(null);
+
 
   useEffect(() => {
-    setIsLoading(true);
+    setIsLoading(true); // Start loading
     try {
+      // Load activities
       const storedActivities = localStorage.getItem(LOCAL_STORAGE_KEY_ACTIVITIES);
       if (storedActivities) {
         setActivities(JSON.parse(storedActivities));
       }
 
+      // Load categories
       const storedCategories = localStorage.getItem(LOCAL_STORAGE_KEY_CATEGORIES);
       if (storedCategories) {
         setCategories(JSON.parse(storedCategories).map((cat: Omit<Category, 'icon'> & { iconName: string }) => ({
@@ -80,70 +96,81 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setCategories(INITIAL_CATEGORIES);
       }
 
+      // Load app mode
       const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
       if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) {
         setAppModeState(storedAppMode);
       }
+      
+      // Load authentication state
+      const storedAuth = localStorage.getItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
+      setIsAuthenticatedState(storedAuth === 'true');
+
+      // Load login attempts
+      const storedAttempts = localStorage.getItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
+      setLoginAttemptsState(storedAttempts ? parseInt(storedAttempts, 10) : 0);
+      
+      // Load lockout end time
+      const storedLockoutTime = localStorage.getItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
+      setLockoutEndTimeState(storedLockoutTime ? parseInt(storedLockoutTime, 10) : null);
 
     } catch (err) {
       console.error("Failed to load data from local storage", err);
       setError("Failed to load saved data.");
     } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Finish loading
     }
   }, []);
 
+  // --- Persistence Effects ---
   useEffect(() => {
     if (!isLoading) { 
-      try {
-        localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVITIES, JSON.stringify(activities));
-      } catch (err) {
-        console.error("Failed to save activities to local storage", err);
-        setError("Failed to save activities. Changes might not persist.");
-      }
+      localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVITIES, JSON.stringify(activities));
     }
   }, [activities, isLoading]);
 
   useEffect(() => {
     if (!isLoading) {
-      try {
-        // Store iconName directly as it's part of the Category type now
-        const serializableCategories = categories.map(({ icon, ...rest }) => rest);
-        localStorage.setItem(LOCAL_STORAGE_KEY_CATEGORIES, JSON.stringify(serializableCategories));
-      } catch (err) {
-        console.error("Failed to save categories to local storage", err);
-        setError("Failed to save categories. Changes might not persist.");
-      }
+      const serializableCategories = categories.map(({ icon, ...rest }) => rest);
+      localStorage.setItem(LOCAL_STORAGE_KEY_CATEGORIES, JSON.stringify(serializableCategories));
     }
   }, [categories, isLoading]);
 
   useEffect(() => {
     if (!isLoading) {
-      try {
-        localStorage.setItem(LOCAL_STORAGE_KEY_APP_MODE, appMode);
-      } catch (err) {
-        console.error("Failed to save app mode to local storage", err);
-        // Optionally set an error state or notify the user
-      }
+      localStorage.setItem(LOCAL_STORAGE_KEY_APP_MODE, appMode);
+      const root = document.documentElement;
+      root.classList.remove('mode-personal', 'mode-work');
+      root.classList.add(appMode === 'work' ? 'mode-work' : 'mode-personal');
     }
   }, [appMode, isLoading]);
 
-  // Effect to apply mode-specific class to HTML element
   useEffect(() => {
-    const root = document.documentElement;
-    root.classList.remove('mode-personal', 'mode-work'); // Clean up previous mode classes
-
-    if (appMode === 'work') {
-      root.classList.add('mode-work');
-    } else {
-      root.classList.add('mode-personal'); // Default to personal
+    if (!isLoading) {
+      localStorage.setItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED, String(isAuthenticated));
     }
-  }, [appMode]);
+  }, [isAuthenticated, isLoading]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      localStorage.setItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS, String(loginAttempts));
+    }
+  }, [loginAttempts, isLoading]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      if (lockoutEndTime === null) {
+        localStorage.removeItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
+      } else {
+        localStorage.setItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME, String(lockoutEndTime));
+      }
+    }
+  }, [lockoutEndTime, isLoading]);
 
 
   // Effect for activity notifications
   useEffect(() => {
-    if (isLoading) return; 
+    if (isLoading || !isAuthenticated) return; 
 
     const intervalId = setInterval(() => {
       const now = new Date();
@@ -158,16 +185,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (!activity.time || notifiedToday.has(activity.id) || activity.completed) {
           return;
         }
-
         const activityDatePart = new Date(activity.createdAt);
         if (!isSameDay(activityDatePart, now)) {
           return; 
         }
-
         const [hours, minutes] = activity.time.split(':').map(Number);
         const activityDateTime = new Date(activityDatePart);
         activityDateTime.setHours(hours, minutes, 0, 0);
-
         const fiveMinutesInMs = 5 * 60 * 1000;
         const timeDiffMs = activityDateTime.getTime() - now.getTime();
         
@@ -182,12 +206,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, 60000); 
 
     return () => clearInterval(intervalId);
-  }, [activities, isLoading, toast, notifiedToday, lastNotificationCheckDay]);
+  }, [activities, isLoading, toast, notifiedToday, lastNotificationCheckDay, isAuthenticated]);
 
+  // --- Callback Functions ---
   const setAppMode = useCallback((mode: AppMode) => {
     setAppModeState(mode);
   }, []);
 
+  const setIsAuthenticated = useCallback((value: boolean) => {
+    setIsAuthenticatedState(value);
+  }, []);
+
+  const setLoginAttempts = useCallback((attempts: number) => {
+    setLoginAttemptsState(attempts);
+  }, []);
+
+  const setLockoutEndTime = useCallback((timestamp: number | null) => {
+    setLockoutEndTimeState(timestamp);
+  }, []);
 
   const addActivity = useCallback((
       activityData: Omit<Activity, 'id' | 'todos' | 'status' | 'createdAt' | 'completed'> & { 
@@ -332,11 +368,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateCategory,
         deleteCategory,
         isLoading,
-        error
+        error,
+        isAuthenticated,
+        setIsAuthenticated,
+        loginAttempts,
+        setLoginAttempts,
+        lockoutEndTime,
+        setLockoutEndTime,
       }}
     >
       {children}
     </AppContext.Provider>
   );
 };
-

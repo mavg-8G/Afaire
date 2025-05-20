@@ -37,7 +37,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <LanguageProvider>
-            <AppProvider>
+            <AppProvider> {/* AppProvider now wraps everything */}
               {children}
               <Toaster />
             </AppProvider>

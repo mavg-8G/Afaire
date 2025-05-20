@@ -94,6 +94,20 @@ export type Translations = {
   noDetailsAvailable: string;
   noTodosForThisActivity: string;
 
+  // LoginPage
+  loginWelcomeMessage: string;
+  loginUsernameLabel: string;
+  loginPasswordLabel: string;
+  loginButtonText: string;
+  loginLoggingIn: string;
+  loginInvalidCredentials: string;
+  loginErrorTitle: string;
+  loginLockoutTitle: string;
+  loginLockoutMessage: (params: { seconds: number }) => string;
+  loginUsernameRequired: string;
+  loginPasswordRequired: string;
+  loginSecurityNotice: string;
+  loginRedirecting: string;
 };
 
 export const translations: Record<Locale, Translations> = {
@@ -177,6 +191,20 @@ export const translations: Record<Locale, Translations> = {
     todosCompleted: (params) => `${params.completed} / ${params.total} todos completed`,
     noDetailsAvailable: "No details available.",
     noTodosForThisActivity: "No todos for this activity.",
+    // Login Page
+    loginWelcomeMessage: "Log in to manage your activities.",
+    loginUsernameLabel: "Username",
+    loginPasswordLabel: "Password",
+    loginButtonText: "Login",
+    loginLoggingIn: "Logging in...",
+    loginInvalidCredentials: "Invalid username or password.",
+    loginErrorTitle: "Login Error",
+    loginLockoutTitle: "Temporarily Locked Out",
+    loginLockoutMessage: (params) => `Too many failed login attempts. Please try again in ${params.seconds} seconds.`,
+    loginUsernameRequired: "Username is required.",
+    loginPasswordRequired: "Password is required.",
+    loginSecurityNotice: "This is a prototype. Do not use real credentials.",
+    loginRedirecting: "Redirecting...",
   },
   es: {
     addActivity: "Añadir Actividad",
@@ -258,6 +286,19 @@ export const translations: Record<Locale, Translations> = {
     todosCompleted: (params) => `${params.completed} / ${params.total} tareas completadas`,
     noDetailsAvailable: "No hay detalles disponibles.",
     noTodosForThisActivity: "No hay tareas para esta actividad.",
+    // Login Page
+    loginWelcomeMessage: "Inicia sesión para gestionar tus actividades.",
+    loginUsernameLabel: "Usuario",
+    loginPasswordLabel: "Contraseña",
+    loginButtonText: "Iniciar Sesión",
+    loginLoggingIn: "Iniciando sesión...",
+    loginInvalidCredentials: "Usuario o contraseña incorrectos.",
+    loginErrorTitle: "Error de Inicio de Sesión",
+    loginLockoutTitle: "Bloqueado Temporalmente",
+    loginLockoutMessage: (params) => `Demasiados intentos fallidos. Por favor, inténtalo de nuevo en ${params.seconds} segundos.`,
+    loginUsernameRequired: "El nombre de usuario es obligatorio.",
+    loginPasswordRequired: "La contraseña es obligatoria.",
+    loginSecurityNotice: "Esto es un prototipo. No uses credenciales reales.",
+    loginRedirecting: "Redirigiendo...",
   },
 };
-    
