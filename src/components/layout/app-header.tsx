@@ -55,26 +55,31 @@ export default function AppHeader() {
     <>
       <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between">
+          {/* Left Section: Logo and App Name */}
           <div className="flex items-center gap-2">
             <LogoIcon className="h-7 w-7 text-primary" />
             <Link href="/" className="text-xl font-bold tracking-tight text-foreground hover:no-underline sm:text-2xl">
                 {APP_NAME}
             </Link>
           </div>
+
+          {/* Center Section: App Mode Toggle (Desktop Only) */}
+          <div className="hidden md:flex">
+            {appModeToggleSwitch}
+          </div>
+
+          {/* Right Section: Action Buttons */}
           <div className="flex items-center gap-x-1 sm:gap-x-2">
             <Button onClick={() => setIsModalOpen(true)} variant="default" size="sm" className="text-xs sm:text-sm sm:h-10 sm:px-4 sm:py-2">
               <PlusCircle className="mr-1 h-4 w-4 sm:mr-2 sm:h-5 sm:w-5" />
               {t('addActivity')}
             </Button>
             
-            {/* Desktop Actions */}
-            <div className="hidden md:flex items-center gap-x-3">
-              {appModeToggleSwitch}
-
+            {/* Desktop Specific Actions (Settings, Theme, Language) */}
+            <div className="hidden md:flex items-center gap-x-1"> {/* Adjusted gap for tighter fit if needed */}
               <Link href="/categories" passHref>
-                <Button variant="outline" aria-label={t('manageCategories')}>
+                <Button variant="outline" size="icon" aria-label={t('manageCategories')}>
                   <Settings className="h-5 w-5" />
-                  {/* <span className="ml-2">{t('manageCategories')}</span> */}
                 </Button>
               </Link>
               
@@ -120,7 +125,7 @@ export default function AppHeader() {
               </DropdownMenu>
             </div>
 
-            {/* Mobile Actions */}
+            {/* Mobile Actions (MoreVertical Dropdown) */}
             <div className="md:hidden">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -173,4 +178,3 @@ export default function AppHeader() {
     </>
   );
 }
-
