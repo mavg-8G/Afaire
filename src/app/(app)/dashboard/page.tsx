@@ -28,11 +28,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 type ViewMode = 'weekly' | 'monthly';
 
+// Updated logic for determining if an activity is "chart completed"
 const isActivityChartCompleted = (activity: Activity): boolean => {
-  if (!activity.todos || activity.todos.length === 0) {
-    return true; // No todos means definition of "all todos completed" is met.
+  if (activity.todos && activity.todos.length > 0) {
+    // If there are todos, completion depends on all todos being completed.
+    return activity.todos.every(todo => todo.completed);
+  } else {
+    // If there are no todos, completion depends solely on the activity's own 'completed' flag.
+    return !!activity.completed;
   }
-  return activity.todos.every(todo => todo.completed);
 };
 
 export default function DashboardPage() {
@@ -173,3 +177,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
