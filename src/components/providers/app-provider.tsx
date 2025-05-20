@@ -1,24 +1,24 @@
 
 "use client";
 import type { ReactNode } from 'react';
-import React, { createContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useState, useCallback, useEffect, useMemo } from 'react';
 import type { Activity, Todo, Category, ActivityStatus, AppMode } from '@/lib/types';
 import { INITIAL_CATEGORIES } from '@/lib/constants';
-import { v4 as uuidv4 } from 'uuid'; 
+import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import { isSameDay } from 'date-fns';
-import * as Icons from 'lucide-react'; 
+import * as Icons from 'lucide-react';
 
 export interface AppContextType {
-  activities: Activity[];
+  activities: Activity[]; // This will be the derived list for the current mode
   categories: Category[];
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
   addActivity: (
-    activityData: Omit<Activity, 'id' | 'todos' | 'status' | 'createdAt' | 'completed'> & { 
+    activityData: Omit<Activity, 'id' | 'todos' | 'status' | 'createdAt' | 'completed'> & {
       todos?: Omit<Todo, 'id' | 'completed'>[];
-      time?: string; 
-    }, 
+      time?: string;
+    },
     customCreatedAt?: number
   ) => void;
   updateActivity: (activityId: string, updates: Partial<Activity>) => void;
@@ -31,10 +31,9 @@ export interface AppContextType {
   addCategory: (name: string, iconName: string) => void;
   updateCategory: (categoryId: string, updates: { name?: string; iconName?: string }) => void;
   deleteCategory: (categoryId: string) => void;
-  isLoading: boolean; 
+  isLoading: boolean;
   error: string | null;
 
-  // Authentication and Login Security
   isAuthenticated: boolean;
   setIsAuthenticated: (value: boolean) => void;
   loginAttempts: number;
@@ -46,7 +45,8 @@ export interface AppContextType {
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY_ACTIVITIES = 'todoFlowActivities';
+const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities';
+const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities';
 const LOCAL_STORAGE_KEY_CATEGORIES = 'todoFlowCategories';
 const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode';
 const LOCAL_STORAGE_KEY_IS_AUTHENTICATED = 'todoFlowIsAuthenticated';
@@ -57,61 +57,68 @@ const LOCAL_STORAGE_KEY_LOCKOUT_END_TIME = 'todoFlowLockoutEndTime';
 const getIconComponent = (iconName: string): Icons.LucideIcon => {
   const capitalizedIconName = iconName.charAt(0).toUpperCase() + iconName.slice(1);
   const pascalCaseIconName = capitalizedIconName.replace(/[^A-Za-z0-9]/g, '');
-  return (Icons as any)[pascalCaseIconName] || Icons.Package; 
+  return (Icons as any)[pascalCaseIconName] || Icons.Package;
 };
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [activities, setActivities] = useState<Activity[]>([]);
+  const [personalActivities, setPersonalActivities] = useState<Activity[]>([]);
+  const [workActivities, setWorkActivities] = useState<Activity[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [appMode, setAppModeState] = useState<AppMode>('personal');
-  const [isLoading, setIsLoading] = useState<boolean>(true); 
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const [lastNotificationCheckDay, setLastNotificationCheckDay] = useState<number | null>(null);
   const [notifiedToday, setNotifiedToday] = useState<Set<string>>(new Set());
 
-  // Authentication and Login Security State
   const [isAuthenticated, setIsAuthenticatedState] = useState<boolean>(false);
   const [loginAttempts, setLoginAttemptsState] = useState<number>(0);
   const [lockoutEndTime, setLockoutEndTimeState] = useState<number | null>(null);
 
+  // Derived activities based on appMode
+  const activities = useMemo(() => {
+    return appMode === 'work' ? workActivities : personalActivities;
+  }, [appMode, personalActivities, workActivities]);
+
+  const currentActivitySetter = useMemo(() => {
+    return appMode === 'work' ? setWorkActivities : setPersonalActivities;
+  }, [appMode]);
+
 
   useEffect(() => {
-    setIsLoading(true); 
+    setIsLoading(true);
     try {
-      // Load activities
-      const storedActivities = localStorage.getItem(LOCAL_STORAGE_KEY_ACTIVITIES);
-      if (storedActivities) {
-        setActivities(JSON.parse(storedActivities));
+      const storedPersonalActivities = localStorage.getItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES);
+      if (storedPersonalActivities) {
+        setPersonalActivities(JSON.parse(storedPersonalActivities));
+      }
+      const storedWorkActivities = localStorage.getItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES);
+      if (storedWorkActivities) {
+        setWorkActivities(JSON.parse(storedWorkActivities));
       }
 
-      // Load categories
       const storedCategories = localStorage.getItem(LOCAL_STORAGE_KEY_CATEGORIES);
       if (storedCategories) {
         setCategories(JSON.parse(storedCategories).map((cat: Omit<Category, 'icon'> & { iconName: string }) => ({
           ...cat,
-          icon: getIconComponent(cat.iconName || 'Package') 
+          icon: getIconComponent(cat.iconName || 'Package')
         })));
       } else {
         setCategories(INITIAL_CATEGORIES);
       }
 
-      // Load app mode
       const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
       if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) {
         setAppModeState(storedAppMode);
       }
       
-      // Load authentication state
       const storedAuth = localStorage.getItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
       setIsAuthenticatedState(storedAuth === 'true');
 
-      // Load login attempts
       const storedAttempts = localStorage.getItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
       setLoginAttemptsState(storedAttempts ? parseInt(storedAttempts, 10) : 0);
       
-      // Load lockout end time
       const storedLockoutTime = localStorage.getItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
       setLockoutEndTimeState(storedLockoutTime ? parseInt(storedLockoutTime, 10) : null);
 
@@ -119,16 +126,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       console.error("Failed to load data from local storage", err);
       setError("Failed to load saved data.");
     } finally {
-      setIsLoading(false); 
+      setIsLoading(false);
     }
   }, []);
 
   // --- Persistence Effects ---
   useEffect(() => {
-    if (!isLoading) { 
-      localStorage.setItem(LOCAL_STORAGE_KEY_ACTIVITIES, JSON.stringify(activities));
+    if (!isLoading) {
+      localStorage.setItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES, JSON.stringify(personalActivities));
     }
-  }, [activities, isLoading]);
+  }, [personalActivities, isLoading]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      localStorage.setItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES, JSON.stringify(workActivities));
+    }
+  }, [workActivities, isLoading]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -169,26 +182,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [lockoutEndTime, isLoading]);
 
 
-  // Effect for activity notifications
   useEffect(() => {
-    if (isLoading || !isAuthenticated) return; 
+    if (isLoading || !isAuthenticated) return;
 
     const intervalId = setInterval(() => {
       const now = new Date();
       const currentDay = now.getDate();
 
       if (lastNotificationCheckDay !== null && lastNotificationCheckDay !== currentDay) {
-        setNotifiedToday(new Set()); 
+        setNotifiedToday(new Set());
       }
       setLastNotificationCheckDay(currentDay);
 
+      // Use the derived 'activities' for the current mode for notifications
       activities.forEach(activity => {
         if (!activity.time || notifiedToday.has(activity.id) || activity.completed) {
           return;
         }
         const activityDatePart = new Date(activity.createdAt);
         if (!isSameDay(activityDatePart, now)) {
-          return; 
+          return;
         }
         const [hours, minutes] = activity.time.split(':').map(Number);
         const activityDateTime = new Date(activityDatePart);
@@ -204,12 +217,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           setNotifiedToday(prev => new Set(prev).add(activity.id));
         }
       });
-    }, 60000); 
+    }, 60000);
 
     return () => clearInterval(intervalId);
-  }, [activities, isLoading, toast, notifiedToday, lastNotificationCheckDay, isAuthenticated]);
+  }, [activities, isLoading, toast, notifiedToday, lastNotificationCheckDay, isAuthenticated]); // Added 'activities' as dependency
 
-  // --- Callback Functions ---
   const setAppMode = useCallback((mode: AppMode) => {
     setAppModeState(mode);
   }, []);
@@ -228,12 +240,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const logout = useCallback(() => {
     setIsAuthenticatedState(false);
-    setLoginAttemptsState(0); // Reset attempts on logout
-    setLockoutEndTimeState(null); // Clear lockout on logout
+    setLoginAttemptsState(0);
+    setLockoutEndTimeState(null);
   }, []);
 
   const addActivity = useCallback((
-      activityData: Omit<Activity, 'id' | 'todos' | 'status' | 'createdAt' | 'completed'> & { 
+      activityData: Omit<Activity, 'id' | 'todos' | 'status' | 'createdAt' | 'completed'> & {
         todos?: Omit<Todo, 'id' | 'completed'>[];
         time?: string;
       },
@@ -249,31 +261,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       time: activityData.time || undefined,
       completed: false,
     };
-    setActivities(prev => [...prev, newActivity]);
-  }, []);
+    currentActivitySetter(prev => [...prev, newActivity]);
+  }, [currentActivitySetter]);
 
   const updateActivity = useCallback((activityId: string, updates: Partial<Activity>) => {
-    setActivities(prev =>
+    currentActivitySetter(prev =>
       prev.map(act => (act.id === activityId ? { ...act, ...updates } : act))
     );
-  }, []);
+  }, [currentActivitySetter]);
 
   const deleteActivity = useCallback((activityId: string) => {
-    setActivities(prev => prev.filter(act => act.id !== activityId));
-  }, []);
+    currentActivitySetter(prev => prev.filter(act => act.id !== activityId));
+  }, [currentActivitySetter]);
 
   const addTodoToActivity = useCallback((activityId: string, todoText: string) => {
     const newTodo: Todo = { id: uuidv4(), text: todoText, completed: false };
-    setActivities(prev =>
+    currentActivitySetter(prev =>
       prev.map(act =>
         act.id === activityId ? { ...act, todos: [...act.todos, newTodo] } : act
       )
     );
-  }, []);
+  }, [currentActivitySetter]);
 
   const updateTodoInActivity = useCallback(
     (activityId: string, todoId: string, updates: Partial<Todo>) => {
-      setActivities(prev =>
+      currentActivitySetter(prev =>
         prev.map(act =>
           act.id === activityId
             ? {
@@ -286,24 +298,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         )
       );
     },
-    []
+    [currentActivitySetter]
   );
 
   const deleteTodoFromActivity = useCallback((activityId: string, todoId: string) => {
-    setActivities(prev =>
+    currentActivitySetter(prev =>
       prev.map(act =>
         act.id === activityId
           ? { ...act, todos: act.todos.filter(todo => todo.id !== todoId) }
           : act
       )
     );
-  }, []);
+  }, [currentActivitySetter]);
   
   const moveActivity = useCallback((activityId: string, newStatus: ActivityStatus) => {
-    setActivities(prev =>
+    currentActivitySetter(prev =>
       prev.map(act => (act.id === activityId ? { ...act, status: newStatus } : act)
     ));
-  }, []);
+  }, [currentActivitySetter]);
 
   const getCategoryById = useCallback(
     (categoryId: string) => categories.find(cat => cat.id === categoryId),
@@ -347,7 +359,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!categoryToDelete) return;
 
     setCategories(prev => prev.filter(cat => cat.id !== categoryId));
-    setActivities(prevActivities => 
+    
+    // Update activities in both lists if they used this category
+    setPersonalActivities(prevActivities => 
+      prevActivities.map(act => 
+        act.categoryId === categoryId ? { ...act, categoryId: '' } : act 
+      )
+    );
+    setWorkActivities(prevActivities => 
       prevActivities.map(act => 
         act.categoryId === categoryId ? { ...act, categoryId: '' } : act 
       )
@@ -359,7 +378,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   return (
     <AppContext.Provider
       value={{
-        activities,
+        activities, // Expose the derived, mode-specific list
         categories,
         appMode,
         setAppMode,
@@ -389,3 +408,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+
+
+    
