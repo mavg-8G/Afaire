@@ -2,7 +2,7 @@
 "use client";
 import type { ReactNode } from 'react';
 import React, { createContext, useState, useCallback, useEffect } from 'react';
-import type { Activity, Todo, Category, ActivityStatus } from '@/lib/types';
+import type { Activity, Todo, Category, ActivityStatus, AppMode } from '@/lib/types';
 import { INITIAL_CATEGORIES } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs
 import { useToast } from '@/hooks/use-toast';
@@ -12,6 +12,8 @@ import * as Icons from 'lucide-react'; // Import all lucide-react icons
 export interface AppContextType {
   activities: Activity[];
   categories: Category[];
+  appMode: AppMode;
+  setAppMode: (mode: AppMode) => void;
   addActivity: (
     activityData: Omit<Activity, 'id' | 'todos' | 'status' | 'createdAt' | 'completed'> & { 
       todos?: Omit<Todo, 'id' | 'completed'>[];
@@ -37,6 +39,8 @@ export const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEY_ACTIVITIES = 'todoFlowActivities';
 const LOCAL_STORAGE_KEY_CATEGORIES = 'todoFlowCategories';
+const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode';
+
 
 // Helper to get icon component by name
 const getIconComponent = (iconName: string): Icons.LucideIcon => {
@@ -49,6 +53,7 @@ const getIconComponent = (iconName: string): Icons.LucideIcon => {
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [appMode, setAppModeState] = useState<AppMode>('personal');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
@@ -73,6 +78,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         })));
       } else {
         setCategories(INITIAL_CATEGORIES);
+      }
+
+      const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
+      if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) {
+        setAppModeState(storedAppMode);
       }
 
     } catch (err) {
@@ -107,6 +117,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [categories, isLoading]);
 
+  useEffect(() => {
+    if (!isLoading) {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY_APP_MODE, appMode);
+      } catch (err) {
+        console.error("Failed to save app mode to local storage", err);
+        // Optionally set an error state or notify the user
+      }
+    }
+  }, [appMode, isLoading]);
+
+
   // Effect for activity notifications
   useEffect(() => {
     if (isLoading) return; 
@@ -121,7 +143,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setLastNotificationCheckDay(currentDay);
 
       activities.forEach(activity => {
-        if (!activity.time || notifiedToday.has(activity.id)) {
+        if (!activity.time || notifiedToday.has(activity.id) || activity.completed) {
           return;
         }
 
@@ -149,6 +171,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     return () => clearInterval(intervalId);
   }, [activities, isLoading, toast, notifiedToday, lastNotificationCheckDay]);
+
+  const setAppMode = useCallback((mode: AppMode) => {
+    setAppModeState(mode);
+  }, []);
 
 
   const addActivity = useCallback((
@@ -280,6 +306,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       value={{
         activities,
         categories,
+        appMode,
+        setAppMode,
         addActivity,
         updateActivity,
         deleteActivity,
@@ -299,3 +327,4 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+

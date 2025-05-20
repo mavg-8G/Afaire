@@ -28,3 +28,5 @@ export interface Category {
 }
 
 export type ViewMode = 'all' | 'daily' | 'weekly' | 'monthly'; // For potential future filtering
+
+export type AppMode = 'personal' | 'work';

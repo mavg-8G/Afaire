@@ -12,7 +12,11 @@ export type Translations = {
   lightTheme: string;
   darkTheme: string;
   systemTheme: string;
-  moreOptions: string; // New key
+  moreOptions: string; 
+  personalMode: string;
+  workMode: string;
+  switchToPersonalMode: string;
+  switchToWorkMode: string;
 
 
   // CategoriesPage
@@ -104,6 +108,10 @@ export const translations: Record<Locale, Translations> = {
     darkTheme: "Dark",
     systemTheme: "System",
     moreOptions: "More options",
+    personalMode: "Personal",
+    workMode: "Work",
+    switchToPersonalMode: "Switch to Personal Mode",
+    switchToWorkMode: "Switch to Work Mode",
     backToCalendar: "Back to Calendar",
     addCategory: "Add Category",
     editCategory: "Edit Category",
@@ -181,6 +189,10 @@ export const translations: Record<Locale, Translations> = {
     darkTheme: "Oscuro",
     systemTheme: "Sistema",
     moreOptions: "Más opciones",
+    personalMode: "Personal",
+    workMode: "Trabajo",
+    switchToPersonalMode: "Cambiar a Modo Personal",
+    switchToWorkMode: "Cambiar a Modo Trabajo",
     backToCalendar: "Volver al Calendario",
     addCategory: "Añadir Categoría",
     editCategory: "Editar Categoría",

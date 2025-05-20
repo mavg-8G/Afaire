@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Settings, Languages, Sun, Moon, Laptop, MoreVertical } from 'lucide-react'; 
+import { PlusCircle, Settings, Languages, Sun, Moon, Laptop, MoreVertical, User, Briefcase } from 'lucide-react'; 
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { APP_NAME } from '@/lib/constants';
 import ActivityModal from '@/components/forms/activity-modal'; 
@@ -17,11 +17,39 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { useAppStore } from '@/hooks/use-app-store';
+import type { AppMode } from '@/lib/types';
 
 export default function AppHeader() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { t, setLocale, locale } = useTranslations();
   const { setTheme, theme } = useTheme();
+  const { appMode, setAppMode } = useAppStore();
+
+  const handleModeToggle = (isWorkMode: boolean) => {
+    setAppMode(isWorkMode ? 'work' : 'personal');
+  };
+
+  const appModeToggleSwitch = (
+    <div className="flex items-center space-x-2">
+      <Label htmlFor="app-mode-toggle" className="text-sm font-medium text-muted-foreground">
+        <User className={`inline-block h-4 w-4 mr-1 ${appMode === 'personal' ? 'text-primary' : ''}`} />
+        {t('personalMode')}
+      </Label>
+      <Switch
+        id="app-mode-toggle"
+        checked={appMode === 'work'}
+        onCheckedChange={handleModeToggle}
+        aria-label="Toggle between personal and work mode"
+      />
+      <Label htmlFor="app-mode-toggle" className="text-sm font-medium text-muted-foreground">
+        <Briefcase className={`inline-block h-4 w-4 mr-1 ${appMode === 'work' ? 'text-primary' : ''}`} />
+        {t('workMode')}
+      </Label>
+    </div>
+  );
 
   return (
     <>
@@ -40,11 +68,13 @@ export default function AppHeader() {
             </Button>
             
             {/* Desktop Actions */}
-            <div className="hidden md:flex items-center gap-x-2">
+            <div className="hidden md:flex items-center gap-x-3">
+              {appModeToggleSwitch}
+
               <Link href="/categories" passHref>
                 <Button variant="outline" aria-label={t('manageCategories')}>
                   <Settings className="h-5 w-5" />
-                  <span className="ml-2">{t('manageCategories')}</span>
+                  {/* <span className="ml-2">{t('manageCategories')}</span> */}
                 </Button>
               </Link>
               
@@ -100,6 +130,10 @@ export default function AppHeader() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                   <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="focus:bg-transparent cursor-default">
+                    {appModeToggleSwitch}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
                     <Link href="/categories" className="flex items-center w-full">
                       <Settings className="mr-2 h-4 w-4" />
@@ -139,3 +173,4 @@ export default function AppHeader() {
     </>
   );
 }
+
