@@ -25,8 +25,8 @@ export type Translations = {
   viewEditManageCategories: string;
   delete: string;
   confirmDelete: string;
-  confirmDeleteCategoryDescription: string; 
-  categoriesCount: (count: number) => string;
+  confirmDeleteCategoryDescription: (params: { categoryName: string }) => string; 
+  categoriesCount: (params: { count: number }) => string;
   noCategoriesYet: string;
 
 
@@ -34,7 +34,7 @@ export type Translations = {
   editActivityTitle: string;
   addActivityTitle: string;
   editActivityDescription: string;
-  addActivityDescription: (initialDateMsg: string) => string;
+  addActivityDescription: (params: { initialDateMsg: string }) => string;
   activityTitleLabel: string;
   categoryLabel: string;
   selectCategoryPlaceholder: string;
@@ -60,20 +60,20 @@ export type Translations = {
 
 
   // ActivityCalendarView
-  activitiesForDate: (date: string) => string;
+  activitiesForDate: (params: { date: string }) => string;
   loadingDate: string;
   noActivitiesForDay: string;
   selectDateToSeeActivities: string;
-  addActivityForDate: (date: string) => string;
+  addActivityForDate: (params: { date: string }) => string;
   confirmDeleteActivityTitle: string;
-  confirmDeleteActivityDescription: (activityTitle: string) => string;
+  confirmDeleteActivityDescription: (params: { activityTitle: string }) => string;
   toastActivityDeletedTitle: string;
-  toastActivityDeletedDescription: (activityTitle: string) => string;
+  toastActivityDeletedDescription: (params: { activityTitle: string }) => string;
 
   // ActivityListItem
   editActivitySr: string; // Sr for Screen Reader
   deleteActivitySr: string;
-  todosCompleted: (completed: number, total: number) => string;
+  todosCompleted: (params: { completed: number, total: number }) => string;
   noDetailsAvailable: string;
   noTodosForThisActivity: string;
 
@@ -101,13 +101,13 @@ export const translations: Record<Locale, Translations> = {
     viewEditManageCategories: "View, edit, and manage your current categories.",
     delete: "Delete",
     confirmDelete: "Are you sure?",
-    confirmDeleteCategoryDescription: "This action will delete the category \"{categoryName}\". Activities using this category will no longer be associated with it. This cannot be undone.",
-    categoriesCount: (count) => `You have ${count} categor${count === 1 ? 'y' : 'ies'}.`,
+    confirmDeleteCategoryDescription: (params) => `This action will delete the category "${params.categoryName}". Activities using this category will no longer be associated with it. This cannot be undone.`,
+    categoriesCount: (params) => `You have ${params.count} categor${params.count === 1 ? 'y' : 'ies'}.`,
     noCategoriesYet: "No categories added yet. Use the form to add your first category.",
     editActivityTitle: "Edit Activity",
     addActivityTitle: "Add New Activity",
     editActivityDescription: "Update the details of your activity.",
-    addActivityDescription: (initialDateMsg) => `Fill in the details for your new activity. ${initialDateMsg}`,
+    addActivityDescription: (params) => `Fill in the details for your new activity. ${params.initialDateMsg}`,
     activityTitleLabel: "Activity Title",
     categoryLabel: "Category",
     selectCategoryPlaceholder: "Select a category",
@@ -130,18 +130,18 @@ export const translations: Record<Locale, Translations> = {
     toastNoSuggestionsDescription: "AI couldn't find any suggestions for this title.",
     toastSuggestionError: "Suggestion Error",
     toastSuggestionErrorDescription: "Could not fetch todo suggestions.",
-    activitiesForDate: (date) => `Activities for ${date}`,
+    activitiesForDate: (params) => `Activities for ${params.date}`,
     loadingDate: "Loading date...",
     noActivitiesForDay: "No activities scheduled for this day.",
     selectDateToSeeActivities: "Select a date to see activities.",
-    addActivityForDate: (date) => `Add Activity for ${date}`,
+    addActivityForDate: (params) => `Add Activity for ${params.date}`,
     confirmDeleteActivityTitle: "Are you sure?",
-    confirmDeleteActivityDescription: (activityTitle) => `This action cannot be undone. This will permanently delete the activity "${activityTitle}" and all its associated todos.`,
+    confirmDeleteActivityDescription: (params) => `This action cannot be undone. This will permanently delete the activity "${params.activityTitle}" and all its associated todos.`,
     toastActivityDeletedTitle: "Activity Deleted",
-    toastActivityDeletedDescription: (activityTitle) => `"${activityTitle}" has been removed.`,
+    toastActivityDeletedDescription: (params) => `"${params.activityTitle}" has been removed.`,
     editActivitySr: "Edit Activity",
     deleteActivitySr: "Delete Activity",
-    todosCompleted: (completed, total) => `${completed} / ${total} todos completed`,
+    todosCompleted: (params) => `${params.completed} / ${params.total} todos completed`,
     noDetailsAvailable: "No details available.",
     noTodosForThisActivity: "No todos for this activity.",
   },
@@ -166,13 +166,13 @@ export const translations: Record<Locale, Translations> = {
     viewEditManageCategories: "Ver, editar y gestionar tus categorías actuales.",
     delete: "Eliminar",
     confirmDelete: "¿Estás seguro?",
-    confirmDeleteCategoryDescription: "Esta acción eliminará la categoría \"{categoryName}\". Las actividades que usan esta categoría ya no estarán asociadas a ella. Esto no se puede deshacer.",
-    categoriesCount: (count) => `Tienes ${count} categorí${count === 1 ? 'a' : 'as'}.`,
+    confirmDeleteCategoryDescription: (params) => `Esta acción eliminará la categoría "${params.categoryName}". Las actividades que usan esta categoría ya no estarán asociadas a ella. Esto no se puede deshacer.`,
+    categoriesCount: (params) => `Tienes ${params.count} categorí${params.count === 1 ? 'a' : 'as'}.`,
     noCategoriesYet: "Aún no has añadido categorías. Usa el formulario para añadir tu primera categoría.",
     editActivityTitle: "Editar Actividad",
     addActivityTitle: "Añadir Nueva Actividad",
     editActivityDescription: "Actualiza los detalles de tu actividad.",
-    addActivityDescription: (initialDateMsg) => `Completa los detalles de tu nueva actividad. ${initialDateMsg}`,
+    addActivityDescription: (params) => `Completa los detalles de tu nueva actividad. ${params.initialDateMsg}`,
     activityTitleLabel: "Título de la Actividad",
     categoryLabel: "Categoría",
     selectCategoryPlaceholder: "Selecciona una categoría",
@@ -195,19 +195,20 @@ export const translations: Record<Locale, Translations> = {
     toastNoSuggestionsDescription: "La IA no pudo encontrar sugerencias para este título.",
     toastSuggestionError: "Error de Sugerencia",
     toastSuggestionErrorDescription: "No se pudieron obtener sugerencias de tareas.",
-    activitiesForDate: (date) => `Actividades para ${date}`,
+    activitiesForDate: (params) => `Actividades para ${params.date}`,
     loadingDate: "Cargando fecha...",
     noActivitiesForDay: "No hay actividades programadas para este día.",
     selectDateToSeeActivities: "Selecciona una fecha para ver actividades.",
-    addActivityForDate: (date) => `Añadir Actividad para ${date}`,
+    addActivityForDate: (params) => `Añadir Actividad para ${params.date}`,
     confirmDeleteActivityTitle: "¿Estás seguro?",
-    confirmDeleteActivityDescription: (activityTitle) => `Esta acción no se puede deshacer. Esto eliminará permanentemente la actividad "${activityTitle}" y todas sus tareas asociadas.`,
+    confirmDeleteActivityDescription: (params) => `Esta acción no se puede deshacer. Esto eliminará permanentemente la actividad "${params.activityTitle}" y todas sus tareas asociadas.`,
     toastActivityDeletedTitle: "Actividad Eliminada",
-    toastActivityDeletedDescription: (activityTitle) => `Se ha eliminado "${activityTitle}".`,
+    toastActivityDeletedDescription: (params) => `Se ha eliminado "${params.activityTitle}".`,
     editActivitySr: "Editar Actividad",
     deleteActivitySr: "Eliminar Actividad",
-    todosCompleted: (completed, total) => `${completed} / ${total} tareas completadas`,
+    todosCompleted: (params) => `${params.completed} / ${params.total} tareas completadas`,
     noDetailsAvailable: "No hay detalles disponibles.",
     noTodosForThisActivity: "No hay tareas para esta actividad.",
   },
 };
+
