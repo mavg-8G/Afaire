@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/select";
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Category } from '@/lib/types';
+import { useTranslations } from '@/contexts/language-context';
 
 interface CategorySelectorProps {
   value: string | undefined;
@@ -17,13 +18,15 @@ interface CategorySelectorProps {
   placeholder?: string;
 }
 
-export default function CategorySelector({ value, onChange, placeholder = "Select a category" }: CategorySelectorProps) {
+export default function CategorySelector({ value, onChange, placeholder }: CategorySelectorProps) {
   const { categories } = useAppStore();
+  const { t } = useTranslations();
+  const defaultPlaceholder = placeholder || t('selectCategoryPlaceholder');
 
   return (
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger className="w-full">
-        <SelectValue placeholder={placeholder} />
+        <SelectValue placeholder={defaultPlaceholder} />
       </SelectTrigger>
       <SelectContent>
         {categories.map((category: Category) => (

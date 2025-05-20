@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAppStore } from '@/hooks/use-app-store';
 import { cn } from '@/lib/utils';
+import { useTranslations } from '@/contexts/language-context';
 
 interface ActivityListItemProps {
   activity: Activity;
@@ -18,6 +19,7 @@ interface ActivityListItemProps {
 
 export default function ActivityListItem({ activity, category, onEdit, onDelete }: ActivityListItemProps) {
   const { updateActivity } = useAppStore();
+  const { t } = useTranslations();
   const completedTodos = activity.todos.filter(t => t.completed).length;
   const totalTodos = activity.todos.length;
 
@@ -42,7 +44,7 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete 
             checked={!!activity.completed}
             onCheckedChange={(checked) => handleActivityCompletedChange(Boolean(checked))}
             aria-labelledby={`activity-title-${activity.id}`}
-            className="mt-1" // Align checkbox with title
+            className="mt-1" 
           />
           <div className="flex flex-col flex-grow min-w-0">
             <CardTitle 
@@ -69,11 +71,11 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete 
         <div className="flex items-center flex-shrink-0">
           <Button variant="ghost" size="icon" onClick={onEdit} className="h-7 w-7">
             <Edit3 className="h-4 w-4" />
-            <span className="sr-only">Edit Activity</span>
+            <span className="sr-only">{t('editActivitySr')}</span>
           </Button>
           <Button variant="ghost" size="icon" onClick={onDelete} className="h-7 w-7 text-destructive hover:text-destructive">
             <Trash2 className="h-4 w-4" />
-            <span className="sr-only">Delete Activity</span>
+            <span className="sr-only">{t('deleteActivitySr')}</span>
           </Button>
         </div>
       </CardHeader>
@@ -87,23 +89,23 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete 
           )}
           {totalTodos > 0 && (
             <p className={cn("text-xs", activity.completed ? "text-muted-foreground" : "text-muted-foreground")}>
-              {completedTodos} / {totalTodos} todos completed
+              {t('todosCompleted', { completed: completedTodos, total: totalTodos })}
             </p>
           )}
         </div>
-         {totalTodos === 0 && !category && !activity.time && ( // Check if time also not present for this message
+         {totalTodos === 0 && !category && !activity.time && ( 
           <p className={cn("text-xs mt-1", activity.completed ? "text-muted-foreground/80" : "text-muted-foreground")}>
-            No details available.
+            {t('noDetailsAvailable')}
           </p>
         )}
          {totalTodos === 0 && category && !activity.time && (
           <p className={cn("text-xs mt-1", activity.completed ? "text-muted-foreground/80" : "text-muted-foreground")}>
-            No todos for this activity.
+            {t('noTodosForThisActivity')}
           </p>
         )}
-         {totalTodos === 0 && !category && activity.time && ( // If only time and no category/todos
+         {totalTodos === 0 && !category && activity.time && ( 
           <p className={cn("text-xs mt-1", activity.completed ? "text-muted-foreground/80" : "text-muted-foreground")}>
-            No todos for this activity.
+            {t('noTodosForThisActivity')}
           </p>
         )}
       </CardContent>

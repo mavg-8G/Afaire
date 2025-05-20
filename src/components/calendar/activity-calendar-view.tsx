@@ -22,18 +22,22 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
+import { useTranslations } from '@/contexts/language-context';
+import { enUS, es } from 'date-fns/locale';
 
 export default function ActivityCalendarView() {
   const { activities, getCategoryById, deleteActivity } = useAppStore();
   const { toast } = useToast();
+  const { t, locale } = useTranslations();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | undefined>(undefined);
   const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
   const [isAddingActivityForSelectedDate, setIsAddingActivityForSelectedDate] = useState(false);
 
+  const dateLocale = locale === 'es' ? es : enUS;
+
   useEffect(() => {
-    // Set selectedDate on the client side after hydration to avoid mismatch
     setSelectedDate(new Date());
   }, []);
 
@@ -69,7 +73,10 @@ export default function ActivityCalendarView() {
   const handleConfirmDelete = () => {
     if (activityToDelete) {
       deleteActivity(activityToDelete.id);
-      toast({ title: "Activity Deleted", description: `"${activityToDelete.title}" has been removed.` });
+      toast({ 
+        title: t('toastActivityDeletedTitle'), 
+        description: t('toastActivityDeletedDescription', { activityTitle: activityToDelete.title })
+      });
       setActivityToDelete(null);
     }
   };
@@ -99,7 +106,8 @@ export default function ActivityCalendarView() {
             className="rounded-md"
             modifiers={modifiers}
             modifiersClassNames={modifiersClassNames}
-            initialFocus // Add initialFocus to help with client-side rendering consistency
+            initialFocus
+            locale={dateLocale}
           />
         </CardContent>
       </Card>
@@ -107,7 +115,7 @@ export default function ActivityCalendarView() {
       <Card className="lg:w-1/2 xl:w-1/3 shadow-lg w-full flex flex-col">
         <CardHeader>
           <CardTitle>
-            Activities for {selectedDate ? format(selectedDate, 'PPP') : 'Loading date...'}
+            {selectedDate ? t('activitiesForDate', {date: format(selectedDate, 'PPP', { locale: dateLocale })}) : t('loadingDate')}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-grow">
@@ -127,7 +135,7 @@ export default function ActivityCalendarView() {
             </ScrollArea>
           ) : (
             <p className="text-sm text-muted-foreground py-4 text-center">
-              {selectedDate ? "No activities scheduled for this day." : "Select a date to see activities."}
+              {selectedDate ? t('noActivitiesForDay') : t('selectDateToSeeActivities')}
             </p>
           )}
         </CardContent>
@@ -138,7 +146,7 @@ export default function ActivityCalendarView() {
             className="w-full"
           >
             <PlusCircle className="mr-2 h-5 w-5" />
-            Add Activity for {selectedDate ? format(selectedDate, 'MMM d') : '...'}
+            {selectedDate ? t('addActivityForDate', {date: format(selectedDate, 'MMM d', { locale: dateLocale })}) : '...'}
           </Button>
         </CardFooter>
       </Card>
@@ -156,15 +164,14 @@ export default function ActivityCalendarView() {
         <AlertDialog open={!!activityToDelete} onOpenChange={() => setActivityToDelete(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogTitle>{t('confirmDeleteActivityTitle')}</AlertDialogTitle>
               <AlertDialogDescription>
-                This action cannot be undone. This will permanently delete the activity
-                "{activityToDelete.title}" and all its associated todos.
+                {t('confirmDeleteActivityDescription', { activityTitle: activityToDelete.title })}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setActivityToDelete(null)}>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleConfirmDelete}>Delete</AlertDialogAction>
+              <AlertDialogCancel onClick={() => setActivityToDelete(null)}>{t('cancel')}</AlertDialogCancel>
+              <AlertDialogAction onClick={handleConfirmDelete}>{t('delete')}</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

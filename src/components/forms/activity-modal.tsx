@@ -22,7 +22,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle, Trash2, Sparkles, Loader2, CalendarIcon, Clock } from 'lucide-react';
 import { useAppStore } from '@/hooks/use-app-store';
@@ -34,12 +33,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format } from 'date-fns';
+import { useTranslations } from '@/contexts/language-context';
+import { enUS, es } from 'date-fns/locale';
 
 interface ActivityModalProps {
   isOpen: boolean;
   onClose: () => void;
-  activity?: Activity; // For editing
-  initialDate?: Date; // For pre-filling date for new activities
+  activity?: Activity; 
+  initialDate?: Date; 
 }
 
 const todoSchema = z.object({
@@ -61,7 +62,10 @@ type ActivityFormData = z.infer<typeof activityFormSchema>;
 export default function ActivityModal({ isOpen, onClose, activity, initialDate }: ActivityModalProps) {
   const { addActivity, updateActivity } = useAppStore();
   const { toast } = useToast();
+  const { t, locale } = useTranslations();
   const [isSuggestingTodos, setIsSuggestingTodos] = useState(false);
+
+  const dateLocale = locale === 'es' ? es : enUS;
 
   const form = useForm<ActivityFormData>({
     resolver: zodResolver(activityFormSchema),
@@ -117,10 +121,9 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
     if (activity) {
       updateActivity(activity.id, {
         ...activityPayload,
-        // Ensure todos are correctly cast to Todo[] if they exist
         todos: activityPayload.todos as Todo[],
       });
-      toast({ title: "Activity Updated", description: "Your activity has been successfully updated." });
+      toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
     } else {
       addActivity(
         { 
@@ -131,7 +134,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
         }, 
         data.activityDate.getTime()
       );
-      toast({ title: "Activity Added", description: "Your new activity has been successfully added." });
+      toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
     }
     onClose();
   };
@@ -139,7 +142,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
   const handleSuggestTodos = async () => {
     const activityTitle = form.getValues("title");
     if (!activityTitle) {
-      toast({ title: "Title Needed", description: "Please enter an activity title to get suggestions.", variant: "destructive" });
+      toast({ title: t('toastTitleNeeded'), description: t('toastTitleNeededDescription'), variant: "destructive" });
       return;
     }
     setIsSuggestingTodos(true);
@@ -153,13 +156,13 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
             append({ text: todoText, completed: false });
           }
         });
-        toast({ title: "Todos Suggested", description: "AI has added some todo suggestions." });
+        toast({ title: t('toastTodosSuggested'), description: t('toastTodosSuggestedDescription') });
       } else {
-        toast({ title: "No Suggestions", description: "AI couldn't find any suggestions for this title." });
+        toast({ title: t('toastNoSuggestions'), description: t('toastNoSuggestionsDescription') });
       }
     } catch (error) {
       console.error("Error suggesting todos:", error);
-      toast({ title: "Suggestion Error", description: "Could not fetch todo suggestions.", variant: "destructive" });
+      toast({ title: t('toastSuggestionError'), description: t('toastSuggestionErrorDescription'), variant: "destructive" });
     } finally {
       setIsSuggestingTodos(false);
     }
@@ -167,14 +170,21 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
 
   if (!isOpen) return null;
 
+  const formattedInitialDateMsg = initialDate && !activity 
+    ? ` ${t('locale') === 'es' ? 'Por defecto será el' : 'Defaulting to'} ${format(initialDate, "PPP", { locale: dateLocale })}.` 
+    : ` ${t('locale') === 'es' ? 'Puedes cambiar la fecha abajo.' : 'You can change the date below.'}`;
+
+  const dialogDescriptionText = activity 
+    ? t('editActivityDescription') 
+    : t('addActivityDescription', { initialDateMsg: formattedInitialDateMsg });
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>{activity ? "Edit Activity" : "Add New Activity"}</DialogTitle>
+          <DialogTitle>{activity ? t('editActivityTitle') : t('addActivityTitle')}</DialogTitle>
           <DialogDescription>
-            {activity ? "Update the details of your activity." : 
-             `Fill in the details for your new activity. ${initialDate && !activity ? `Defaulting to ${format(initialDate, "PPP")}.` : 'You can change the date below.'}`}
+            {dialogDescriptionText}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -184,7 +194,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Activity Title</FormLabel>
+                  <FormLabel>{t('activityTitleLabel')}</FormLabel>
                   <FormControl>
                     <Input placeholder="e.g., Morning Gym Session" {...field} />
                   </FormControl>
@@ -197,11 +207,11 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
               name="categoryId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Category</FormLabel>
+                  <FormLabel>{t('categoryLabel')}</FormLabel>
                   <CategorySelector
                     value={field.value}
                     onChange={field.onChange}
-                    placeholder="Select a category"
+                    placeholder={t('selectCategoryPlaceholder')}
                   />
                   <FormMessage />
                 </FormItem>
@@ -213,7 +223,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                 name="activityDate"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Activity Date</FormLabel>
+                    <FormLabel>{t('activityDateLabel')}</FormLabel>
                     <Popover>
                       <PopoverTrigger asChild>
                         <FormControl>
@@ -225,9 +235,9 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                             )}
                           >
                             {field.value ? (
-                              format(field.value, "PPP")
+                              format(field.value, "PPP", { locale: dateLocale })
                             ) : (
-                              <span>Pick a date</span>
+                              <span>{t('pickADate')}</span>
                             )}
                             <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                           </Button>
@@ -242,6 +252,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                             date < new Date("1900-01-01")
                           }
                           initialFocus
+                          locale={dateLocale}
                         />
                       </PopoverContent>
                     </Popover>
@@ -254,7 +265,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                 name="time"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Activity Time (HH:MM)</FormLabel>
+                    <FormLabel>{t('activityTimeLabel')}</FormLabel>
                     <FormControl>
                       <div className="relative">
                         <Input type="time" {...field} className="pr-8" />
@@ -269,10 +280,10 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
             
             <div>
               <div className="flex justify-between items-center mb-2">
-                <FormLabel>Todos</FormLabel>
+                <FormLabel>{t('todosLabel')}</FormLabel>
                 <Button type="button" variant="outline" size="sm" onClick={handleSuggestTodos} disabled={isSuggestingTodos}>
                   {isSuggestingTodos ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                  Suggest Todos
+                  {t('suggestTodos')}
                 </Button>
               </div>
               <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
@@ -299,7 +310,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                       render={({ field: todoField }) => (
                         <FormItem className="flex-grow">
                           <FormControl>
-                            <Input placeholder="New todo item" {...todoField} />
+                            <Input placeholder={t('newTodoPlaceholder')} {...todoField} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -307,6 +318,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                     />
                     <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
+                       <span className="sr-only">{t('delete')}</span>
                     </Button>
                   </div>
                 ))}
@@ -318,12 +330,12 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                 onClick={() => append({ text: "", completed: false })}
                 className="mt-2"
               >
-                <PlusCircle className="mr-2 h-4 w-4" /> Add Todo
+                <PlusCircle className="mr-2 h-4 w-4" /> {t('addTodo')}
               </Button>
             </div>
           <DialogFooter className="pt-4 mt-auto">
-            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit">{activity ? "Save Changes" : "Add Activity"}</Button>
+            <Button type="button" variant="outline" onClick={onClose}>{t('cancel')}</Button>
+            <Button type="submit">{activity ? t('saveChanges') : t('addActivity')}</Button>
           </DialogFooter>
           </form>
         </Form>

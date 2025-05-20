@@ -11,7 +11,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -20,7 +19,8 @@ import {
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Category } from '@/lib/types';
 import { Trash2, PlusCircle, Edit3, XCircle, ArrowLeft } from 'lucide-react';
-import AppHeader from '@/components/layout/app-header';
+// AppHeader might be removed if it's global in layout and not specifically needed here
+// import AppHeader from '@/components/layout/app-header'; 
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,6 +33,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useTranslations } from '@/contexts/language-context';
 
 const categoryFormSchema = z.object({
   name: z.string().min(1, "Category name is required."),
@@ -43,6 +44,7 @@ type CategoryFormData = z.infer<typeof categoryFormSchema>;
 
 export default function ManageCategoriesPage() {
   const { categories, addCategory, updateCategory, deleteCategory } = useAppStore();
+  const { t } = useTranslations();
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
@@ -92,25 +94,29 @@ export default function ManageCategoriesPage() {
     setEditingCategory(null);
     form.reset();
   };
+  
+  const iconNameDescKey = t('iconNameDescriptionLink');
+  const linkPart = `<a href="https://lucide.dev/icons/" target="_blank" rel="noopener noreferrer" class="underline text-primary">lucide.dev/icons</a>`;
+  const iconNameDescription = iconNameDescKey.replace('<a>lucide.dev/icons</a>', linkPart);
 
   return (
     <div className="flex flex-col flex-grow min-h-screen">
-      <AppHeader />
+      {/* <AppHeader /> */}
       <main className="flex-grow container mx-auto py-8">
         <div className="mb-6 flex justify-start">
           <Link href="/" passHref>
             <Button variant="outline">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Volver al Calendario
+              {t('backToCalendar')}
             </Button>
           </Link>
         </div>
         <div className="grid gap-8 md:grid-cols-2">
           <Card className="shadow-lg">
             <CardHeader>
-              <CardTitle>{editingCategory ? "Edit Category" : "Add New Category"}</CardTitle>
+              <CardTitle>{editingCategory ? t('editCategory') : t('addNewCategory')}</CardTitle>
               <CardDescription>
-                {editingCategory ? "Update the details of your category." : "Create a new category for your activities."}
+                {editingCategory ? t('updateCategoryDetails') : t('createCategoryDescription')}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -121,9 +127,9 @@ export default function ManageCategoriesPage() {
                     name="name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Category Name</FormLabel>
+                        <FormLabel>{t('categoryName')}</FormLabel>
                         <FormControl>
-                          <Input placeholder="e.g., Fitness" {...field} />
+                          <Input placeholder="e.g., Fitness, Gimnasio" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -134,13 +140,11 @@ export default function ManageCategoriesPage() {
                     name="iconName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Icon Name (from Lucide)</FormLabel>
+                        <FormLabel>{t('iconName')}</FormLabel>
                         <FormControl>
                           <Input placeholder="e.g., Dumbbell, Coffee, BookOpen" {...field} />
                         </FormControl>
-                        <FormDescription>
-                          Enter a PascalCase icon name from <a href="https://lucide.dev/icons/" target="_blank" rel="noopener noreferrer" className="underline text-primary">lucide.dev/icons</a>.
-                        </FormDescription>
+                        <div className="text-[0.8rem] text-muted-foreground" dangerouslySetInnerHTML={{ __html: iconNameDescription }} />
                         <FormMessage />
                       </FormItem>
                     )}
@@ -148,12 +152,12 @@ export default function ManageCategoriesPage() {
                   <div className="flex space-x-2">
                     <Button type="submit" className="flex-grow">
                       {editingCategory ? <Edit3 className="mr-2 h-5 w-5" /> : <PlusCircle className="mr-2 h-5 w-5" />}
-                      {editingCategory ? "Save Changes" : "Add Category"}
+                      {editingCategory ? t('saveChanges') : t('addCategory')}
                     </Button>
                     {editingCategory && (
                       <Button type="button" variant="outline" onClick={handleCancelEdit}>
                         <XCircle className="mr-2 h-5 w-5" />
-                        Cancel
+                        {t('cancel')}
                       </Button>
                     )}
                   </div>
@@ -164,12 +168,12 @@ export default function ManageCategoriesPage() {
 
           <Card className="shadow-lg flex flex-col">
             <CardHeader>
-              <CardTitle>Existing Categories</CardTitle>
-              <CardDescription>View, edit, and manage your current categories.</CardDescription>
+              <CardTitle>{t('existingCategories')}</CardTitle>
+              <CardDescription>{t('viewEditManageCategories')}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow">
               {categories.length > 0 ? (
-                <ScrollArea className="h-[calc(100vh-32rem)] sm:h-[calc(100vh-30rem)] pr-1"> {/* Adjusted height */}
+                <ScrollArea className="h-[calc(100vh-32rem)] sm:h-[calc(100vh-30rem)] pr-1"> 
                   <ul className="space-y-3">
                     {categories.map((category) => (
                       <li key={category.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md shadow-sm">
@@ -180,26 +184,26 @@ export default function ManageCategoriesPage() {
                         <div className="flex items-center">
                           <Button variant="ghost" size="icon" onClick={() => handleEditCategory(category)} className="text-primary hover:text-primary/80">
                             <Edit3 className="h-5 w-5" />
+                            <span className="sr-only">{t('editCategory')}</span>
                           </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive/80">
                                 <Trash2 className="h-5 w-5" />
+                                 <span className="sr-only">{t('delete')}</span>
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                <AlertDialogTitle>{t('confirmDelete')}</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  This action will delete the category "{category.name}". 
-                                  Activities using this category will no longer be associated with it.
-                                  This cannot be undone.
+                                  {t('confirmDeleteCategoryDescription', { categoryName: category.name })}
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
-                                <AlertDialogCancel onClick={() => setCategoryToDelete(null)}>Cancel</AlertDialogCancel>
+                                <AlertDialogCancel onClick={() => setCategoryToDelete(null)}>{t('cancel')}</AlertDialogCancel>
                                 <AlertDialogAction onClick={() => handleDeleteCategory(category.id)}>
-                                  Delete
+                                  {t('delete')}
                                 </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
@@ -210,12 +214,12 @@ export default function ManageCategoriesPage() {
                   </ul>
                 </ScrollArea>
               ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">No categories added yet. Use the form to add your first category.</p>
+                <p className="text-sm text-muted-foreground text-center py-4">{t('noCategoriesYet')}</p>
               )}
             </CardContent>
              {categories.length > 0 && (
               <CardFooter className="text-sm text-muted-foreground">
-                You have {categories.length} categor{categories.length === 1 ? 'y' : 'ies'}.
+                {t('categoriesCount', { count: categories.length })}
               </CardFooter>
             )}
           </Card>
@@ -224,4 +228,3 @@ export default function ManageCategoriesPage() {
     </div>
   );
 }
-
