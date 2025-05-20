@@ -12,6 +12,7 @@ export type Translations = {
   lightTheme: string;
   darkTheme: string;
   systemTheme: string;
+  moreOptions: string; // New key
 
 
   // CategoriesPage
@@ -69,8 +70,8 @@ export type Translations = {
   activitiesForWeek: (params: { startDate: string; endDate: string }) => string;
   activitiesForMonth: (params: { month: string }) => string;
   loadingDate: string;
-  noActivitiesForDay: string; // Kept for specific daily messages if needed, but new general one below
-  noActivitiesForPeriod: string; // New general message
+  noActivitiesForDay: string; 
+  noActivitiesForPeriod: string; 
   selectDateToSeeActivities: string;
   addActivityForDate: (params: { date: string }) => string;
   confirmDeleteActivityTitle: string;
@@ -83,7 +84,7 @@ export type Translations = {
   viewMonthly: string;
 
   // ActivityListItem
-  editActivitySr: string; // Sr for Screen Reader
+  editActivitySr: string; 
   deleteActivitySr: string;
   todosCompleted: (params: { completed: number, total: number }) => string;
   noDetailsAvailable: string;
@@ -102,6 +103,7 @@ export const translations: Record<Locale, Translations> = {
     lightTheme: "Light",
     darkTheme: "Dark",
     systemTheme: "System",
+    moreOptions: "More options",
     backToCalendar: "Back to Calendar",
     addCategory: "Add Category",
     editCategory: "Edit Category",
@@ -178,6 +180,7 @@ export const translations: Record<Locale, Translations> = {
     lightTheme: "Claro",
     darkTheme: "Oscuro",
     systemTheme: "Sistema",
+    moreOptions: "Más opciones",
     backToCalendar: "Volver al Calendario",
     addCategory: "Añadir Categoría",
     editCategory: "Editar Categoría",
