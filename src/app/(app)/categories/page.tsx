@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslations } from '@/contexts/language-context';
+import { FormDescription } from "@/components/ui/form";
+
 
 const categoryFormSchema = z.object({
   name: z.string().min(1, "Category name is required."),
@@ -53,7 +55,7 @@ export default function ManageCategoriesPage() {
     defaultValues: {
       name: "",
       iconName: "",
-      mode: appMode, // Default to current app mode or 'all' if preferred
+      mode: appMode, 
     },
   });
 
@@ -62,7 +64,7 @@ export default function ManageCategoriesPage() {
       form.reset({
         name: editingCategory.name,
         iconName: editingCategory.iconName,
-        mode: editingCategory.mode || appMode, // Default to current appMode if category.mode is undefined
+        mode: editingCategory.mode || appMode, 
       });
     } else {
       form.reset({ name: "", iconName: "", mode: appMode });
@@ -103,7 +105,7 @@ export default function ManageCategoriesPage() {
 
   return (
     <div className="flex flex-col flex-grow min-h-screen">
-      <main className="flex-grow container mx-auto py-8">
+      <main className="flex-grow container mx-auto py-8 px-4">
         <div className="mb-6 flex justify-start">
           <Link href="/" passHref>
             <Button variant="outline">
@@ -145,7 +147,7 @@ export default function ManageCategoriesPage() {
                         <FormControl>
                           <Input placeholder="e.g., Dumbbell, Coffee, BookOpen" {...field} />
                         </FormControl>
-                        <div className="text-[0.8rem] text-muted-foreground" dangerouslySetInnerHTML={{ __html: iconNameDescription }} />
+                        <FormDescription dangerouslySetInnerHTML={{ __html: iconNameDescription }} />
                         <FormMessage />
                       </FormItem>
                     )}
@@ -159,7 +161,7 @@ export default function ManageCategoriesPage() {
                         <FormControl>
                           <RadioGroup
                             onValueChange={field.onChange}
-                            defaultValue={field.value}
+                            value={field.value} // Ensure value is controlled
                             className="flex flex-col space-y-1 sm:flex-row sm:space-y-0 sm:space-x-4"
                           >
                             <FormItem className="flex items-center space-x-2 space-y-0">
@@ -210,7 +212,7 @@ export default function ManageCategoriesPage() {
             </CardHeader>
             <CardContent className="flex-grow">
               {filteredCategories.length > 0 ? (
-                <ScrollArea className="h-[calc(100vh-36rem)] sm:h-[calc(100vh-34rem)] pr-1"> 
+                <ScrollArea className="h-full pr-1"> 
                   <ul className="space-y-3">
                     {filteredCategories.map((category) => (
                       <li key={category.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md shadow-sm">
