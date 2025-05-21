@@ -245,7 +245,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0 z-[51]" align="start"> {/* Increased z-index */}
+                      <PopoverContent className="w-auto p-0" align="start">
                         <Calendar
                           mode="single"
                           selected={field.value}
@@ -347,4 +347,3 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
     </Dialog>
   );
 }
-
