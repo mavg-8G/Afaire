@@ -119,6 +119,13 @@ export default function ActivityCalendarView() {
       setIsActivityModalOpen(true);
     }
   };
+  
+  const handleAddNewActivityGeneric = () => {
+    setEditingActivity(undefined);
+    setIsAddingActivityForSelectedDate(false); // This will use current date in modal
+    setIsActivityModalOpen(true);
+  };
+
 
   const handleOpenDeleteConfirm = (activity: Activity) => {
     setActivityToDelete(activity);
@@ -203,7 +210,7 @@ export default function ActivityCalendarView() {
       <div className="container mx-auto py-6 flex flex-col lg:flex-row gap-6 items-start">
         <Card className="lg:w-1/2 xl:w-2/3 shadow-lg w-full">
           <CardContent className="p-0 sm:p-2 flex justify-center">
-            <Skeleton className="h-[300px] w-[350px] rounded-md" />
+            <Skeleton className="h-[300px] w-[350px] sm:w-[400px] sm:h-[350px] rounded-md" />
           </CardContent>
         </Card>
         <Card className="lg:w-1/2 xl:w-1/3 shadow-lg w-full flex flex-col">
@@ -230,98 +237,109 @@ export default function ActivityCalendarView() {
   }
 
   return (
-    <div className="container mx-auto py-6 flex flex-col lg:flex-row gap-6 items-start">
-      <Card className="lg:w-1/2 xl:w-2/3 shadow-lg w-full">
-        <CardContent className="p-0 sm:p-2 flex justify-center">
-          <Calendar
-            mode="single"
-            selected={selectedDate}
-            onSelect={handleDateSelect}
-            month={currentDisplayMonth}
-            onMonthChange={setCurrentDisplayMonth}
-            className="p-1 sm:p-3 rounded-md"
-            modifiers={modifiers}
-            modifiersClassNames={modifiersClassNames}
-            locale={dateLocale}
-            footer={todayButtonFooter}
+    <div className="relative flex-grow">
+      <div className="container mx-auto py-6 flex flex-col lg:flex-row gap-6 items-start">
+        <Card className="lg:w-1/2 xl:w-2/3 shadow-lg w-full">
+          <CardContent className="p-0 sm:p-2 flex justify-center">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={handleDateSelect}
+              month={currentDisplayMonth}
+              onMonthChange={setCurrentDisplayMonth}
+              className="p-1 sm:p-3 rounded-md"
+              modifiers={modifiers}
+              modifiersClassNames={modifiersClassNames}
+              locale={dateLocale}
+              footer={todayButtonFooter}
+            />
+          </CardContent>
+        </Card>
+        
+        <Card className="lg:w-1/2 xl:w-1/3 shadow-lg w-full flex flex-col">
+          <CardHeader>
+            <CardTitle>
+              {getCardTitle()}
+            </CardTitle>
+            <div className="pt-2">
+              <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)}>
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="daily">{t('viewDaily')}</TabsTrigger>
+                  <TabsTrigger value="weekly">{t('viewWeekly')}</TabsTrigger>
+                  <TabsTrigger value="monthly">{t('viewMonthly')}</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+          </CardHeader>
+          <CardContent className="flex-grow">
+            {selectedDate && activitiesForView.length > 0 ? (
+              <ScrollArea className="h-[calc(100vh-30rem)] sm:h-[calc(100vh-30rem)] pr-1">
+                <div className="space-y-3">
+                  {activitiesForView.map(activity => (
+                    <ActivityListItem 
+                      key={activity.id} 
+                      activity={activity} 
+                      category={getCategoryById(activity.categoryId)}
+                      onEdit={() => handleEditActivity(activity)}
+                      onDelete={() => handleOpenDeleteConfirm(activity)}
+                      showDate={viewMode === 'weekly' || viewMode === 'monthly'}
+                    />
+                  ))}
+                </div>
+              </ScrollArea>
+            ) : (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                {selectedDate ? t('noActivitiesForPeriod') : t('selectDateToSeeActivities')}
+              </p>
+            )}
+          </CardContent>
+          <CardFooter>
+            <Button 
+              onClick={handleAddNewActivityForSelectedDate} 
+              disabled={!selectedDate}
+              className="w-full"
+            >
+              <PlusCircle className="mr-2 h-5 w-5" />
+              {selectedDate ? t('addActivityForDate', {date: format(selectedDate, 'MMM d', { locale: dateLocale })}) : '...'}
+            </Button>
+          </CardFooter>
+        </Card>
+
+        {isActivityModalOpen && (
+          <ActivityModal
+            isOpen={isActivityModalOpen}
+            onClose={handleCloseModal}
+            activity={editingActivity}
+            initialDate={isAddingActivityForSelectedDate && selectedDate ? selectedDate : (editingActivity ? new Date(editingActivity.createdAt) : new Date())}
           />
-        </CardContent>
-      </Card>
+        )}
+
+        {activityToDelete && (
+          <AlertDialog open={!!activityToDelete} onOpenChange={() => setActivityToDelete(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{t('confirmDeleteActivityTitle')}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {t('confirmDeleteActivityDescription', { activityTitle: activityToDelete.title })}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setActivityToDelete(null)}>{t('cancel')}</AlertDialogCancel>
+                <AlertDialogAction onClick={handleConfirmDelete}>{t('delete')}</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+      </div>
       
-      <Card className="lg:w-1/2 xl:w-1/3 shadow-lg w-full flex flex-col">
-        <CardHeader>
-          <CardTitle>
-            {getCardTitle()}
-          </CardTitle>
-          <div className="pt-2">
-            <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)}>
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="daily">{t('viewDaily')}</TabsTrigger>
-                <TabsTrigger value="weekly">{t('viewWeekly')}</TabsTrigger>
-                <TabsTrigger value="monthly">{t('viewMonthly')}</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-        </CardHeader>
-        <CardContent className="flex-grow">
-          {selectedDate && activitiesForView.length > 0 ? (
-            <ScrollArea className="h-[calc(100vh-28rem)] sm:h-[calc(100vh-28rem)] pr-1">
-              <div className="space-y-3">
-                {activitiesForView.map(activity => (
-                  <ActivityListItem 
-                    key={activity.id} 
-                    activity={activity} 
-                    category={getCategoryById(activity.categoryId)}
-                    onEdit={() => handleEditActivity(activity)}
-                    onDelete={() => handleOpenDeleteConfirm(activity)}
-                    showDate={viewMode === 'weekly' || viewMode === 'monthly'}
-                  />
-                ))}
-              </div>
-            </ScrollArea>
-          ) : (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              {selectedDate ? t('noActivitiesForPeriod') : t('selectDateToSeeActivities')}
-            </p>
-          )}
-        </CardContent>
-        <CardFooter>
-          <Button 
-            onClick={handleAddNewActivityForSelectedDate} 
-            disabled={!selectedDate}
-            className="w-full"
-          >
-            <PlusCircle className="mr-2 h-5 w-5" />
-            {selectedDate ? t('addActivityForDate', {date: format(selectedDate, 'MMM d', { locale: dateLocale })}) : '...'}
-          </Button>
-        </CardFooter>
-      </Card>
-
-      {isActivityModalOpen && (
-        <ActivityModal
-          isOpen={isActivityModalOpen}
-          onClose={handleCloseModal}
-          activity={editingActivity}
-          initialDate={isAddingActivityForSelectedDate && selectedDate ? selectedDate : undefined}
-        />
-      )}
-
-      {activityToDelete && (
-        <AlertDialog open={!!activityToDelete} onOpenChange={() => setActivityToDelete(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t('confirmDeleteActivityTitle')}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t('confirmDeleteActivityDescription', { activityTitle: activityToDelete.title })}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setActivityToDelete(null)}>{t('cancel')}</AlertDialogCancel>
-              <AlertDialogAction onClick={handleConfirmDelete}>{t('delete')}</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
+      {/* Floating Action Button */}
+      <Button
+        onClick={handleAddNewActivityGeneric}
+        className="fixed bottom-6 right-6 rounded-full shadow-lg h-14 w-14 z-30 p-0"
+        aria-label={t('addActivity')}
+      >
+        <PlusCircle className="h-7 w-7" />
+      </Button>
     </div>
   );
 }

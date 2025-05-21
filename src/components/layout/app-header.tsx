@@ -3,10 +3,9 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Settings, Languages, Sun, Moon, Laptop, MoreVertical, User, Briefcase, LogOut, KeyRound, LayoutDashboard } from 'lucide-react'; 
+import { Settings, Languages, Sun, Moon, Laptop, MoreVertical, User, Briefcase, LogOut, KeyRound, LayoutDashboard } from 'lucide-react';
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { APP_NAME } from '@/lib/constants';
-import ActivityModal from '@/components/forms/activity-modal'; 
 import ChangePasswordModal from '@/components/forms/change-password-modal';
 import { useTranslations } from '@/contexts/language-context';
 import { useTheme } from 'next-themes';
@@ -25,7 +24,6 @@ import type { AppMode } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 
 export default function AppHeader() {
-  const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
   const { t, setLocale, locale } = useTranslations();
   const { setTheme, theme } = useTheme();
@@ -79,11 +77,6 @@ export default function AppHeader() {
 
           {/* Right Section: Action Buttons */}
           <div className="flex items-center gap-x-1 sm:gap-x-2">
-            <Button onClick={() => setIsActivityModalOpen(true)} variant="default" size="sm" className="text-xs sm:text-sm sm:h-10 sm:px-4 sm:py-2">
-              <PlusCircle className="mr-1 h-4 w-4 sm:mr-2 sm:h-5 sm:w-5" />
-              {t('addActivity')}
-            </Button>
-            
             {/* Desktop Specific Actions */}
             <div className="hidden md:flex items-center gap-x-1">
                <Link href="/dashboard" passHref>
@@ -211,7 +204,6 @@ export default function AppHeader() {
           </div>
         </div>
       </header>
-      <ActivityModal isOpen={isActivityModalOpen} onClose={() => setIsActivityModalOpen(false)} />
       <ChangePasswordModal isOpen={isChangePasswordModalOpen} onClose={() => setIsChangePasswordModalOpen(false)} />
     </>
   );
