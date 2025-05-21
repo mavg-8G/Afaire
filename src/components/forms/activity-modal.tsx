@@ -103,7 +103,8 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
           todos: [],
         });
       }
-      setIsDatePopoverOpen(false);
+      // Ensure popover is closed when modal reopens or activity changes
+      setIsDatePopoverOpen(false); 
     }
   }, [activity, form, isOpen, initialDate]);
 
@@ -246,7 +247,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                         </FormControl>
                       </PopoverTrigger>
                       <PopoverContent
-                        className="w-auto p-0 z-[70]"
+                        className="w-auto p-0 z-[70]" 
                         align="start"
                       >
                         <Calendar
@@ -254,12 +255,13 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                           selected={field.value}
                           onSelect={(selectedDate) => {
                             field.onChange(selectedDate);
-                            setIsDatePopoverOpen(false);
+                            setIsDatePopoverOpen(false); // Close popover on date select
                           }}
                           disabled={(date) =>
                             date < new Date("1900-01-01")
                           }
                           locale={dateLocale}
+                          
                         />
                       </PopoverContent>
                     </Popover>
@@ -271,7 +273,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                 control={form.control}
                 name="time"
                 render={({ field }) => (
-                  <FormItem className="flex flex-col">
+                  <FormItem className="flex flex-col min-w-0"> {/* Added min-w-0 */}
                     <FormLabel className="min-h-8">{t('activityTimeLabel')}</FormLabel>
                     <FormControl>
                       <div className="relative">
