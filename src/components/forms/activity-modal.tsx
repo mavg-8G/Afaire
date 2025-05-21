@@ -39,8 +39,8 @@ import { enUS, es } from 'date-fns/locale';
 interface ActivityModalProps {
   isOpen: boolean;
   onClose: () => void;
-  activity?: Activity; 
-  initialDate?: Date; 
+  activity?: Activity;
+  initialDate?: Date;
 }
 
 const todoSchema = z.object({
@@ -103,7 +103,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
           todos: [],
         });
       }
-      setIsDatePopoverOpen(false); 
+      setIsDatePopoverOpen(false);
     }
   }, [activity, form, isOpen, initialDate]);
 
@@ -111,10 +111,10 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
     const activityPayload: Partial<Activity> & { title: string; categoryId: string; createdAt: number } = {
       title: data.title,
       categoryId: data.categoryId,
-      todos: data.todos?.map(t => ({ 
-        id: t.id || undefined, 
-        text: t.text, 
-        completed: t.completed || false 
+      todos: data.todos?.map(t => ({
+        id: t.id || undefined,
+        text: t.text,
+        completed: t.completed || false
       })) || [],
       createdAt: data.activityDate.getTime(),
       time: data.time === "" ? undefined : data.time,
@@ -128,19 +128,19 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
       toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
     } else {
       addActivity(
-        { 
-          title: data.title, 
-          categoryId: data.categoryId, 
+        {
+          title: data.title,
+          categoryId: data.categoryId,
           todos: data.todos?.map(t=>({text: t.text, completed: false})),
           time: data.time === "" ? undefined : data.time,
-        }, 
+        },
         data.activityDate.getTime()
       );
       toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
     }
     onClose();
   };
-  
+
   const handleSuggestTodos = async () => {
     const activityTitle = form.getValues("title");
     if (!activityTitle) {
@@ -172,12 +172,12 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
 
   if (!isOpen) return null;
 
-  const formattedInitialDateMsg = initialDate && !activity 
-    ? ` ${t('locale') === 'es' ? 'Por defecto será el' : 'Defaulting to'} ${format(initialDate, "PPP", { locale: dateLocale })}.` 
+  const formattedInitialDateMsg = initialDate && !activity
+    ? ` ${t('locale') === 'es' ? 'Por defecto será el' : 'Defaulting to'} ${format(initialDate, "PPP", { locale: dateLocale })}.`
     : ` ${t('locale') === 'es' ? 'Puedes cambiar la fecha abajo.' : 'You can change the date below.'}`;
 
-  const dialogDescriptionText = activity 
-    ? t('editActivityDescription') 
+  const dialogDescriptionText = activity
+    ? t('editActivityDescription')
     : t('addActivityDescription', { initialDateMsg: formattedInitialDateMsg });
 
   return (
@@ -225,7 +225,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                 name="activityDate"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>{t('activityDateLabel')}</FormLabel>
+                    <FormLabel className="min-h-8">{t('activityDateLabel')}</FormLabel>
                     <Popover open={isDatePopoverOpen} onOpenChange={setIsDatePopoverOpen}>
                       <PopoverTrigger asChild>
                         <FormControl>
@@ -245,8 +245,8 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
-                      <PopoverContent 
-                        className="w-auto p-0 z-[70]" 
+                      <PopoverContent
+                        className="w-auto p-0 z-[70]"
                         align="start"
                       >
                         <Calendar
@@ -254,7 +254,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                           selected={field.value}
                           onSelect={(selectedDate) => {
                             field.onChange(selectedDate);
-                            setIsDatePopoverOpen(false); 
+                            setIsDatePopoverOpen(false);
                           }}
                           disabled={(date) =>
                             date < new Date("1900-01-01")
@@ -272,7 +272,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                 name="time"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>{t('activityTimeLabel')}</FormLabel>
+                    <FormLabel className="min-h-8">{t('activityTimeLabel')}</FormLabel>
                     <FormControl>
                       <div className="relative">
                         <Input type="time" {...field} className="pr-8" />
@@ -284,7 +284,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                 )}
               />
             </div>
-            
+
             <div>
               <div className="flex justify-between items-center mb-2">
                 <FormLabel>{t('todosLabel')}</FormLabel>
