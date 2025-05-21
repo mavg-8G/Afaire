@@ -64,6 +64,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
   const { toast } = useToast();
   const { t, locale } = useTranslations();
   const [isSuggestingTodos, setIsSuggestingTodos] = useState(false);
+  const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false);
 
   const dateLocale = locale === 'es' ? es : enUS;
 
@@ -102,6 +103,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
           todos: [],
         });
       }
+      setIsDatePopoverOpen(false); // Ensure popover is closed when modal opens/resets
     }
   }, [activity, form, isOpen, initialDate]);
 
@@ -179,7 +181,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
     : t('addActivityDescription', { initialDateMsg: formattedInitialDateMsg });
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{activity ? t('editActivityTitle') : t('addActivityTitle')}</DialogTitle>
@@ -224,7 +226,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel>{t('activityDateLabel')}</FormLabel>
-                    <Popover>
+                    <Popover open={isDatePopoverOpen} onOpenChange={setIsDatePopoverOpen}>
                       <PopoverTrigger asChild>
                         <FormControl>
                           <Button
@@ -243,15 +245,17 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
+                      <PopoverContent className="w-auto p-0 z-[51]" align="start"> {/* Increased z-index */}
                         <Calendar
                           mode="single"
                           selected={field.value}
-                          onSelect={field.onChange}
+                          onSelect={(selectedDate) => {
+                            field.onChange(selectedDate);
+                            setIsDatePopoverOpen(false); // Close popover on select
+                          }}
                           disabled={(date) =>
                             date < new Date("1900-01-01")
                           }
-                          initialFocus
                           locale={dateLocale}
                         />
                       </PopoverContent>
@@ -343,3 +347,4 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
     </Dialog>
   );
 }
+
