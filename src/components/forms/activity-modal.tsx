@@ -103,7 +103,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
           todos: [],
         });
       }
-      setIsDatePopoverOpen(false); // Ensure popover is closed when modal opens/resets
+      setIsDatePopoverOpen(false); 
     }
   }, [activity, form, isOpen, initialDate]);
 
@@ -245,13 +245,16 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
+                      <PopoverContent 
+                        className="w-auto p-0 z-[70]" 
+                        align="start"
+                      >
                         <Calendar
                           mode="single"
                           selected={field.value}
                           onSelect={(selectedDate) => {
                             field.onChange(selectedDate);
-                            setIsDatePopoverOpen(false); // Close popover on select
+                            setIsDatePopoverOpen(false); 
                           }}
                           disabled={(date) =>
                             date < new Date("1900-01-01")
@@ -347,3 +350,4 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
     </Dialog>
   );
 }
+
