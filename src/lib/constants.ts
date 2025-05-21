@@ -17,3 +17,4 @@ export const APP_NAME = 'À faire';
 // Hardcoded credentials for login
 export const HARDCODED_USERNAME = "pruebas";
 export const HARDCODED_PASSWORD = "pruebas123";
+
