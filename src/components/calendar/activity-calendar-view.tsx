@@ -79,27 +79,30 @@ export default function ActivityCalendarView() {
     }
 
     return filteredActivities.sort((a, b) => {
-      if (a.completed && !b.completed) return 1;
-      if (!a.completed && b.completed) return -1;
+      // Prioritize completed vs not completed
+      if (a.completed && !b.completed) return 1; // Completed items go to the bottom of their group
+      if (!a.completed && b.completed) return -1; // Not completed items go to the top of their group
 
       const aHasTime = !!a.time;
       const bHasTime = !!b.time;
 
-      if (aHasTime && !bHasTime) return -1;
-      if (!aHasTime && bHasTime) return 1;
+      // Within completed/not-completed groups, sort by time
+      if (aHasTime && !bHasTime) return -1; // Activities with time come before those without
+      if (!aHasTime && bHasTime) return 1;  // Activities without time come after those with
 
       if (aHasTime && bHasTime && a.time && b.time) {
         const [aHours, aMinutes] = a.time.split(':').map(Number);
         const [bHours, bMinutes] = b.time.split(':').map(Number);
-        if (aHours !== bHours) return aHours - bHours;
-        if (aMinutes !== bMinutes) return aMinutes - bMinutes;
+        if (aHours !== bHours) return aHours - bHours; // Sort by hour
+        if (aMinutes !== bMinutes) return aMinutes - bMinutes; // Sort by minute
       }
       // For weekly/monthly view, sort by date first then by original logic
       if (viewMode === 'weekly' || viewMode === 'monthly') {
         const dateComparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         if (dateComparison !== 0) return dateComparison;
       }
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(); // Fallback or for daily view
+      // Fallback: sort by creation time (original timestamp) or maintain stable sort for items without time
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(); 
     });
   }, [activities, selectedDate, hasMounted, viewMode, dateLocale]);
 
@@ -236,7 +239,7 @@ export default function ActivityCalendarView() {
             onSelect={handleDateSelect}
             month={currentDisplayMonth}
             onMonthChange={setCurrentDisplayMonth}
-            className="rounded-md"
+            className="p-1 sm:p-3 rounded-md"
             modifiers={modifiers}
             modifiersClassNames={modifiersClassNames}
             locale={dateLocale}
@@ -262,7 +265,7 @@ export default function ActivityCalendarView() {
         </CardHeader>
         <CardContent className="flex-grow">
           {selectedDate && activitiesForView.length > 0 ? (
-            <ScrollArea className="h-[calc(100vh-30rem)] sm:h-[calc(100vh-28rem)] pr-1">
+            <ScrollArea className="h-[calc(100vh-28rem)] sm:h-[calc(100vh-28rem)] pr-1">
               <div className="space-y-3">
                 {activitiesForView.map(activity => (
                   <ActivityListItem 
