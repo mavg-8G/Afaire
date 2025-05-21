@@ -318,7 +318,7 @@ export const translations: Record<Locale, Translations> = {
     switchToWorkMode: "Cambiar a Modo Trabajo",
     logout: "Cerrar Sesión",
     changePassword: "Cambiar Contraseña",
-    dashboard: "Panel de Control",
+    dashboard: "Dashboard",
     backToCalendar: "Volver al Calendario",
     addCategory: "Añadir Categoría",
     editCategory: "Editar Categoría",
