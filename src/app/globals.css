@@ -11,25 +11,25 @@ body {
   /* --- PERSONAL MODE --- */
   /* Personal Light (Default if no .mode-work and not .dark) */
   :root, html.mode-personal, html.mode-personal.light {
-    --background: 210 60% 97%; /* Softer, lighter blue/gray */
-    --foreground: 215 25% 25%; /* Dark gray, less harsh */
+    --background: 35 70% 96%; /* Very Light Peach/Cream */
+    --foreground: 35 20% 25%; /* Dark Warm Gray */
     --card: 0 0% 100%;
-    --card-foreground: 215 25% 25%;
+    --card-foreground: 35 20% 25%;
     --popover: 0 0% 100%;
-    --popover-foreground: 215 25% 25%;
-    --primary: 190 70% 65%; /* Soft Teal */
-    --primary-foreground: 210 40% 98%; /* White text on soft teal */
-    --secondary: 210 40% 92%; /* Lighter gray for secondary elements */
-    --secondary-foreground: 215 25% 35%;
-    --muted: 210 40% 88%; /* Even lighter gray for muted text/elements */
-    --muted-foreground: 215 20% 55%;
-    --accent: 140 55% 70%; /* Soft Green */
-    --accent-foreground: 210 40% 98%; /* White text on soft green */
+    --popover-foreground: 35 20% 25%;
+    --primary: 25 80% 72%; /* Soft Coral/Peach */
+    --primary-foreground: 25 50% 20%; /* Dark Brown for contrast */
+    --secondary: 35 50% 92%; /* Light Peach/Gray */
+    --secondary-foreground: 35 20% 35%;
+    --muted: 35 40% 88%; /* Lighter Peach/Gray */
+    --muted-foreground: 35 15% 55%; /* Medium Warm Gray */
+    --accent: 260 60% 75%; /* Soft Lavender */
+    --accent-foreground: 260 50% 20%; /* Dark Purple for contrast */
     --destructive: 0 84.2% 60.2%; /* Default red */
     --destructive-foreground: 0 0% 98%;
-    --border: 210 30% 88%; /* Adjusted border for better visibility */
-    --input: 210 30% 88%;  /* Adjusted input border */
-    --ring: 190 70% 65%; /* Primary color for rings */
+    --border: 35 30% 85%;
+    --input: 35 30% 85%;
+    --ring: 25 80% 72%; /* Matches primary */
     --radius: 0.5rem;
 
     --chart-1: 12 76% 61%;
@@ -39,37 +39,37 @@ body {
     --chart-5: 27 87% 67%;
 
     /* Sidebar for Personal Light */
-    --sidebar-background: 210 50% 95%;
-    --sidebar-foreground: 215 25% 25%;
-    --sidebar-primary: 190 70% 65%;
-    --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 140 55% 70%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 210 30% 85%;
-    --sidebar-ring: 190 70% 65%;
+    --sidebar-background: 35 60% 94%;
+    --sidebar-foreground: 35 20% 25%;
+    --sidebar-primary: 25 80% 72%;
+    --sidebar-primary-foreground: 25 50% 20%;
+    --sidebar-accent: 260 60% 75%;
+    --sidebar-accent-foreground: 260 50% 20%;
+    --sidebar-border: 35 30% 82%;
+    --sidebar-ring: 25 80% 72%;
   }
 
   /* Personal Dark (Default .dark if no .mode-work) */
   .dark:not(.mode-work), html.mode-personal.dark {
-    --background: 210 20% 12%; /* Softer dark, less black */
-    --foreground: 210 40% 90%; /* Light gray for text */
-    --card: 210 20% 15%;
-    --card-foreground: 210 40% 90%;
-    --popover: 210 20% 15%;
-    --popover-foreground: 210 40% 90%;
-    --primary: 190 60% 55%; /* Muted Teal */
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 18% 20%;
-    --secondary-foreground: 210 40% 85%;
-    --muted: 210 15% 25%;
-    --muted-foreground: 210 30% 65%;
-    --accent: 140 45% 60%; /* Muted Green */
-    --accent-foreground: 210 40% 98%;
+    --background: 30 15% 12%; /* Dark Warm Brown/Gray */
+    --foreground: 35 30% 88%; /* Light Peach/Cream text */
+    --card: 30 15% 15%;
+    --card-foreground: 35 30% 88%;
+    --popover: 30 15% 15%;
+    --popover-foreground: 35 30% 88%;
+    --primary: 25 70% 65%; /* Muted Coral/Peach */
+    --primary-foreground: 25 50% 95%; /* Very Light Peach for contrast */
+    --secondary: 30 12% 20%;
+    --secondary-foreground: 35 30% 80%;
+    --muted: 30 10% 25%;
+    --muted-foreground: 35 20% 65%;
+    --accent: 260 50% 68%; /* Muted Lavender */
+    --accent-foreground: 260 50% 95%; /* Very Light Lavender for contrast */
     --destructive: 0 70% 50%; /* Slightly softer red for dark */
     --destructive-foreground: 0 0% 98%;
-    --border: 210 15% 25%;
-    --input: 210 15% 25%;
-    --ring: 190 60% 55%;
+    --border: 30 10% 25%;
+    --input: 30 10% 25%;
+    --ring: 25 70% 65%; /* Matches primary */
     
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
@@ -78,14 +78,14 @@ body {
     --chart-5: 340 75% 55%;
 
     /* Sidebar for Personal Dark */
-    --sidebar-background: 210 18% 10%;
-    --sidebar-foreground: 210 40% 90%;
-    --sidebar-primary: 190 60% 55%;
-    --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 140 45% 60%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 210 15% 22%;
-    --sidebar-ring: 190 60% 55%;
+    --sidebar-background: 30 12% 10%;
+    --sidebar-foreground: 35 30% 88%;
+    --sidebar-primary: 25 70% 65%;
+    --sidebar-primary-foreground: 25 50% 95%;
+    --sidebar-accent: 260 50% 68%;
+    --sidebar-accent-foreground: 260 50% 95%;
+    --sidebar-border: 30 10% 19%;
+    --sidebar-ring: 25 70% 65%;
   }
 
   /* --- WORK MODE --- */
@@ -198,4 +198,3 @@ body {
 .day-with-event button.day_today.day_selected::after {
   background-color: hsl(var(--accent-foreground)); /* Keep it contrasting if today is also selected */
 }
-
