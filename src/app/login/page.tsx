@@ -17,7 +17,7 @@ import { useTranslations } from '@/contexts/language-context';
 import { APP_NAME, HARDCODED_USERNAME, HARDCODED_PASSWORD } from '@/lib/constants';
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Terminal } from 'lucide-react';
+import { Terminal, Eye, EyeOff } from 'lucide-react';
 
 const loginFormSchema = z.object({
   username: z.string().min(1, 'loginUsernameRequired'),
@@ -44,6 +44,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [remainingLockoutTime, setRemainingLockoutTime] = useState<number | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
@@ -163,7 +164,26 @@ export default function LoginPage() {
                   <FormItem>
                     <FormLabel>{t('loginPasswordLabel')}</FormLabel>
                     <FormControl>
-                      <Input type="password" placeholder={t('loginPasswordPlaceholder')} {...field} disabled={isLockedOut} />
+                      <div className="relative">
+                        <Input
+                          type={showPassword ? "text" : "password"}
+                          placeholder={t('loginPasswordPlaceholder')}
+                          {...field}
+                          disabled={isLockedOut}
+                          className="pr-10"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
+                          onClick={() => setShowPassword(!showPassword)}
+                          disabled={isLockedOut}
+                          aria-label={showPassword ? t('hidePassword') : t('showPassword')}
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
                     </FormControl>
                      <FormMessage>{form.formState.errors.password && t(form.formState.errors.password.message as any)}</FormMessage>
                   </FormItem>
@@ -217,5 +237,4 @@ export default function LoginPage() {
     </div>
   );
 }
-
     

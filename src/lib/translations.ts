@@ -118,6 +118,9 @@ export type Translations = {
   loginSecurityNotice: string;
   loginRedirecting: string;
   rememberMeLabel: string;
+  showPassword?: string;
+  hidePassword?: string;
+
 
   // ChangePasswordModal
   changePasswordModalTitle: string;
@@ -142,7 +145,7 @@ export type Translations = {
   toastCategoryAddedTitle: string;
   toastCategoryAddedDescription: (params: { categoryName: string }) => string;
   toastCategoryUpdatedTitle: string;
-  toastCategoryUpdatedDescription: string;
+  toastCategoryUpdatedDescription: (params: { categoryName: string }) => string;
   toastCategoryDeletedTitle: string;
   toastCategoryDeletedDescription: (params: { categoryName: string }) => string;
   toastActivityStartingSoonTitle: string;
@@ -263,6 +266,8 @@ export const translations: Record<Locale, Translations> = {
     loginSecurityNotice: "This is a prototype. Do not use real credentials.",
     loginRedirecting: "Redirecting...",
     rememberMeLabel: "Keep me logged in for 30 days",
+    showPassword: "Show password",
+    hidePassword: "Hide password",
     changePasswordModalTitle: "Change Password",
     changePasswordModalDescription: "Enter your current password and a new password below.",
     currentPasswordLabel: "Current Password",
@@ -283,7 +288,7 @@ export const translations: Record<Locale, Translations> = {
     toastCategoryAddedTitle: "Category Added",
     toastCategoryAddedDescription: (params) => `Category "${params.categoryName}" has been added.`,
     toastCategoryUpdatedTitle: "Category Updated",
-    toastCategoryUpdatedDescription: "The category details have been updated.",
+    toastCategoryUpdatedDescription: (params) => `Category "${params.categoryName}" has been updated.`,
     toastCategoryDeletedTitle: "Category Deleted",
     toastCategoryDeletedDescription: (params) => `Category "${params.categoryName}" has been removed.`,
     toastActivityStartingSoonTitle: "Activity Starting Soon!",
@@ -399,6 +404,8 @@ export const translations: Record<Locale, Translations> = {
     loginSecurityNotice: "Esto es un prototipo. No uses credenciales reales.",
     loginRedirecting: "Redirigiendo...",
     rememberMeLabel: "Mantenerme conectado por 30 días",
+    showPassword: "Mostrar contraseña",
+    hidePassword: "Ocultar contraseña",
     changePasswordModalTitle: "Cambiar Contraseña",
     changePasswordModalDescription: "Introduce tu contraseña actual y una nueva contraseña a continuación.",
     currentPasswordLabel: "Contraseña Actual",
@@ -419,7 +426,7 @@ export const translations: Record<Locale, Translations> = {
     toastCategoryAddedTitle: "Categoría Añadida",
     toastCategoryAddedDescription: (params) => `La categoría "${params.categoryName}" ha sido añadida.`,
     toastCategoryUpdatedTitle: "Categoría Actualizada",
-    toastCategoryUpdatedDescription: "Los detalles de la categoría han sido actualizados.",
+    toastCategoryUpdatedDescription: (params) => `La categoría "${params.categoryName}" ha sido actualizada.`,
     toastCategoryDeletedTitle: "Categoría Eliminada",
     toastCategoryDeletedDescription: (params) => `La categoría "${params.categoryName}" ha sido eliminada.`,
     toastActivityStartingSoonTitle: "¡Actividad Comienza Pronto!",

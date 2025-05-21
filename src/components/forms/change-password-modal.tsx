@@ -25,9 +25,9 @@ import {
 } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslations } from '@/contexts/language-context';
-import { HARDCODED_PASSWORD } from '@/lib/constants'; // Assuming you moved it here
+import { HARDCODED_PASSWORD } from '@/lib/constants';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Terminal } from 'lucide-react';
+import { Terminal, Eye, EyeOff } from 'lucide-react';
 
 
 const PASSWORD_MIN_LENGTH = 6;
@@ -41,9 +41,12 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
   const { t } = useTranslations();
   const { toast } = useToast();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
 
   const changePasswordFormSchema = z.object({
-    currentPassword: z.string().min(1, t('passwordUpdateErrorIncorrectCurrent')), // Simplified, actual check in submit
+    currentPassword: z.string().min(1, t('passwordUpdateErrorIncorrectCurrent')), 
     newPassword: z.string().min(PASSWORD_MIN_LENGTH, t('passwordMinLength', { length: PASSWORD_MIN_LENGTH })),
     confirmNewPassword: z.string().min(1, t('passwordUpdateErrorConfirmPasswordRequired')),
   }).refine(data => data.newPassword === data.confirmNewPassword, {
@@ -68,13 +71,10 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
   const onSubmit = (data: ChangePasswordFormData) => {
     setServerError(null);
     if (data.currentPassword !== HARDCODED_PASSWORD) {
-      // form.setError("currentPassword", { type: "manual", message: t('passwordUpdateErrorIncorrectCurrent') });
       setServerError(t('passwordUpdateErrorIncorrectCurrent'));
       return;
     }
 
-    // In a real app, you'd call an API to change the password here.
-    // For this prototype, we just show a success message.
     toast({
       title: t('passwordUpdateSuccessTitle'),
       description: t('passwordUpdateSuccessDescription'),
@@ -86,6 +86,9 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
   const handleCloseDialog = () => {
     form.reset();
     setServerError(null);
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+    setShowConfirmNewPassword(false);
     onClose();
   };
 
@@ -109,7 +112,24 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
                 <FormItem>
                   <FormLabel>{t('currentPasswordLabel')}</FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder={t('currentPasswordPlaceholder')} {...field} />
+                    <div className="relative">
+                      <Input
+                        type={showCurrentPassword ? "text" : "password"}
+                        placeholder={t('currentPasswordPlaceholder')}
+                        {...field}
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
+                        onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                        aria-label={showCurrentPassword ? t('hidePassword') : t('showPassword')}
+                      >
+                        {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -122,7 +142,24 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
                 <FormItem>
                   <FormLabel>{t('newPasswordLabel')}</FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder={t('newPasswordPlaceholder')} {...field} />
+                    <div className="relative">
+                      <Input
+                        type={showNewPassword ? "text" : "password"}
+                        placeholder={t('newPasswordPlaceholder')}
+                        {...field}
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                         aria-label={showNewPassword ? t('hidePassword') : t('showPassword')}
+                      >
+                        {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -135,7 +172,24 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
                 <FormItem>
                   <FormLabel>{t('confirmNewPasswordLabel')}</FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder={t('confirmNewPasswordPlaceholder')} {...field} />
+                    <div className="relative">
+                      <Input
+                        type={showConfirmNewPassword ? "text" : "password"}
+                        placeholder={t('confirmNewPasswordPlaceholder')}
+                        {...field}
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
+                        onClick={() => setShowConfirmNewPassword(!showConfirmNewPassword)}
+                        aria-label={showConfirmNewPassword ? t('hidePassword') : t('showPassword')}
+                      >
+                        {showConfirmNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -160,3 +214,4 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
     </Dialog>
   );
 }
+
