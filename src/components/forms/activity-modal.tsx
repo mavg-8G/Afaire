@@ -277,7 +277,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                     <FormLabel className="min-h-8">{t('activityTimeLabel')}</FormLabel>
                     <FormControl>
                       <div className="relative">
-                        <Input type="time" {...field} className="pr-8" />
+                        <Input type="time" {...field} className="pr-6" />
                         <Clock className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
                       </div>
                     </FormControl>
