@@ -38,7 +38,6 @@ export default function ActivityCalendarView() {
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | undefined>(undefined);
   const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
-  const [isAddingActivityForSelectedDate, setIsAddingActivityForSelectedDate] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('daily');
 
@@ -79,50 +78,38 @@ export default function ActivityCalendarView() {
     }
 
     return filteredActivities.sort((a, b) => {
-      // Prioritize completed vs not completed
-      if (a.completed && !b.completed) return 1; // Completed items go to the bottom of their group
-      if (!a.completed && b.completed) return -1; // Not completed items go to the top of their group
+      if (a.completed && !b.completed) return 1; 
+      if (!a.completed && b.completed) return -1; 
 
       const aHasTime = !!a.time;
       const bHasTime = !!b.time;
 
-      // Within completed/not-completed groups, sort by time
-      if (aHasTime && !bHasTime) return -1; // Activities with time come before those without
-      if (!aHasTime && bHasTime) return 1;  // Activities without time come after those with
+      if (aHasTime && !bHasTime) return -1; 
+      if (!aHasTime && bHasTime) return 1;  
 
       if (aHasTime && bHasTime && a.time && b.time) {
         const [aHours, aMinutes] = a.time.split(':').map(Number);
         const [bHours, bMinutes] = b.time.split(':').map(Number);
-        if (aHours !== bHours) return aHours - bHours; // Sort by hour
-        if (aMinutes !== bMinutes) return aMinutes - bMinutes; // Sort by minute
+        if (aHours !== bHours) return aHours - bHours; 
+        if (aMinutes !== bMinutes) return aMinutes - bMinutes; 
       }
-      // For weekly/monthly view, sort by date first then by original logic
+      
       if (viewMode === 'weekly' || viewMode === 'monthly') {
         const dateComparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         if (dateComparison !== 0) return dateComparison;
       }
-      // Fallback: sort by creation time (original timestamp) or maintain stable sort for items without time
+      
       return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(); 
     });
   }, [activities, selectedDate, hasMounted, viewMode, dateLocale]);
 
   const handleEditActivity = (activity: Activity) => {
     setEditingActivity(activity);
-    setIsAddingActivityForSelectedDate(false);
     setIsActivityModalOpen(true);
-  };
-
-  const handleAddNewActivityForSelectedDate = () => {
-    if (selectedDate) {
-      setEditingActivity(undefined);
-      setIsAddingActivityForSelectedDate(true);
-      setIsActivityModalOpen(true);
-    }
   };
   
   const handleAddNewActivityGeneric = () => {
     setEditingActivity(undefined);
-    setIsAddingActivityForSelectedDate(false); // This will use current date in modal
     setIsActivityModalOpen(true);
   };
 
@@ -145,7 +132,6 @@ export default function ActivityCalendarView() {
   const handleCloseModal = () => {
     setIsActivityModalOpen(false);
     setEditingActivity(undefined);
-    setIsAddingActivityForSelectedDate(false);
   };
 
   const modifiers = {
@@ -240,7 +226,7 @@ export default function ActivityCalendarView() {
     <div className="relative flex-grow">
       <div className="container mx-auto py-6 flex flex-col lg:flex-row gap-6 items-start">
         <Card className="lg:w-1/2 xl:w-2/3 shadow-lg w-full">
-          <CardContent className="p-0 sm:p-2 flex justify-center">
+          <CardContent className="p-0 sm:p-1 flex justify-center sm:p-3">
             <Calendar
               mode="single"
               selected={selectedDate}
@@ -273,7 +259,7 @@ export default function ActivityCalendarView() {
           </CardHeader>
           <CardContent className="flex-grow">
             {selectedDate && activitiesForView.length > 0 ? (
-              <ScrollArea className="h-[calc(100vh-30rem)] sm:h-[calc(100vh-30rem)] pr-1">
+              <ScrollArea className="h-[calc(100vh-27rem)] sm:h-[calc(100vh-27rem)] pr-1"> {/* Adjusted height */}
                 <div className="space-y-3">
                   {activitiesForView.map(activity => (
                     <ActivityListItem 
@@ -293,16 +279,7 @@ export default function ActivityCalendarView() {
               </p>
             )}
           </CardContent>
-          <CardFooter>
-            <Button 
-              onClick={handleAddNewActivityForSelectedDate} 
-              disabled={!selectedDate}
-              className="w-full"
-            >
-              <PlusCircle className="mr-2 h-5 w-5" />
-              {selectedDate ? t('addActivityForDate', {date: format(selectedDate, 'MMM d', { locale: dateLocale })}) : '...'}
-            </Button>
-          </CardFooter>
+          {/* CardFooter removed as per request */}
         </Card>
 
         {isActivityModalOpen && (
@@ -310,7 +287,7 @@ export default function ActivityCalendarView() {
             isOpen={isActivityModalOpen}
             onClose={handleCloseModal}
             activity={editingActivity}
-            initialDate={isAddingActivityForSelectedDate && selectedDate ? selectedDate : (editingActivity ? new Date(editingActivity.createdAt) : new Date())}
+            initialDate={editingActivity ? new Date(editingActivity.createdAt) : new Date()}
           />
         )}
 
@@ -332,7 +309,6 @@ export default function ActivityCalendarView() {
         )}
       </div>
       
-      {/* Floating Action Button */}
       <Button
         onClick={handleAddNewActivityGeneric}
         className="fixed bottom-6 right-6 rounded-full shadow-lg h-14 w-14 z-30 p-0"
