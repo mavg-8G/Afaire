@@ -22,6 +22,7 @@ export type Translations = {
   dashboard: string;
   notificationsTitle: string;
   noNotificationsYet: string;
+  notificationUnread: string;
   markAllAsRead: string;
   clearAllNotifications: string;
   notificationBellLabel: string;
@@ -92,6 +93,7 @@ export type Translations = {
   dayThu: string;
   dayFri: string;
   daySat: string;
+  invalidTimeFormat24Hour: string;
 
 
   // ActivityCalendarView
@@ -211,6 +213,7 @@ export const translations: Record<Locale, Translations> = {
     dashboard: "Dashboard",
     notificationsTitle: "Notifications",
     noNotificationsYet: "No new notifications.",
+    notificationUnread: "unread",
     markAllAsRead: "Mark all as read",
     clearAllNotifications: "Clear all",
     notificationBellLabel: "View notifications",
@@ -275,6 +278,7 @@ export const translations: Record<Locale, Translations> = {
     dayThu: "Thu",
     dayFri: "Fri",
     daySat: "Sat",
+    invalidTimeFormat24Hour: "Invalid time format. Use HH:MM (24-hour).",
     activitiesForDate: (params) => `Activities for ${params.date}`,
     activitiesForWeek: (params) => `Activities for week: ${params.startDate} - ${params.endDate}`,
     activitiesForMonth: (params) => `Activities for ${params.month}`,
@@ -375,6 +379,7 @@ export const translations: Record<Locale, Translations> = {
     dashboard: "Dashboard",
     notificationsTitle: "Notificaciones",
     noNotificationsYet: "No hay notificaciones nuevas.",
+    notificationUnread: "sin leer",
     markAllAsRead: "Marcar todas como leídas",
     clearAllNotifications: "Limpiar todas",
     notificationBellLabel: "Ver notificaciones",
@@ -439,6 +444,7 @@ export const translations: Record<Locale, Translations> = {
     dayThu: "Jue",
     dayFri: "Vie",
     daySat: "Sáb",
+    invalidTimeFormat24Hour: "Formato de hora inválido. Usa HH:MM (24 horas).",
     activitiesForDate: (params) => `Actividades para ${params.date}`,
     activitiesForWeek: (params) => `Actividades para la semana: ${params.startDate} - ${params.endDate}`,
     activitiesForMonth: (params) => `Actividades para ${params.month}`,
