@@ -308,9 +308,9 @@ export default function ActivityCalendarView() {
 
   const handleAddNewActivityGeneric = () => {
     setEditingActivity(undefined);
-    // When adding a new activity via FAB, the date in the modal should default to the selectedDate
-    // if available, otherwise today.
-    setDateForModal(selectedDate || new Date());
+    // When adding a new activity via FAB, the date in the modal should default to the current date
+    // for the new activity's start date.
+    setDateForModal(new Date()); // Default to today for new activity
     setEditingInstanceDate(undefined); // No specific instance for a new activity
     setIsActivityModalOpen(true);
   };
@@ -471,7 +471,7 @@ export default function ActivityCalendarView() {
           </CardHeader>
           <CardContent className="flex-grow">
             {selectedDate && activitiesForView.length > 0 ? (
-              <ScrollArea className="h-[calc(100vh-22rem)] sm:h-[calc(100vh-22rem)] pr-1">
+              <ScrollArea className="h-[calc(100vh-20rem)] sm:h-[calc(100vh-20rem)] pr-1">
                 <div className="space-y-3">
                   {activitiesForView.map(activity => (
                     <ActivityListItem
@@ -524,7 +524,7 @@ export default function ActivityCalendarView() {
 
       <Button
         onClick={handleAddNewActivityGeneric}
-        className="fixed bottom-6 right-6 rounded-full shadow-lg h-14 w-14 z-30 p-0 bg-[hsl(var(--accent))]/40 text-accent-foreground backdrop-blur-md border border-border/50"
+        className="fixed bottom-6 right-6 rounded-full shadow-lg h-14 w-14 z-30 p-0 bg-[hsl(var(--accent))]/25 text-accent-foreground backdrop-blur-md border border-border/50"
         aria-label={t('addActivity')}
       >
         <PlusCircle className="h-7 w-7" />
