@@ -52,7 +52,7 @@ export default function AppHeader() {
     router.push('/login');
   };
 
-  const appModeToggleSwitchMobile = ( // Renamed for clarity
+  const appModeToggleSwitchMobile = (
     <div className="flex items-center space-x-2 px-2 py-1.5">
       <Label htmlFor="app-mode-toggle-mobile" className="text-sm font-medium text-muted-foreground flex items-center">
         <User className={`inline-block h-4 w-4 mr-1 ${appMode === 'personal' ? 'text-primary' : ''}`} />
@@ -141,23 +141,22 @@ export default function AppHeader() {
   return (
     <>
       <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between"> {/* This div uses justify-between */}
+        <div className="container flex h-16 items-center justify-between">
           {/* Left Group */}
-          <div className="flex items-center gap-2 ml-4"> {/* Changed ml-2 to ml-4 */}
+          <div className="flex items-center gap-2 ml-4">
             <LogoIcon className="h-7 w-7 text-primary" />
             <Link href="/" className="text-xl font-bold tracking-tight text-foreground hover:no-underline sm:text-2xl">
                 {APP_NAME}
             </Link>
           </div>
 
+          {/* Center Group: Desktop App Mode Toggle Switch - Only on desktop */}
+          <div className="hidden md:flex">
+            {desktopAppModeToggleSwitch}
+          </div>
+            
           {/* Right Group - This will be pushed to the far right by justify-between */}
           <div className="flex items-center gap-x-1 sm:gap-x-2 mr-2">
-            
-            {/* Desktop App Mode Toggle Switch - MOVED HERE */}
-            <div className="hidden md:flex">
-              {desktopAppModeToggleSwitch}
-            </div>
-            
             {/* Notification Bell - Visible on all screen sizes */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -167,7 +166,6 @@ export default function AppHeader() {
                     <span className="absolute top-0 right-0 flex h-3 w-3">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-3 w-3 bg-primary text-xs text-primary-foreground items-center justify-center">
-                         {/* {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount} */}
                       </span>
                     </span>
                   )}
@@ -250,7 +248,7 @@ export default function AppHeader() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="focus:bg-transparent cursor-default p-0">
-                    {appModeToggleSwitchMobile} {/* Use the renamed variable */}
+                    {appModeToggleSwitchMobile}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                    <DropdownMenuItem asChild>
