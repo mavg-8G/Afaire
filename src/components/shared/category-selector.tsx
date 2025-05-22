@@ -19,9 +19,19 @@ interface CategorySelectorProps {
 }
 
 export default function CategorySelector({ value, onChange, placeholder }: CategorySelectorProps) {
-  const { categories } = useAppStore();
+  const { categories, isLoading } = useAppStore(); // Get isLoading state
   const { t } = useTranslations();
   const defaultPlaceholder = placeholder || t('selectCategoryPlaceholder');
+
+  if (isLoading) {
+    return (
+      <Select disabled>
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder={t('loadingCategoriesPlaceholder')} />
+        </SelectTrigger>
+      </Select>
+    );
+  }
 
   return (
     <Select value={value} onValueChange={onChange}>

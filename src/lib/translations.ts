@@ -61,7 +61,8 @@ export type Translations = {
   activityTitleLabel: string;
   categoryLabel: string;
   selectCategoryPlaceholder: string;
-  activityDateLabel: string; 
+  loadingCategoriesPlaceholder: string; // New key
+  activityDateLabel: string;
   pickADate: string;
   activityTimeLabel: string;
   activityNotesLabel: string;
@@ -254,6 +255,7 @@ export const translations: Record<Locale, Translations> = {
     activityTitleLabel: "Activity Title",
     categoryLabel: "Category",
     selectCategoryPlaceholder: "Select a category",
+    loadingCategoriesPlaceholder: "Loading categories...",
     activityDateLabel: "Start Date / Date",
     pickADate: "Pick a date",
     activityTimeLabel: "Activity Time (HH:MM)",
@@ -428,6 +430,7 @@ export const translations: Record<Locale, Translations> = {
     activityTitleLabel: "Título de la Actividad",
     categoryLabel: "Categoría",
     selectCategoryPlaceholder: "Selecciona una categoría",
+    loadingCategoriesPlaceholder: "Cargando categorías...",
     activityDateLabel: "Fecha de Inicio / Fecha",
     pickADate: "Elige una fecha",
     activityTimeLabel: "Hora de la Actividad (HH:MM)",
