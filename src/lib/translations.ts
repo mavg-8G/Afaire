@@ -94,6 +94,7 @@ export type Translations = {
   dayFri: string;
   daySat: string;
   invalidTimeFormat24Hour: string;
+  timeFormatDescription24Hour: string;
 
 
   // ActivityCalendarView
@@ -279,6 +280,7 @@ export const translations: Record<Locale, Translations> = {
     dayFri: "Fri",
     daySat: "Sat",
     invalidTimeFormat24Hour: "Invalid time format. Use HH:MM (24-hour).",
+    timeFormatDescription24Hour: "Please use 24-hour format (e.g., 14:30).",
     activitiesForDate: (params) => `Activities for ${params.date}`,
     activitiesForWeek: (params) => `Activities for week: ${params.startDate} - ${params.endDate}`,
     activitiesForMonth: (params) => `Activities for ${params.month}`,
@@ -445,6 +447,7 @@ export const translations: Record<Locale, Translations> = {
     dayFri: "Vie",
     daySat: "Sáb",
     invalidTimeFormat24Hour: "Formato de hora inválido. Usa HH:MM (24 horas).",
+    timeFormatDescription24Hour: "Por favor, usa el formato de 24 horas (ej: 14:30).",
     activitiesForDate: (params) => `Actividades para ${params.date}`,
     activitiesForWeek: (params) => `Actividades para la semana: ${params.startDate} - ${params.endDate}`,
     activitiesForMonth: (params) => `Actividades para ${params.month}`,
@@ -538,3 +541,5 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
+
+    

@@ -285,10 +285,11 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                     <FormLabel className="min-h-8">{t('activityTimeLabel')}</FormLabel>
                     <FormControl>
                       <div className="relative w-full">
-                        <Input type="time" {...field} className="pr-6 w-full" />
+                        <Input type="time" {...field} className="w-full" />
                         <Clock className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
                       </div>
                     </FormControl>
+                    <FormDescription>{t('timeFormatDescription24Hour')}</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -402,7 +403,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                              <Button
                                 variant={"outline"}
                                 className={cn(
-                                  "w-full pl-3 text-left font-normal justify-start", // Changed from flex justify-between
+                                  "w-full pl-3 text-left font-normal justify-start", 
                                   !field.value && "text-muted-foreground"
                                 )}
                               >
@@ -416,7 +417,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                           </FormControl>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0 z-[80]" align="start">
-                          <Calendar
+                           <Calendar
                             mode="single"
                             selected={field.value || undefined}
                             onSelect={(date) => {
@@ -433,7 +434,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                           />
                           {field.value && (
                             <Button
-                              type="button" // Ensure it's not a submit button
+                              type="button" 
                               variant="ghost"
                               size="sm" 
                               className="w-full rounded-t-none border-t" 
@@ -543,3 +544,5 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
+
+    
