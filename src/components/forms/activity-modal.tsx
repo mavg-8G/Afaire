@@ -42,7 +42,7 @@ interface ActivityModalProps {
   isOpen: boolean;
   onClose: () => void;
   activity?: Activity; // Master activity if editing
-  initialDate?: Date; // For FAB or pre-selecting calendar date
+  initialDate: Date; // Stable date for new activity or edit base date
   instanceDate?: Date; // If editing/viewing a specific instance of a recurring task
 }
 
@@ -68,8 +68,8 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
   const [isRecurrenceEndDatePopoverOpen, setIsRecurrenceEndDatePopoverOpen] = useState(false);
 
   const dateLocale = locale === 'es' ? es : enUS;
-  const effectiveInitialDate = instanceDate || (activity ? new Date(activity.createdAt) : initialDate) || new Date();
-
+  
+  // activityDate is the primary date for the activity (start date for recurrence)
   const activityFormSchema = z.object({
     title: z.string().min(1, t('activityTitleLabel')),
     categoryId: z.string().min(1, t('categoryLabel')),
@@ -79,25 +79,12 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
     notes: z.string().optional(),
     recurrence: recurrenceSchema,
   });
-  
+
   type ActivityFormData = z.infer<typeof activityFormSchema>;
 
   const form = useForm<ActivityFormData>({
     resolver: zodResolver(activityFormSchema),
-    defaultValues: {
-      title: "",
-      categoryId: "",
-      activityDate: effectiveInitialDate,
-      time: "",
-      todos: [],
-      notes: "",
-      recurrence: {
-        type: 'none',
-        endDate: null,
-        daysOfWeek: [],
-        dayOfMonth: new Date(effectiveInitialDate).getDate(),
-      },
-    },
+    // Default values are set/reset in useEffect when modal opens
   });
 
   const { fields, append, remove } = useFieldArray({
@@ -106,16 +93,16 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
   });
 
   const recurrenceType = form.watch('recurrence.type');
-  const activityStartDate = form.watch('activityDate'); 
+  const activityStartDate = form.watch('activityDate');
 
   useEffect(() => {
     if (isOpen) {
-      // const currentEffectiveDate = instanceDate || (activity ? new Date(activity.createdAt) : initialDate) || new Date();
-      if (activity) {
+      if (activity) { // Editing existing activity
+        const baseDate = new Date(activity.createdAt);
         form.reset({
           title: activity.title,
           categoryId: activity.categoryId,
-          activityDate: new Date(activity.createdAt), 
+          activityDate: baseDate,
           time: activity.time || "",
           todos: activity.todos?.map(t => ({ id: t.id, text: t.text, completed: t.completed })) || [],
           notes: activity.notes || "",
@@ -123,14 +110,14 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
             type: activity.recurrence?.type || 'none',
             endDate: activity.recurrence?.endDate ? new Date(activity.recurrence.endDate) : null,
             daysOfWeek: activity.recurrence?.daysOfWeek || [],
-            dayOfMonth: activity.recurrence?.dayOfMonth || new Date(activity.createdAt).getDate(),
+            dayOfMonth: activity.recurrence?.dayOfMonth || baseDate.getDate(),
           }
         });
-      } else {
+      } else { // Adding new activity, use the stable initialDate prop
         form.reset({
           title: "",
           categoryId: "",
-          activityDate: initialDate || new Date(),
+          activityDate: initialDate, // Use the stable prop
           time: "",
           todos: [],
           notes: "",
@@ -138,14 +125,14 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
             type: 'none',
             endDate: null,
             daysOfWeek: [],
-            dayOfMonth: (initialDate || new Date()).getDate(), 
+            dayOfMonth: initialDate.getDate(),
           }
         });
       }
       setIsStartDatePopoverOpen(false);
       setIsRecurrenceEndDatePopoverOpen(false);
     }
-  }, [activity, form, isOpen, initialDate, instanceDate]);
+  }, [activity, form, isOpen, initialDate, instanceDate]); // `initialDate` is now stable
 
   const onSubmit = (data: ActivityFormData) => {
     const recurrenceRule: RecurrenceRule | null = data.recurrence.type === 'none' ? null : {
@@ -159,24 +146,24 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
       title: data.title,
       categoryId: data.categoryId,
       todos: data.todos?.map(t => ({
-        id: t.id || undefined, 
+        id: t.id || undefined,
         text: t.text,
         completed: t.completed || false
       })) || [],
-      createdAt: data.activityDate.getTime(), 
+      createdAt: data.activityDate.getTime(),
       time: data.time === "" ? undefined : data.time,
       notes: data.notes,
       recurrence: recurrenceRule,
-      completedOccurrences: activity?.completedOccurrences || {}, 
+      completedOccurrences: activity?.completedOccurrences || {},
     };
 
-    if (activity) { 
+    if (activity) {
       updateActivity(activity.id, activityPayload as Partial<Activity>);
       toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
     } else {
       addActivity(
         activityPayload as Omit<Activity, 'id' | 'completedOccurrences'> & { todos?: Omit<Todo, 'id' | 'completed'>[] },
-        data.activityDate.getTime() 
+        data.activityDate.getTime() // Pass createdAt explicitly
       );
       toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
     }
@@ -187,13 +174,13 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
 
   const dialogDescriptionText = activity
     ? t('editActivityDescription')
-    : t('addActivityDescription', { initialDateMsg: ` ${t('locale') === 'es' ? 'Fecha por defecto:' : 'Default date:'} ${format(initialDate || new Date(), "PPP", { locale: dateLocale })}.` });
-  
+    : t('addActivityDescription', { initialDateMsg: ` ${t('locale') === 'es' ? 'Fecha por defecto:' : 'Default date:'} ${format(initialDate, "PPP", { locale: dateLocale })}.` });
+
   const maxRecurrenceEndDate = activityStartDate ? addDays(addMonths(activityStartDate, 5), 1) : undefined;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col z-[70]">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col z-[70]"> {/* Ensure dialog has high z-index */}
         <DialogHeader>
           <DialogTitle>{activity ? t('editActivityTitle') : t('addActivityTitle')}</DialogTitle>
           <DialogDescription>
@@ -233,7 +220,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="activityDate" 
+                name="activityDate"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel className="min-h-8">{t('activityDateLabel')}</FormLabel>
@@ -256,7 +243,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start" > {/* Removed z-index, relies on global popover z-index */}
+                      <PopoverContent className="w-auto p-0" align="start">
                         <Calendar
                           mode="single"
                           selected={field.value}
@@ -281,11 +268,11 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                 control={form.control}
                 name="time"
                 render={({ field }) => (
-                  <FormItem className="flex flex-col min-w-0">
+                  <FormItem className="flex flex-col min-w-0"> {/* min-w-0 helps with shrinking */}
                     <FormLabel className="min-h-8">{t('activityTimeLabel')}</FormLabel>
                     <FormControl>
-                      <div className="relative w-full">
-                        <Input type="time" {...field} className="w-full pr-7" />
+                      <div className="relative w-full"> {/* w-full on wrapper */}
+                        <Input type="time" {...field} className="w-full pr-7" /> {/* Reduced padding */}
                         <Clock className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
                       </div>
                     </FormControl>
@@ -403,7 +390,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                              <Button
                                 variant={"outline"}
                                 className={cn(
-                                  "w-full pl-3 text-left font-normal justify-start", 
+                                  "w-full pl-3 text-left font-normal justify-start",
                                   !field.value && "text-muted-foreground"
                                 )}
                               >
@@ -416,7 +403,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                               </Button>
                           </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start"> {/* Removed z-index */}
+                        <PopoverContent className="w-auto p-0" align="start">
                            <Calendar
                             mode="single"
                             selected={field.value || undefined}
@@ -434,14 +421,14 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                           />
                            {field.value && (
                             <Button
-                              type="button" 
+                              type="button"
                               variant="ghost"
-                              size="sm" 
-                              className="w-full rounded-t-none border-t" 
+                              size="sm"
+                              className="w-full rounded-t-none border-t"
                               onClick={(e) => {
-                                e.stopPropagation(); 
+                                e.stopPropagation();
                                 field.onChange(null);
-                                setIsRecurrenceEndDatePopoverOpen(false); 
+                                setIsRecurrenceEndDatePopoverOpen(false);
                               }}
                               aria-label={t('recurrenceClearEndDate')}
                             >
@@ -544,7 +531,3 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
-
-    
-
-    
