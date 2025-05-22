@@ -143,7 +143,7 @@ export default function AppHeader() {
       <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between"> {/* This div uses justify-between */}
           {/* Left Group */}
-          <div className="flex items-center gap-2 ml-2">
+          <div className="flex items-center gap-2 ml-4"> {/* Changed ml-2 to ml-4 */}
             <LogoIcon className="h-7 w-7 text-primary" />
             <Link href="/" className="text-xl font-bold tracking-tight text-foreground hover:no-underline sm:text-2xl">
                 {APP_NAME}
