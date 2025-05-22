@@ -79,6 +79,7 @@ export type Translations = {
   recurrenceDaysOfWeekLabel: string;
   recurrenceDayOfMonthLabel: string;
   recurrenceDayOfMonthPlaceholder: string;
+  recurrenceClearEndDate: string;
   daySun: string;
   dayMon: string;
   dayTue: string;
@@ -111,9 +112,9 @@ export type Translations = {
   todosCompleted: (params: { completed: number, total: number }) => string;
   noDetailsAvailable: string;
   noTodosForThisActivity: string;
-  recurrenceDaily: string;
-  recurrenceWeekly: string;
-  recurrenceMonthly: string;
+  recurrenceDailyText: string;
+  recurrenceWeeklyText: string;
+  recurrenceMonthlyText: string;
 
 
   // LoginPage
@@ -256,6 +257,7 @@ export const translations: Record<Locale, Translations> = {
     recurrenceDaysOfWeekLabel: "On Days",
     recurrenceDayOfMonthLabel: "Day of Month",
     recurrenceDayOfMonthPlaceholder: "e.g., 15",
+    recurrenceClearEndDate: "Clear end date",
     daySun: "Sun",
     dayMon: "Mon",
     dayTue: "Tue",
@@ -283,6 +285,9 @@ export const translations: Record<Locale, Translations> = {
     todosCompleted: (params) => `${params.completed} / ${params.total} todos completed`,
     noDetailsAvailable: "No details available.",
     noTodosForThisActivity: "No todos for this activity.",
+    recurrenceDailyText: "Daily",
+    recurrenceWeeklyText: "Weekly",
+    recurrenceMonthlyText: "Monthly",
     loginWelcomeMessage: "Log in to manage your activities.",
     loginUsernameLabel: "Username",
     loginPasswordLabel: "Password",
@@ -411,6 +416,7 @@ export const translations: Record<Locale, Translations> = {
     recurrenceDaysOfWeekLabel: "En los días",
     recurrenceDayOfMonthLabel: "Día del Mes",
     recurrenceDayOfMonthPlaceholder: "ej: 15",
+    recurrenceClearEndDate: "Quitar fecha de fin",
     daySun: "Dom",
     dayMon: "Lun",
     dayTue: "Mar",
@@ -438,6 +444,9 @@ export const translations: Record<Locale, Translations> = {
     todosCompleted: (params) => `${params.completed} / ${params.total} tareas completadas`,
     noDetailsAvailable: "No hay detalles disponibles.",
     noTodosForThisActivity: "No hay tareas para esta actividad.",
+    recurrenceDailyText: "Diariamente",
+    recurrenceWeeklyText: "Semanalmente",
+    recurrenceMonthlyText: "Mensualmente",
     loginWelcomeMessage: "Inicia sesión para gestionar tus actividades.",
     loginUsernameLabel: "Usuario",
     loginPasswordLabel: "Contraseña",

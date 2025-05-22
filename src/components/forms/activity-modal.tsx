@@ -410,50 +410,54 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                             <Button
                               variant={"outline"}
                               className={cn(
-                                "w-full pl-3 text-left font-normal",
+                                "w-full pl-3 text-left font-normal flex justify-between items-center", // Ensure flex and justify-between
                                 !field.value && "text-muted-foreground"
                               )}
                             >
-                              {field.value ? (
-                                format(field.value, "PPP", { locale: dateLocale })
-                              ) : (
-                                <span>{t('recurrenceNoEndDate')}</span>
-                              )}
-                              <CalendarIcon className="ml-auto mr-2 h-4 w-4 opacity-50" />
-                               {field.value && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 p-0 hover:bg-muted"
-                                  onClick={(e) => {
-                                    e.stopPropagation(); // Prevent popover from closing
-                                    field.onChange(null);
-                                    setIsRecurrenceEndDatePopoverOpen(false);
-                                  }}
-                                  aria-label={t('recurrenceNoEndDate')}
-                                >
-                                  <X className="h-3 w-3" />
-                                </Button>
-                              )}
+                              <span className="flex-grow"> {/* Allow text to take space */}
+                                {field.value ? (
+                                  format(field.value, "PPP", { locale: dateLocale })
+                                ) : (
+                                  <span>{t('recurrenceNoEndDate')}</span>
+                                )}
+                              </span>
+                              <CalendarIcon className="ml-2 h-4 w-4 opacity-50" /> {/* Ensure calendar icon is present */}
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0 z-[70]" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value || undefined}
-                            onSelect={(date) => {
-                              field.onChange(date);
-                              setIsRecurrenceEndDatePopoverOpen(false);
-                            }}
-                            disabled={(date) => {
-                                const minDate = activityStartDate || new Date("1900-01-01");
-                                if (date < minDate) return true;
-                                if (maxRecurrenceEndDate && date > maxRecurrenceEndDate) return true;
-                                return false;
-                            }}
-                            locale={dateLocale}
-                          />
+                          <div className="flex flex-col"> {/* Wrapper for calendar and clear button */}
+                            <Calendar
+                              mode="single"
+                              selected={field.value || undefined}
+                              onSelect={(date) => {
+                                field.onChange(date);
+                                setIsRecurrenceEndDatePopoverOpen(false);
+                              }}
+                              disabled={(date) => {
+                                  const minDate = activityStartDate || new Date("1900-01-01");
+                                  if (date < minDate) return true;
+                                  if (maxRecurrenceEndDate && date > maxRecurrenceEndDate) return true;
+                                  return false;
+                              }}
+                              locale={dateLocale}
+                            />
+                            {field.value && (
+                              <Button
+                                variant="ghost"
+                                size="sm" 
+                                className="w-full rounded-t-none border-t" // Style for clear button
+                                onClick={(e) => {
+                                  e.stopPropagation(); // Prevent popover from closing if it's part of it
+                                  field.onChange(null);
+                                  setIsRecurrenceEndDatePopoverOpen(false); // Close popover after clearing
+                                }}
+                                aria-label={t('recurrenceNoEndDate')}
+                              >
+                                <X className="mr-2 h-4 w-4" /> {t('recurrenceClearEndDate', {defaultValue: "Clear end date"})}
+                              </Button>
+                            )}
+                          </div>
                         </PopoverContent>
                       </Popover>
                       <FormMessage />
