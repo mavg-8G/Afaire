@@ -6,7 +6,17 @@ import type { Activity, Todo, Category, AppMode, RecurrenceRule } from '@/lib/ty
 import { INITIAL_CATEGORIES } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
-import { isSameDay, formatISO } from 'date-fns';
+import {
+  isSameDay, formatISO, parseISO,
+  addDays, addWeeks, addMonths,
+  subDays, subWeeks,
+  startOfDay, endOfDay,
+  isBefore, isAfter,
+  getDay, getDate, // getDate is for day of month
+  isWithinInterval,
+  setDate as setDayOfMonth,
+  addYears, isEqual
+} from 'date-fns';
 import * as Icons from 'lucide-react';
 import { useTranslations } from '@/contexts/language-context';
 
@@ -50,9 +60,9 @@ export interface AppContextType {
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities_v2'; // Updated key for new structure
-const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities_v2'; // Updated key
-const LOCAL_STORAGE_KEY_ALL_CATEGORIES = 'todoFlowAllCategories_v1'; // Versioning categories too
+const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities_v2';
+const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities_v2';
+const LOCAL_STORAGE_KEY_ALL_CATEGORIES = 'todoFlowAllCategories_v1';
 const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode';
 const LOCAL_STORAGE_KEY_IS_AUTHENTICATED = 'todoFlowIsAuthenticated';
 const LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS = 'todoFlowLoginAttempts';
@@ -74,6 +84,173 @@ if (typeof window !== 'undefined') {
   logoutChannel = new BroadcastChannel('todoFlowLogoutChannel');
 }
 
+// Helper to create a clean Date object representing the start of a given date
+const getStartOfDay = (date: Date): Date => {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+interface FutureInstance {
+  instanceDate: Date;
+  masterActivityId: string;
+}
+
+function generateFutureInstancesForNotifications(
+  masterActivity: Activity,
+  rangeStartDate: Date, // Start of the period to look for instances
+  rangeEndDate: Date    // End of the period
+): FutureInstance[] {
+  if (!masterActivity.recurrence || masterActivity.recurrence.type === 'none') {
+    // For non-recurring, if it falls within range and is not completed
+    const activityDate = new Date(masterActivity.createdAt);
+    if (isWithinInterval(activityDate, { start: rangeStartDate, end: rangeEndDate }) && !masterActivity.completed) {
+        return [{ instanceDate: activityDate, masterActivityId: masterActivity.id }];
+    }
+    return [];
+  }
+
+  const instances: FutureInstance[] = [];
+  const recurrence = masterActivity.recurrence;
+  let currentDate = new Date(masterActivity.createdAt);
+
+  // Ensure currentDate is not before the master activity's own start date
+  // and align it to be at or after rangeStartDate for efficient generation.
+  if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
+    currentDate = new Date(masterActivity.createdAt);
+  }
+  
+  // Advance currentDate to be at least rangeStartDate, respecting recurrence pattern start
+  // This part is complex and needs to correctly find the first valid occurrence >= rangeStartDate
+  // For simplicity in this context, we'll advance day by day and check validity.
+  // A more optimized version would jump by week/month.
+  let alignmentIterations = 0;
+  const maxAlignmentIterations = 366 * 2; // Max 2 years for alignment
+
+  while (isBefore(currentDate, rangeStartDate) && alignmentIterations < maxAlignmentIterations) {
+      alignmentIterations++;
+      let nextPossibleDate = currentDate;
+      if (recurrence.type === 'daily') {
+          nextPossibleDate = addDays(currentDate, 1);
+      } else if (recurrence.type === 'weekly') {
+          // Simply advance by one day; validity check below will handle daysOfWeek
+          nextPossibleDate = addDays(currentDate, 1); 
+      } else if (recurrence.type === 'monthly') {
+          // For monthly, need more careful advancement to find next valid day
+          if (recurrence.dayOfMonth) {
+            let tempDate = addDays(currentDate, 1); // Start checking from the next day
+            // Go to the next month if current day is already past the target dayOfMonth
+            if (getDate(tempDate) > recurrence.dayOfMonth) {
+                tempDate = addMonths(tempDate, 1);
+            }
+            // Set to the specific dayOfMonth
+            nextPossibleDate = setDayOfMonth(tempDate, recurrence.dayOfMonth);
+          } else {
+            nextPossibleDate = addDays(currentDate, 1); // Fallback if dayOfMonth not set
+          }
+      } else {
+          break; 
+      }
+      
+      if (isEqual(nextPossibleDate, currentDate) && recurrence.type !== 'daily') {
+        // If date didn't advance (e.g. monthly logic couldn't find a new date), break to prevent infinite loop
+        // For daily, it's okay if it's equal if we are already at rangeStartDate
+        console.warn("generateFutureInstancesForNotifications: Date did not advance during alignment for activity:", masterActivity.id, "currentDate:", currentDate, "recurrence:", recurrence);
+        break;
+      }
+      currentDate = nextPossibleDate;
+  }
+  if (alignmentIterations >= maxAlignmentIterations) {
+    console.warn("generateFutureInstancesForNotifications: Exceeded safety limit during date alignment for activity:", masterActivity.id);
+    return []; // Return empty if alignment takes too long
+  }
+
+
+  const seriesEndDate = recurrence.endDate ? new Date(recurrence.endDate) : null;
+  let iterations = 0;
+  const maxIterations = 366 * 1; // Look ahead up to 1 year for notifications
+
+  while (iterations < maxIterations && !isAfter(currentDate, rangeEndDate)) {
+    iterations++;
+
+    if (seriesEndDate && isAfter(currentDate, seriesEndDate)) break;
+    
+    // Ensure we don't generate instances before the original start date of the recurring activity.
+    if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
+        if (recurrence.type === 'daily') currentDate = addDays(currentDate, 1);
+        else if (recurrence.type === 'weekly') currentDate = addDays(currentDate, 1); // Check next day
+        else if (recurrence.type === 'monthly') { // More careful advance for monthly
+             if (recurrence.dayOfMonth) {
+                let nextMonth = addMonths(currentDate, 1);
+                currentDate = setDayOfMonth(nextMonth, recurrence.dayOfMonth);
+             } else {
+                currentDate = addDays(currentDate,1); // fallback
+             }
+        } else break;
+        continue;
+    }
+
+    let isValidOccurrence = false;
+    switch (recurrence.type) {
+      case 'daily':
+        isValidOccurrence = true;
+        break;
+      case 'weekly':
+        if (recurrence.daysOfWeek?.includes(getDay(currentDate))) {
+          isValidOccurrence = true;
+        }
+        break;
+      case 'monthly':
+        if (recurrence.dayOfMonth && getDate(currentDate) === recurrence.dayOfMonth) {
+          isValidOccurrence = true;
+        }
+        break;
+    }
+
+    if (isValidOccurrence) {
+      // Check if this specific instance is completed
+      const occurrenceDateKey = formatISO(currentDate, { representation: 'date' });
+      const isInstanceCompleted = !!masterActivity.completedOccurrences?.[occurrenceDateKey];
+      
+      if (!isInstanceCompleted) {
+           instances.push({
+            instanceDate: new Date(currentDate.getTime()), // Important to create new Date objects
+            masterActivityId: masterActivity.id,
+          });
+      }
+    }
+
+    // Advance current date
+    if (recurrence.type === 'daily') {
+        currentDate = addDays(currentDate, 1);
+    } else if (recurrence.type === 'weekly') {
+        currentDate = addDays(currentDate, 1); // Check next day, loop will handle dayOfWeek
+    } else if (recurrence.type === 'monthly') {
+        if (recurrence.dayOfMonth) {
+            let nextMonthDate = addMonths(currentDate, 1); // Go to next month
+            currentDate = setDayOfMonth(nextMonthDate, recurrence.dayOfMonth); // Set to the specific day
+            // If setting dayOfMonth made it jump to *another* month (e.g. day 31 in Feb -> Mar 3)
+            // or if the month isn't what we expect, we might need adjustment,
+            // but usually date-fns handles this gracefully by landing on the correct day in the target month.
+            // However, for safety if dayOfMonth is, e.g. 31 and next month is Feb, it will become Feb 28/29.
+            // This could be an issue if we strict-check month. For notifications, it might be okay.
+            // A simpler advance to ensure we cross into the next month then find the day:
+            // currentDate = addDays(currentDate, 1); // Go to next day
+            // while(getDate(currentDate) !== recurrence.dayOfMonth && !isAfter(currentDate, rangeEndDate)){
+            //   currentDate = addDays(currentDate, 1)
+            // }
+            // The current logic (setDayOfMonth(addMonths(...))) is usually more direct for monthly fixed day.
+        } else {
+            currentDate = addDays(currentDate, 1); // Fallback if no dayOfMonth
+        }
+    } else {
+      break;
+    }
+  }
+  return instances;
+}
+
+
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [personalActivities, setPersonalActivities] = useState<Activity[]>([]);
   const [workActivities, setWorkActivities] = useState<Activity[]>([]);
@@ -85,7 +262,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const { t } = useTranslations();
 
   const [lastNotificationCheckDay, setLastNotificationCheckDay] = useState<number | null>(null);
-  const [notifiedToday, setNotifiedToday] = useState<Set<string>>(new Set()); // Stores masterActivityId:occurrenceDateString
+  const [notifiedToday, setNotifiedToday] = useState<Set<string>>(new Set());
 
   const [isAuthenticated, setIsAuthenticatedState] = useState<boolean>(false);
   const [loginAttempts, setLoginAttemptsState] = useState<number>(0);
@@ -93,8 +270,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [sessionExpiryTimestamp, setSessionExpiryTimestampState] = useState<number | null>(null);
 
 
-  // This provides the raw, stored activities for the current mode.
-  // Generation of recurring instances will happen in ActivityCalendarView based on these.
    const currentRawActivities = useMemo(() => {
     return appMode === 'work' ? workActivities : personalActivities;
   }, [appMode, personalActivities, workActivities]);
@@ -109,7 +284,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [appMode]);
 
   const filteredCategories = useMemo(() => {
-    if (isLoading) return []; // Prevent filtering before categories are loaded
+    if (isLoading) return [];
     return allCategories.filter(cat =>
       !cat.mode || cat.mode === 'all' || cat.mode === appMode
     );
@@ -176,8 +351,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           setSessionExpiryTimestampState(expiryTime);
         }
       } else {
-        setIsAuthenticatedState(false);
-        setSessionExpiryTimestampState(null);
+        // If no auth or no expiry, ensure user is logged out.
+        if(isAuthenticated) logout(); 
       }
 
       const storedAttempts = localStorage.getItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
@@ -193,7 +368,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } finally {
       setIsLoading(false);
     }
-  }, [logout]); // Added logout as dependency
+  }, [logout, isAuthenticated]); // Added isAuthenticated to dependency array for the auth check
 
   useEffect(() => {
     if (!isLoading) {
@@ -262,64 +437,113 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     if (isLoading || !isAuthenticated) return;
-    // This notification logic needs to be updated to handle recurring instances correctly
+
     const intervalId = setInterval(() => {
       const now = new Date();
-      const currentDay = now.getDate();
+      const today = getStartOfDay(now);
+      const currentDayOfMonthFromNow = now.getDate();
 
-      if (lastNotificationCheckDay !== null && lastNotificationCheckDay !== currentDay) {
+      if (lastNotificationCheckDay !== null && lastNotificationCheckDay !== currentDayOfMonthFromNow) {
         setNotifiedToday(new Set());
       }
-      setLastNotificationCheckDay(currentDay);
+      setLastNotificationCheckDay(currentDayOfMonthFromNow);
 
-      // TODO: Update this to iterate through generated instances for "today"
-      // For now, it will only notify based on the master activity's time if it's non-recurring
-      // and its `createdAt` is today. This is a simplification.
-      currentRawActivities.forEach(activity => {
-        if (activity.recurrence && activity.recurrence.type !== 'none') {
-          // Complex: need to generate today's instance and check its time
-          // For now, skip notifications for recurring master tasks in this simplified loop
-          return;
-        }
+      const activitiesToScan = appMode === 'work' ? workActivities : personalActivities;
 
-        if (!activity.time || activity.completed) return;
+      activitiesToScan.forEach(masterActivity => {
+        const activityTitle = masterActivity.title;
 
-        const activityDatePart = new Date(activity.createdAt);
-        if (!isSameDay(activityDatePart, now)) return;
-        
-        const notificationKey = `${activity.id}:${formatISO(now, { representation: 'date' })}`;
-        if (notifiedToday.has(notificationKey)) return;
+        const todayInstances = generateFutureInstancesForNotifications(masterActivity, today, endOfDay(today));
+        const futureCheckEndDate = addDays(today, 8); 
+        const upcomingInstances = generateFutureInstancesForNotifications(masterActivity, addDays(today,1), futureCheckEndDate);
 
-        const [hours, minutes] = activity.time.split(':').map(Number);
-        const activityDateTime = new Date(activityDatePart);
-        activityDateTime.setHours(hours, minutes, 0, 0);
-        const fiveMinutesInMs = 5 * 60 * 1000;
-        const timeDiffMs = activityDateTime.getTime() - now.getTime();
+        if (masterActivity.time) {
+          todayInstances.forEach(instance => {
+            const occurrenceDateKey = formatISO(instance.instanceDate, { representation: 'date' });
+            const notificationKey5Min = `${instance.masterActivityId}:${occurrenceDateKey}:5min_soon`;
+            const isOccurrenceCompleted = !!masterActivity.completedOccurrences?.[occurrenceDateKey];
 
-        if (timeDiffMs >= 0 && timeDiffMs <= fiveMinutesInMs) {
-          toast({
-            title: t('toastActivityStartingSoonTitle'),
-            description: t('toastActivityStartingSoonDescription', { activityTitle: activity.title, activityTime: activity.time })
+            if (!isOccurrenceCompleted && !notifiedToday.has(notificationKey5Min)) {
+              const [hours, minutes] = masterActivity.time!.split(':').map(Number);
+              const activityDateTime = new Date(instance.instanceDate);
+              activityDateTime.setHours(hours, minutes, 0, 0);
+              const fiveMinutesInMs = 5 * 60 * 1000;
+              const timeDiffMs = activityDateTime.getTime() - now.getTime();
+
+              if (timeDiffMs >= 0 && timeDiffMs <= fiveMinutesInMs) {
+                toast({
+                  title: t('toastActivityStartingSoonTitle'),
+                  description: t('toastActivityStartingSoonDescription', { activityTitle, activityTime: masterActivity.time! })
+                });
+                setNotifiedToday(prev => new Set(prev).add(notificationKey5Min));
+              }
+            }
           });
-          setNotifiedToday(prev => new Set(prev).add(notificationKey));
+        }
+        
+        if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
+          const recurrenceType = masterActivity.recurrence.type;
+
+          upcomingInstances.forEach(instance => {
+            const instanceDateKey = formatISO(instance.instanceDate, { representation: 'date' });
+            const isOccurrenceCompleted = !!masterActivity.completedOccurrences?.[instanceDateKey];
+            if(isOccurrenceCompleted) return;
+
+
+            if (recurrenceType === 'weekly') {
+              const oneDayBefore = subDays(instance.instanceDate, 1);
+              if (isSameDay(today, oneDayBefore)) {
+                const notificationKey = `${instance.masterActivityId}:${instanceDateKey}:1day_weekly`;
+                if (!notifiedToday.has(notificationKey)) {
+                  toast({ title: t('toastActivityTomorrowTitle'), description: t('toastActivityTomorrowDescription', { activityTitle }) });
+                  setNotifiedToday(prev => new Set(prev).add(notificationKey));
+                }
+              }
+            } else if (recurrenceType === 'monthly') {
+              const oneWeekBefore = subWeeks(instance.instanceDate, 1);
+              if (isSameDay(today, oneWeekBefore)) {
+                const notificationKey = `${instance.masterActivityId}:${instanceDateKey}:1week_monthly`;
+                if (!notifiedToday.has(notificationKey)) {
+                  toast({ title: t('toastActivityInOneWeekTitle'), description: t('toastActivityInOneWeekDescription', { activityTitle }) });
+                  setNotifiedToday(prev => new Set(prev).add(notificationKey));
+                }
+              }
+              
+              const twoDaysBefore = subDays(instance.instanceDate, 2);
+              if (isSameDay(today, twoDaysBefore)) {
+                const notificationKey = `${instance.masterActivityId}:${instanceDateKey}:2days_monthly`;
+                if (!notifiedToday.has(notificationKey)) {
+                  toast({ title: t('toastActivityInTwoDaysTitle'), description: t('toastActivityInTwoDaysDescription', { activityTitle }) });
+                  setNotifiedToday(prev => new Set(prev).add(notificationKey));
+                }
+              }
+
+              const oneDayBefore = subDays(instance.instanceDate, 1);
+              if (isSameDay(today, oneDayBefore)) {
+                const notificationKey = `${instance.masterActivityId}:${instanceDateKey}:1day_monthly`;
+                if (!notifiedToday.has(notificationKey)) {
+                  toast({ title: t('toastActivityTomorrowTitle'), description: t('toastActivityTomorrowDescription', { activityTitle }) });
+                  setNotifiedToday(prev => new Set(prev).add(notificationKey));
+                }
+              }
+            }
+          });
         }
       });
-    }, 60000); // Check every minute
+    }, 60000); 
 
     return () => clearInterval(intervalId);
-  }, [currentRawActivities, isLoading, toast, notifiedToday, lastNotificationCheckDay, isAuthenticated, t]);
+  }, [personalActivities, workActivities, appMode, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday]);
+
 
   useEffect(() => {
     if (!logoutChannel) return;
-
     const handleLogoutMessage = (event: MessageEvent) => {
       if (event.data === 'logout_event' && isAuthenticated) {
         logout();
       }
     };
-
     logoutChannel.addEventListener('message', handleLogoutMessage);
-
     return () => {
       if (logoutChannel) {
         logoutChannel.removeEventListener('message', handleLogoutMessage);
@@ -335,9 +559,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const setIsAuthenticated = useCallback((value: boolean, rememberMe: boolean = false) => {
     setIsAuthenticatedState(value);
     if (value) {
-      const now = Date.now();
+      const nowTime = Date.now();
       const expiryDuration = rememberMe ? SESSION_DURATION_30_DAYS_MS : SESSION_DURATION_24_HOURS_MS;
-      const newExpiryTimestamp = now + expiryDuration;
+      const newExpiryTimestamp = nowTime + expiryDuration;
       setSessionExpiryTimestampState(newExpiryTimestamp);
     } else {
       setSessionExpiryTimestampState(null);
@@ -359,7 +583,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         notes?: string;
         recurrence?: RecurrenceRule | null;
       },
-      customCreatedAt?: number // This is the start date of the activity/recurrence
+      customCreatedAt?: number
     ) => {
     const newActivity: Activity = {
       id: uuidv4(),
@@ -369,9 +593,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       createdAt: customCreatedAt !== undefined ? customCreatedAt : Date.now(),
       time: activityData.time || undefined,
       notes: activityData.notes || undefined,
-      completed: false, // Default for new activities
+      completed: false,
       recurrence: activityData.recurrence || { type: 'none' },
-      completedOccurrences: {}, // Initialize empty for new activities
+      completedOccurrences: {},
     };
     currentActivitySetter(prev => [...prev, newActivity]);
   }, [currentActivitySetter]);
@@ -380,16 +604,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     currentActivitySetter(prev =>
       prev.map(act => {
         if (act.id === activityId) {
-          // If recurrence is being set to 'none', clear out specific recurrence fields
           const updatedRecurrence = updates.recurrence?.type === 'none' 
             ? { type: 'none' } 
             : updates.recurrence || act.recurrence;
+          
+          let updatedCompletedOccurrences = act.completedOccurrences;
+          // If recurrence settings are cleared, clear completedOccurrences as well.
+          if (updates.recurrence && updates.recurrence.type === 'none') {
+            updatedCompletedOccurrences = {};
+          } else if (updates.recurrence && 
+                     (updates.recurrence.type !== act.recurrence?.type || 
+                      updates.recurrence.dayOfMonth !== act.recurrence?.dayOfMonth ||
+                      JSON.stringify(updates.recurrence.daysOfWeek) !== JSON.stringify(act.recurrence?.daysOfWeek) ||
+                      new Date(updates.createdAt || act.createdAt).getTime() !== new Date(act.createdAt).getTime()
+                      )) {
+            // If recurrence rule (type, specific days/dates) or start date changes, clear old completions
+            // as they might no longer be valid for the new rule.
+            updatedCompletedOccurrences = {};
+          }
 
-          return { 
-            ...act, 
-            ...updates,
-            recurrence: updatedRecurrence as RecurrenceRule | null | undefined // Type assertion needed after conditional
-          };
+
+          return { ...act, ...updates, recurrence: updatedRecurrence as RecurrenceRule | undefined, completedOccurrences: updatedCompletedOccurrences };
         }
         return act;
       })
@@ -397,13 +632,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [currentActivitySetter]);
 
   const deleteActivity = useCallback((activityId: string) => {
-    // This deletes the master activity, effectively deleting all its occurrences.
     currentActivitySetter(prev => prev.filter(act => act.id !== activityId));
   }, [currentActivitySetter]);
 
   const toggleOccurrenceCompletion = useCallback((masterActivityId: string, occurrenceDateTimestamp: number, completedState: boolean) => {
-    const occurrenceDateKey = formatISO(new Date(occurrenceDateTimestamp), { representation: 'date' }); // YYYY-MM-DD
-
+    const occurrenceDateKey = formatISO(new Date(occurrenceDateTimestamp), { representation: 'date' });
     currentActivitySetter(prevActivities =>
       prevActivities.map(act => {
         if (act.id === masterActivityId) {
@@ -411,7 +644,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           if (completedState) {
             updatedOccurrences[occurrenceDateKey] = true;
           } else {
-            delete updatedOccurrences[occurrenceDateKey]; // Or set to false: updatedOccurrences[occurrenceDateKey] = false;
+            delete updatedOccurrences[occurrenceDateKey];
           }
           return { ...act, completedOccurrences: updatedOccurrences };
         }
@@ -530,7 +763,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   return (
     <AppContext.Provider
       value={{
-        activities: currentRawActivities, // Note: This provides raw activities. CalendarView will generate instances.
+        activities: currentRawActivities,
         getRawActivities,
         categories: filteredCategories,
         appMode,

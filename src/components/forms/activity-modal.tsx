@@ -34,7 +34,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
-import { format, parseISO, setDate as setDateOfMonth } from 'date-fns';
+import { format, parseISO, setDate as setDateOfMonth, addMonths, addDays } from 'date-fns';
 import { useTranslations } from '@/contexts/language-context';
 import { enUS, es } from 'date-fns/locale';
 
@@ -113,6 +113,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
   });
 
   const recurrenceType = form.watch('recurrence.type');
+  const activityStartDate = form.watch('activityDate'); // Watch for changes to the activity's start date
 
   useEffect(() => {
     if (isOpen) {
@@ -195,6 +196,8 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
     ? t('editActivityDescription')
     : t('addActivityDescription', { initialDateMsg: ` ${t('locale') === 'es' ? 'Fecha por defecto:' : 'Default date:'} ${format(initialDate || new Date(), "PPP", { locale: dateLocale })}.` });
 
+  const maxRecurrenceEndDate = activityStartDate ? addDays(addMonths(activityStartDate, 5), 0) : undefined; // 5 months from start date, 0 additional days
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
@@ -266,11 +269,15 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                           selected={field.value}
                           onSelect={(selectedDate) => {
                             field.onChange(selectedDate);
+                            // If end date was before new start date, clear it or adjust
+                            const currentEndDate = form.getValues("recurrence.endDate");
+                            if (selectedDate && currentEndDate && currentEndDate < selectedDate) {
+                                form.setValue("recurrence.endDate", null);
+                            }
                             setIsStartDatePopoverOpen(false);
                           }}
                           disabled={(date) => date < new Date("1900-01-01")}
                           locale={dateLocale}
-                          initialFocus
                         />
                       </PopoverContent>
                     </Popover>
@@ -305,7 +312,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t('recurrenceTypeLabel')}</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value || 'none'}>
+                    <Select onValueChange={field.onChange} value={field.value || 'none'}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder={t('recurrenceNone')} />
@@ -439,13 +446,13 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                               field.onChange(date);
                               setIsRecurrenceEndDatePopoverOpen(false);
                             }}
-                             // Prevent selecting dates before the activity's start date
                             disabled={(date) => {
-                                const activityStartDate = form.getValues("activityDate");
-                                return date < activityStartDate || date < new Date("1900-01-01");
+                                const minDate = activityStartDate || new Date("1900-01-01");
+                                if (date < minDate) return true;
+                                if (maxRecurrenceEndDate && date > maxRecurrenceEndDate) return true;
+                                return false;
                             }}
                             locale={dateLocale}
-                            initialFocus
                           />
                         </PopoverContent>
                       </Popover>

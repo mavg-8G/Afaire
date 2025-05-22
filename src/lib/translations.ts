@@ -111,6 +111,10 @@ export type Translations = {
   todosCompleted: (params: { completed: number, total: number }) => string;
   noDetailsAvailable: string;
   noTodosForThisActivity: string;
+  recurrenceDaily: string;
+  recurrenceWeekly: string;
+  recurrenceMonthly: string;
+
 
   // LoginPage
   loginWelcomeMessage: string;
@@ -161,6 +165,13 @@ export type Translations = {
   toastCategoryDeletedDescription: (params: { categoryName: string }) => string;
   toastActivityStartingSoonTitle: string;
   toastActivityStartingSoonDescription: (params: { activityTitle: string, activityTime: string }) => string;
+  toastActivityTomorrowTitle: string;
+  toastActivityTomorrowDescription: (params: { activityTitle: string }) => string;
+  toastActivityInTwoDaysTitle: string;
+  toastActivityInTwoDaysDescription: (params: { activityTitle: string }) => string;
+  toastActivityInOneWeekTitle: string;
+  toastActivityInOneWeekDescription: (params: { activityTitle: string }) => string;
+
 
   // Dashboard Page
   dashboardTitle: string;
@@ -315,6 +326,12 @@ export const translations: Record<Locale, Translations> = {
     toastCategoryDeletedDescription: (params) => `Category "${params.categoryName}" has been removed.`,
     toastActivityStartingSoonTitle: "Activity Starting Soon!",
     toastActivityStartingSoonDescription: (params) => `"${params.activityTitle}" is scheduled for ${params.activityTime}.`,
+    toastActivityTomorrowTitle: "Activity Reminder",
+    toastActivityTomorrowDescription: (params) => `"${params.activityTitle}" is scheduled for tomorrow.`,
+    toastActivityInTwoDaysTitle: "Activity Reminder",
+    toastActivityInTwoDaysDescription: (params) => `"${params.activityTitle}" is scheduled in 2 days.`,
+    toastActivityInOneWeekTitle: "Activity Reminder",
+    toastActivityInOneWeekDescription: (params) => `"${params.activityTitle}" is scheduled in one week.`,
     dashboardTitle: "Activity Dashboard",
     dashboardViewWeekly: "Last 7 Days",
     dashboardViewMonthly: "Current Month (by Week)",
@@ -464,6 +481,12 @@ export const translations: Record<Locale, Translations> = {
     toastCategoryDeletedDescription: (params) => `La categoría "${params.categoryName}" ha sido eliminada.`,
     toastActivityStartingSoonTitle: "¡Actividad Comienza Pronto!",
     toastActivityStartingSoonDescription: (params) => `"${params.activityTitle}" está programada para las ${params.activityTime}.`,
+    toastActivityTomorrowTitle: "Recordatorio de Actividad",
+    toastActivityTomorrowDescription: (params) => `"${params.activityTitle}" está programada para mañana.`,
+    toastActivityInTwoDaysTitle: "Recordatorio de Actividad",
+    toastActivityInTwoDaysDescription: (params) => `"${params.activityTitle}" está programada en 2 días.`,
+    toastActivityInOneWeekTitle: "Recordatorio de Actividad",
+    toastActivityInOneWeekDescription: (params) => `"${params.activityTitle}" está programada en una semana.`,
     dashboardTitle: "Panel de Actividades",
     dashboardViewWeekly: "Últimos 7 Días",
     dashboardViewMonthly: "Mes Actual (por Semana)",
