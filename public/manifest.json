@@ -1,11 +1,7 @@
 {
-  "name": "À faire - Activity Manager",
+  "name": "À faire - Manage Your Activities",
   "short_name": "À faire",
-  "description": "A smart todo and activity manager.",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#FEF9F3",
-  "theme_color": "#FEF9F3",
+  "description": "A smart todo and activity manager with AI-powered suggestions.",
   "icons": [
     {
       "src": "/icons/icon-192x192.png",
@@ -19,5 +15,9 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FEF9F3",
+  "theme_color": "#FEF9F3"
 }
