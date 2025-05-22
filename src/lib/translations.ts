@@ -184,12 +184,19 @@ export type Translations = {
 
   // Dashboard Page
   dashboardTitle: string;
-  dashboardViewWeekly: string;
-  dashboardViewMonthly: string;
+  dashboardMainDescription: string;
+  dashboardChartView: string;
+  dashboardListView: string;
+  dashboardViewWeekly: string; // Used for chart time range
+  dashboardViewMonthly: string; // Used for chart time range
   dashboardChartTotalActivities: string;
   dashboardChartCompletedActivities: string;
   dashboardWeekLabel: string;
-  dashboardNoData: string;
+  dashboardNoData: string; // For chart
+  dashboardListLast7Days: string; // For list time range
+  dashboardListCurrentMonth: string; // For list time range
+  dashboardNoActivitiesForList: string; // For list view
+  dashboardNotesLabel: string;
 
 };
 
@@ -354,12 +361,19 @@ export const translations: Record<Locale, Translations> = {
     toastActivityInOneWeekTitle: "Activity Reminder: In 1 Week",
     toastActivityInOneWeekDescription: (params) => `"${params.activityTitle}" is scheduled in one week.`,
     dashboardTitle: "Activity Dashboard",
-    dashboardViewWeekly: "Last 7 Days",
-    dashboardViewMonthly: "Current Month (by Week)",
+    dashboardMainDescription: "Track your activity progress and view summaries.",
+    dashboardChartView: "Chart View",
+    dashboardListView: "List View",
+    dashboardViewWeekly: "Last 7 Days", // Used for chart time range and list filter
+    dashboardViewMonthly: "Current Month (by Week)", // Used for chart time range
     dashboardChartTotalActivities: "Total Activities",
     dashboardChartCompletedActivities: "Completed Activities",
     dashboardWeekLabel: "W",
-    dashboardNoData: "No activity data available for the selected period.",
+    dashboardNoData: "No activity data available for the selected period.", // For chart
+    dashboardListLast7Days: "Last 7 Days", // For list time range
+    dashboardListCurrentMonth: "Current Month", // For list time range
+    dashboardNoActivitiesForList: "No activities found for the selected period.", // For list view
+    dashboardNotesLabel: "Notes",
   },
   es: {
     addActivity: "Añadir Actividad",
@@ -521,12 +535,19 @@ export const translations: Record<Locale, Translations> = {
     toastActivityInOneWeekTitle: "Recordatorio: En 1 Semana",
     toastActivityInOneWeekDescription: (params) => `"${params.activityTitle}" está programada en una semana.`,
     dashboardTitle: "Panel de Actividades",
-    dashboardViewWeekly: "Últimos 7 Días",
-    dashboardViewMonthly: "Mes Actual (por Semana)",
+    dashboardMainDescription: "Sigue el progreso de tus actividades y visualiza resúmenes.",
+    dashboardChartView: "Vista de Gráfico",
+    dashboardListView: "Vista de Lista",
+    dashboardViewWeekly: "Últimos 7 Días", // Usado para rango de gráfico y filtro de lista
+    dashboardViewMonthly: "Mes Actual (por Semana)", // Usado para rango de gráfico
     dashboardChartTotalActivities: "Actividades Totales",
     dashboardChartCompletedActivities: "Actividades Completadas",
-    dashboardWeekLabel: "S", // Semana
-    dashboardNoData: "No hay datos de actividad disponibles para el período seleccionado.",
+    dashboardWeekLabel: "S",
+    dashboardNoData: "No hay datos de actividad disponibles para el período seleccionado.", // Para gráfico
+    dashboardListLast7Days: "Últimos 7 Días", // Para rango de lista
+    dashboardListCurrentMonth: "Mes Actual", // Para rango de lista
+    dashboardNoActivitiesForList: "No se encontraron actividades para el período seleccionado.", // Para vista de lista
+    dashboardNotesLabel: "Notas",
   },
 };
 
@@ -541,5 +562,3 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
-
-    
