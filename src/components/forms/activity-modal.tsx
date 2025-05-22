@@ -24,11 +24,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { PlusCircle, Trash2, Sparkles, Loader2, CalendarIcon, Clock } from 'lucide-react';
+import { PlusCircle, Trash2, CalendarIcon, Clock } from 'lucide-react';
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Activity, Todo } from '@/lib/types';
 import CategorySelector from '@/components/shared/category-selector';
-import { suggestTodos, type SuggestTodosInput } from '@/ai/flows/suggest-todos';
 import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -65,7 +64,6 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
   const { addActivity, updateActivity } = useAppStore();
   const { toast } = useToast();
   const { t, locale } = useTranslations();
-  const [isSuggestingTodos, setIsSuggestingTodos] = useState(false);
   const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false);
 
   const dateLocale = locale === 'es' ? es : enUS;
@@ -146,35 +144,6 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
       toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
     }
     onClose();
-  };
-
-  const handleSuggestTodos = async () => {
-    const activityTitle = form.getValues("title");
-    if (!activityTitle) {
-      toast({ title: t('toastTitleNeeded'), description: t('toastTitleNeededDescription'), variant: "destructive" });
-      return;
-    }
-    setIsSuggestingTodos(true);
-    try {
-      const input: SuggestTodosInput = { activityTitle };
-      const result = await suggestTodos(input);
-      if (result.todos && result.todos.length > 0) {
-        result.todos.forEach(todoText => {
-          const existingTodo = fields.find(field => field.text.toLowerCase() === todoText.toLowerCase());
-          if (!existingTodo) {
-            append({ text: todoText, completed: false });
-          }
-        });
-        toast({ title: t('toastTodosSuggested'), description: t('toastTodosSuggestedDescription') });
-      } else {
-        toast({ title: t('toastNoSuggestions'), description: t('toastNoSuggestionsDescription') });
-      }
-    } catch (error) {
-      console.error("Error suggesting todos:", error);
-      toast({ title: t('toastSuggestionError'), description: t('toastSuggestionErrorDescription'), variant: "destructive" });
-    } finally {
-      setIsSuggestingTodos(false);
-    }
   };
 
   if (!isOpen) return null;
@@ -313,10 +282,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
             <div>
               <div className="flex justify-between items-center mb-2">
                 <FormLabel>{t('todosLabel')}</FormLabel>
-                <Button type="button" variant="outline" size="sm" onClick={handleSuggestTodos} disabled={isSuggestingTodos}>
-                  {isSuggestingTodos ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                  {t('suggestTodos')}
-                </Button>
+                {/* "Suggest Todos" button removed */}
               </div>
               <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
                 {fields.map((item, index) => (
