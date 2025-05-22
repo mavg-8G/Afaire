@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Settings, Languages, Sun, Moon, Laptop, MoreVertical, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash } from 'lucide-react';
+import { Settings, Languages, Sun, Moon, Laptop, MoreVertical, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal } from 'lucide-react';
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { APP_NAME } from '@/lib/constants';
 import ChangePasswordModal from '@/components/forms/change-password-modal';
@@ -137,6 +137,41 @@ export default function AppHeader() {
     </DropdownMenuContent>
   );
 
+  const sharedOptionsItems = (
+    <>
+      <DropdownMenuLabel>{t('theme')}</DropdownMenuLabel>
+      <DropdownMenuItem onClick={() => setTheme('light')} disabled={theme === 'light'}>
+        <Sun className="mr-2 h-4 w-4" />
+        {t('lightTheme')}
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={() => setTheme('dark')} disabled={theme === 'dark'}>
+        <Moon className="mr-2 h-4 w-4" />
+        {t('darkTheme')}
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={() => setTheme('system')} disabled={theme === 'system'}>
+        <Laptop className="mr-2 h-4 w-4" />
+        {t('systemTheme')}
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel>{t('language')}</DropdownMenuLabel>
+      <DropdownMenuItem onClick={() => setLocale('en')} disabled={locale === 'en'}>
+        {t('english')}
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={() => setLocale('es')} disabled={locale === 'es'}>
+        {t('spanish')}
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onClick={() => setIsChangePasswordModalOpen(true)}>
+        <KeyRound className="mr-2 h-4 w-4" />
+        {t('changePassword')}
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={handleLogout}>
+        <LogOut className="mr-2 h-4 w-4" />
+        {t('logout')}
+      </DropdownMenuItem>
+    </>
+  );
+
 
   return (
     <>
@@ -156,7 +191,7 @@ export default function AppHeader() {
           </div>
             
           {/* Right Group - This will be pushed to the far right by justify-between */}
-          <div className="flex items-center gap-x-1 sm:gap-x-2 mr-4"> {/* Changed mr-2 to mr-4 */}
+          <div className="flex items-center gap-x-1 sm:gap-x-2 mr-4">
             {/* Notification Bell - Visible on all screen sizes */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -174,7 +209,7 @@ export default function AppHeader() {
               {notificationDropdownContent}
             </DropdownMenu>
             
-            {/* Desktop only action buttons */}
+            {/* Desktop only action buttons and new Options Menu */}
             <div className="hidden md:flex items-center gap-x-1">
                <Link href="/dashboard" passHref>
                 <Button variant="outline" size="icon" aria-label={t('dashboard')}>
@@ -189,52 +224,14 @@ export default function AppHeader() {
               
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon">
-                    <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                    <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                    <span className="sr-only">{t('theme')}</span>
+                  <Button variant="outline" size="icon" aria-label={t('moreOptions')}>
+                    <MoreHorizontal className="h-5 w-5" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setTheme('light')} disabled={theme === 'light'}>
-                    <Sun className="mr-2 h-4 w-4" />
-                    {t('lightTheme')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setTheme('dark')} disabled={theme === 'dark'}>
-                    <Moon className="mr-2 h-4 w-4" />
-                    {t('darkTheme')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setTheme('system')} disabled={theme === 'system'}>
-                    <Laptop className="mr-2 h-4 w-4" />
-                    {t('systemTheme')}
-                  </DropdownMenuItem>
+                  {sharedOptionsItems}
                 </DropdownMenuContent>
               </DropdownMenu>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon">
-                    <Languages className="h-5 w-5" />
-                    <span className="sr-only">{t('language')}</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setLocale('en')} disabled={locale === 'en'}>
-                    {t('english')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setLocale('es')} disabled={locale === 'es'}>
-                    {t('spanish')}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <Button variant="outline" size="icon" aria-label={t('changePassword')} onClick={() => setIsChangePasswordModalOpen(true)}>
-                <KeyRound className="h-5 w-5" />
-              </Button>
-
-              <Button variant="outline" size="icon" aria-label={t('logout')} onClick={handleLogout}>
-                <LogOut className="h-5 w-5" />
-              </Button>
             </div>
 
             {/* Mobile only "More Options" menu */}
@@ -263,37 +260,8 @@ export default function AppHeader() {
                       {t('manageCategories')}
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setIsChangePasswordModalOpen(true)}>
-                    <KeyRound className="mr-2 h-4 w-4" />
-                    {t('changePassword')}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel>{t('theme')}</DropdownMenuLabel>
-                  <DropdownMenuItem onClick={() => setTheme('light')} disabled={theme === 'light'}>
-                    <Sun className="mr-2 h-4 w-4" />
-                    {t('lightTheme')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setTheme('dark')} disabled={theme === 'dark'}>
-                    <Moon className="mr-2 h-4 w-4" />
-                    {t('darkTheme')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setTheme('system')} disabled={theme === 'system'}>
-                    <Laptop className="mr-2 h-4 w-4" />
-                    {t('systemTheme')}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel>{t('language')}</DropdownMenuLabel>
-                  <DropdownMenuItem onClick={() => setLocale('en')} disabled={locale === 'en'}>
-                    {t('english')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setLocale('es')} disabled={locale === 'es'}>
-                    {t('spanish')}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    {t('logout')}
-                  </DropdownMenuItem>
+                  {/* Separator was here, moving it to sharedOptionsItems logic if needed */}
+                  {sharedOptionsItems}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -305,3 +273,4 @@ export default function AppHeader() {
     </>
   );
 }
+
