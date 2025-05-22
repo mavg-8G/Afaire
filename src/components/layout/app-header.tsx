@@ -98,6 +98,49 @@ export default function AppHeader() {
     [...uiNotifications].sort((a, b) => b.timestamp - a.timestamp), 
   [uiNotifications]);
 
+  const notificationDropdownContent = (
+    <DropdownMenuContent align="end" className="w-80 md:w-96 max-h-[70vh] flex flex-col">
+      <DropdownMenuLabel className="flex justify-between items-center">
+        {t('notificationsTitle')}
+        {uiNotifications.length > 0 && (
+           <span className="text-xs text-muted-foreground">({unreadNotificationsCount} {t('notificationUnread').toLowerCase()})</span>
+        )}
+      </DropdownMenuLabel>
+      <DropdownMenuSeparator />
+      {sortedNotifications.length > 0 ? (
+        <>
+          <ScrollArea className="flex-grow overflow-y-auto pr-1">
+            {sortedNotifications.map(notification => (
+              <DropdownMenuItem 
+                key={notification.id} 
+                className={cn("flex flex-col items-start gap-1 cursor-pointer hover:bg-accent/50", !notification.read && "bg-accent/30 font-medium")}
+                onClick={() => markUINotificationAsRead(notification.id)}
+                style={{ whiteSpace: 'normal', height: 'auto', lineHeight: 'normal', padding: '0.5rem 0.75rem'}}
+              >
+                <div className="w-full">
+                    <p className={cn("text-sm", !notification.read && "font-semibold")}>{notification.title}</p>
+                    <p className="text-xs text-muted-foreground truncate max-w-full">{notification.description}</p>
+                    <p className="text-xs text-muted-foreground/70 mt-0.5">
+                      {formatDistanceToNowStrict(new Date(notification.timestamp), { addSuffix: true, locale: dateLocale })}
+                    </p>
+                </div>
+              </DropdownMenuItem>
+            ))}
+          </ScrollArea>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={markAllUINotificationsAsRead} disabled={unreadNotificationsCount === 0}>
+            <CheckCircle className="mr-2 h-4 w-4" /> {t('markAllAsRead')}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={clearAllUINotifications} className="text-destructive hover:!bg-destructive/10">
+             <Trash className="mr-2 h-4 w-4" /> {t('clearAllNotifications')}
+          </DropdownMenuItem>
+        </>
+      ) : (
+        <p className="px-2 py-4 text-center text-sm text-muted-foreground">{t('noNotificationsYet')}</p>
+      )}
+    </DropdownMenuContent>
+  );
+
 
   return (
     <>
@@ -115,63 +158,26 @@ export default function AppHeader() {
           </div>
 
           <div className="flex items-center gap-x-1 sm:gap-x-2">
-            <div className="hidden md:flex items-center gap-x-1">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" aria-label={t('notificationBellLabel')} className="relative">
-                    <Bell className="h-5 w-5" />
-                    {unreadNotificationsCount > 0 && (
-                      <span className="absolute top-0 right-0 flex h-3 w-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-primary text-xs text-primary-foreground items-center justify-center">
-                           {/* {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount} */}
-                        </span>
+             {/* Notification Bell - Visible on all screen sizes */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" aria-label={t('notificationBellLabel')} className="relative">
+                  <Bell className="h-5 w-5" />
+                  {unreadNotificationsCount > 0 && (
+                    <span className="absolute top-0 right-0 flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-primary text-xs text-primary-foreground items-center justify-center">
+                         {/* {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount} */}
                       </span>
-                    )}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80 md:w-96 max-h-[70vh] flex flex-col">
-                  <DropdownMenuLabel className="flex justify-between items-center">
-                    {t('notificationsTitle')}
-                    {uiNotifications.length > 0 && (
-                       <span className="text-xs text-muted-foreground">({unreadNotificationsCount} {t('notificationUnread').toLowerCase()})</span>
-                    )}
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {sortedNotifications.length > 0 ? (
-                    <>
-                      <ScrollArea className="flex-grow overflow-y-auto pr-1">
-                        {sortedNotifications.map(notification => (
-                          <DropdownMenuItem 
-                            key={notification.id} 
-                            className={cn("flex flex-col items-start gap-1 cursor-pointer hover:bg-accent/50", !notification.read && "bg-accent/30 font-medium")}
-                            onClick={() => markUINotificationAsRead(notification.id)}
-                            style={{ whiteSpace: 'normal', height: 'auto', lineHeight: 'normal', padding: '0.5rem 0.75rem'}}
-                          >
-                            <div className="w-full">
-                                <p className={cn("text-sm", !notification.read && "font-semibold")}>{notification.title}</p>
-                                <p className="text-xs text-muted-foreground truncate max-w-full">{notification.description}</p>
-                                <p className="text-xs text-muted-foreground/70 mt-0.5">
-                                  {formatDistanceToNowStrict(new Date(notification.timestamp), { addSuffix: true, locale: dateLocale })}
-                                </p>
-                            </div>
-                          </DropdownMenuItem>
-                        ))}
-                      </ScrollArea>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={markAllUINotificationsAsRead} disabled={unreadNotificationsCount === 0}>
-                        <CheckCircle className="mr-2 h-4 w-4" /> {t('markAllAsRead')}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={clearAllUINotifications} className="text-destructive hover:!bg-destructive/10">
-                         <Trash className="mr-2 h-4 w-4" /> {t('clearAllNotifications')}
-                      </DropdownMenuItem>
-                    </>
-                  ) : (
-                    <p className="px-2 py-4 text-center text-sm text-muted-foreground">{t('noNotificationsYet')}</p>
+                    </span>
                   )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-
+                </Button>
+              </DropdownMenuTrigger>
+              {notificationDropdownContent}
+            </DropdownMenu>
+            
+            {/* Desktop only buttons */}
+            <div className="hidden md:flex items-center gap-x-1">
                <Link href="/dashboard" passHref>
                 <Button variant="outline" size="icon" aria-label={t('dashboard')}>
                   <LayoutDashboard className="h-5 w-5" />
@@ -233,6 +239,7 @@ export default function AppHeader() {
               </Button>
             </div>
 
+            {/* Mobile only "More Options" menu */}
             <div className="md:hidden">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -246,76 +253,6 @@ export default function AppHeader() {
                     {appModeToggleSwitch}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                     <Link href="#" className="flex items-center w-full" onClick={(e) => {
-                        e.preventDefault(); // Prevent navigation if it's just a trigger
-                        // Find the Bell button and click it programmatically
-                        const bellButton = document.getElementById('desktop-notification-bell');
-                        if (bellButton) {
-                            // Close the current MoreVertical dropdown first
-                            // This is tricky without direct control over Radix state from outside.
-                            // A simpler approach for mobile might be a dedicated notification item.
-                            // For now, this will just be a label, or we create a sub-menu.
-                            // Let's make it a sub-menu for better UX on mobile.
-                        }
-                     }}>
-                       <DropdownMenuSub>
-                          <DropdownMenuSubTrigger>
-                            <Bell className="mr-2 h-4 w-4" />
-                            {t('notificationsTitle')}
-                            {unreadNotificationsCount > 0 && (
-                              <span className="ml-auto text-xs bg-primary text-primary-foreground h-4 w-4 rounded-full flex items-center justify-center">
-                                {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
-                              </span>
-                            )}
-                          </DropdownMenuSubTrigger>
-                          <DropdownMenuPortal>
-                            <DropdownMenuSubContent className="w-72 max-h-[60vh] flex flex-col">
-                              <DropdownMenuLabel className="flex justify-between items-center">
-                                {t('notificationsTitle')}
-                                {uiNotifications.length > 0 && (
-                                  <span className="text-xs text-muted-foreground">({unreadNotificationsCount} {t('notificationUnread').toLowerCase()})</span>
-                                )}
-                              </DropdownMenuLabel>
-                              <DropdownMenuSeparator />
-                              {sortedNotifications.length > 0 ? (
-                                <>
-                                  <ScrollArea className="flex-grow overflow-y-auto pr-1">
-                                    {sortedNotifications.map(notification => (
-                                      <DropdownMenuItem 
-                                        key={notification.id} 
-                                        className={cn("flex flex-col items-start gap-1 cursor-pointer hover:bg-accent/50", !notification.read && "bg-accent/30 font-medium")}
-                                        onClick={() => markUINotificationAsRead(notification.id)}
-                                        style={{ whiteSpace: 'normal', height: 'auto', lineHeight: 'normal', padding: '0.5rem 0.75rem'}}
-                                      >
-                                        <div className="w-full">
-                                            <p className={cn("text-sm", !notification.read && "font-semibold")}>{notification.title}</p>
-                                            <p className="text-xs text-muted-foreground truncate max-w-full">{notification.description}</p>
-                                            <p className="text-xs text-muted-foreground/70 mt-0.5">
-                                              {formatDistanceToNowStrict(new Date(notification.timestamp), { addSuffix: true, locale: dateLocale })}
-                                            </p>
-                                        </div>
-                                      </DropdownMenuItem>
-                                    ))}
-                                  </ScrollArea>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem onClick={markAllUINotificationsAsRead} disabled={unreadNotificationsCount === 0}>
-                                    <CheckCircle className="mr-2 h-4 w-4" /> {t('markAllAsRead')}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={clearAllUINotifications} className="text-destructive hover:!bg-destructive/10">
-                                    <Trash className="mr-2 h-4 w-4" /> {t('clearAllNotifications')}
-                                  </DropdownMenuItem>
-                                </>
-                              ) : (
-                                <p className="px-2 py-4 text-center text-sm text-muted-foreground">{t('noNotificationsYet')}</p>
-                              )}
-                            </DropdownMenuSubContent>
-                          </DropdownMenuPortal>
-                       </DropdownMenuSub>
-                     </Link>
-                  </DropdownMenuItem>
-
-
                    <DropdownMenuItem asChild>
                     <Link href="/dashboard" className="flex items-center w-full">
                       <LayoutDashboard className="mr-2 h-4 w-4" />
