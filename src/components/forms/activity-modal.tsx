@@ -2,7 +2,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, Controller } from "react-hook-form";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,27 +20,30 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { PlusCircle, Trash2, CalendarIcon, Clock } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PlusCircle, Trash2, CalendarIcon, Clock, X } from 'lucide-react';
 import { useAppStore } from '@/hooks/use-app-store';
-import type { Activity, Todo } from '@/lib/types';
+import type { Activity, Todo, RecurrenceRule } from '@/lib/types';
 import CategorySelector from '@/components/shared/category-selector';
 import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
-import { format } from 'date-fns';
+import { format, parseISO, setDate as setDateOfMonth } from 'date-fns';
 import { useTranslations } from '@/contexts/language-context';
 import { enUS, es } from 'date-fns/locale';
 
 interface ActivityModalProps {
   isOpen: boolean;
   onClose: () => void;
-  activity?: Activity;
-  initialDate?: Date;
+  activity?: Activity; // Master activity if editing
+  initialDate?: Date; // For FAB or pre-selecting calendar date
+  instanceDate?: Date; // If editing/viewing a specific instance of a recurring task
 }
 
 const todoSchema = z.object({
@@ -49,34 +52,58 @@ const todoSchema = z.object({
   completed: z.boolean().optional(),
 });
 
+const recurrenceSchema = z.object({
+  type: z.enum(['none', 'daily', 'weekly', 'monthly']).default('none'),
+  endDate: z.date().nullable().optional(),
+  daysOfWeek: z.array(z.number().min(0).max(6)).optional().nullable(), // 0 for Sun, 6 for Sat
+  dayOfMonth: z.number().min(1).max(31).optional().nullable(),
+}).default({ type: 'none' });
+
+
 const activityFormSchema = z.object({
   title: z.string().min(1, "Activity title is required."),
   categoryId: z.string().min(1, "Category is required."),
-  activityDate: z.date({ required_error: "Activity date is required." }),
+  activityDate: z.date({ required_error: "Activity date is required." }), // This is the start date for recurring
   time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format. Use HH:MM (24-hour).").optional().or(z.literal('')),
   todos: z.array(todoSchema).optional(),
   notes: z.string().optional(),
+  recurrence: recurrenceSchema,
 });
 
 type ActivityFormData = z.infer<typeof activityFormSchema>;
 
-export default function ActivityModal({ isOpen, onClose, activity, initialDate }: ActivityModalProps) {
+const WEEK_DAYS = [
+  { id: 0, labelKey: 'daySun' }, { id: 1, labelKey: 'dayMon' }, { id: 2, labelKey: 'dayTue' },
+  { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
+  { id: 6, labelKey: 'daySat' },
+] as const;
+
+
+export default function ActivityModal({ isOpen, onClose, activity, initialDate, instanceDate }: ActivityModalProps) {
   const { addActivity, updateActivity } = useAppStore();
   const { toast } = useToast();
   const { t, locale } = useTranslations();
-  const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false);
+  const [isStartDatePopoverOpen, setIsStartDatePopoverOpen] = useState(false);
+  const [isRecurrenceEndDatePopoverOpen, setIsRecurrenceEndDatePopoverOpen] = useState(false);
 
   const dateLocale = locale === 'es' ? es : enUS;
+  const effectiveInitialDate = instanceDate || activity?.createdAt || initialDate || new Date();
 
   const form = useForm<ActivityFormData>({
     resolver: zodResolver(activityFormSchema),
     defaultValues: {
       title: "",
       categoryId: "",
-      activityDate: initialDate || new Date(),
+      activityDate: effectiveInitialDate,
       time: "",
       todos: [],
       notes: "",
+      recurrence: {
+        type: 'none',
+        endDate: null,
+        daysOfWeek: [],
+        dayOfMonth: undefined,
+      },
     },
   });
 
@@ -85,18 +112,27 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
     name: "todos",
   });
 
+  const recurrenceType = form.watch('recurrence.type');
+
   useEffect(() => {
     if (isOpen) {
       if (activity) {
         form.reset({
           title: activity.title,
           categoryId: activity.categoryId,
-          activityDate: new Date(activity.createdAt),
+          activityDate: new Date(activity.createdAt), // This is the original start date of the series
           time: activity.time || "",
-          todos: activity.todos.map(t => ({ id: t.id, text: t.text, completed: t.completed })),
+          todos: activity.todos?.map(t => ({ id: t.id, text: t.text, completed: t.completed })) || [],
           notes: activity.notes || "",
+          recurrence: {
+            type: activity.recurrence?.type || 'none',
+            endDate: activity.recurrence?.endDate ? new Date(activity.recurrence.endDate) : null,
+            daysOfWeek: activity.recurrence?.daysOfWeek || [],
+            dayOfMonth: activity.recurrence?.dayOfMonth || undefined,
+          }
         });
       } else {
+        // For new activity, use initialDate (from FAB or calendar selection)
         form.reset({
           title: "",
           categoryId: "",
@@ -104,42 +140,49 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
           time: "",
           todos: [],
           notes: "",
+          recurrence: {
+            type: 'none',
+            endDate: null,
+            daysOfWeek: [],
+            dayOfMonth: new Date().getDate(), // Default to current day of month
+          }
         });
       }
-      setIsDatePopoverOpen(false);
+      setIsStartDatePopoverOpen(false);
+      setIsRecurrenceEndDatePopoverOpen(false);
     }
-  }, [activity, form, isOpen, initialDate]);
+  }, [activity, form, isOpen, initialDate, instanceDate]);
 
   const onSubmit = (data: ActivityFormData) => {
-    const activityPayload: Partial<Activity> & { title: string; categoryId: string; createdAt: number } = {
+    const recurrenceRule: RecurrenceRule | null = data.recurrence.type === 'none' ? null : {
+      type: data.recurrence.type,
+      endDate: data.recurrence.endDate ? data.recurrence.endDate.getTime() : null,
+      daysOfWeek: data.recurrence.type === 'weekly' ? data.recurrence.daysOfWeek || [] : undefined,
+      dayOfMonth: data.recurrence.type === 'monthly' ? data.recurrence.dayOfMonth || undefined : undefined,
+    };
+
+    const activityPayload = {
       title: data.title,
       categoryId: data.categoryId,
       todos: data.todos?.map(t => ({
-        id: t.id || undefined,
+        id: t.id || undefined, // Let backend generate ID if new
         text: t.text,
         completed: t.completed || false
       })) || [],
-      createdAt: data.activityDate.getTime(),
+      createdAt: data.activityDate.getTime(), // This is the start date for recurrence
       time: data.time === "" ? undefined : data.time,
       notes: data.notes,
+      recurrence: recurrenceRule,
+      completedOccurrences: activity?.completedOccurrences || {}, // Preserve existing completions
     };
 
-    if (activity) {
-      updateActivity(activity.id, {
-        ...activityPayload,
-        todos: activityPayload.todos as Todo[],
-      });
+    if (activity) { // activity is the master activity if editing a recurring series
+      updateActivity(activity.id, activityPayload as Partial<Activity>);
       toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
     } else {
       addActivity(
-        {
-          title: data.title,
-          categoryId: data.categoryId,
-          todos: data.todos?.map(t=>({text: t.text, completed: false})),
-          time: data.time === "" ? undefined : data.time,
-          notes: data.notes,
-        },
-        data.activityDate.getTime()
+        activityPayload as Omit<Activity, 'id' | 'completedOccurrences'> & { todos?: Omit<Todo, 'id' | 'completed'>[] },
+        data.activityDate.getTime() // This is effectively the same as activityPayload.createdAt
       );
       toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
     }
@@ -148,13 +191,9 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
 
   if (!isOpen) return null;
 
-  const formattedInitialDateMsg = initialDate && !activity
-    ? ` ${t('locale') === 'es' ? 'Por defecto será el' : 'Defaulting to'} ${format(initialDate, "PPP", { locale: dateLocale })}.`
-    : ` ${t('locale') === 'es' ? 'Puedes cambiar la fecha abajo.' : 'You can change the date below.'}`;
-
   const dialogDescriptionText = activity
     ? t('editActivityDescription')
-    : t('addActivityDescription', { initialDateMsg: formattedInitialDateMsg });
+    : t('addActivityDescription', { initialDateMsg: ` ${t('locale') === 'es' ? 'Fecha por defecto:' : 'Default date:'} ${format(initialDate || new Date(), "PPP", { locale: dateLocale })}.` });
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -198,11 +237,11 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="activityDate"
+                name="activityDate" // Start Date for recurring activities
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel className="min-h-8">{t('activityDateLabel')}</FormLabel>
-                    <Popover open={isDatePopoverOpen} onOpenChange={setIsDatePopoverOpen}>
+                    <Popover open={isStartDatePopoverOpen} onOpenChange={setIsStartDatePopoverOpen}>
                       <PopoverTrigger asChild>
                         <FormControl>
                           <Button
@@ -221,21 +260,17 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
-                      <PopoverContent
-                        className="w-auto p-0 z-[70]"
-                        align="start"
-                      >
+                      <PopoverContent className="w-auto p-0 z-[70]" align="start" >
                         <Calendar
                           mode="single"
                           selected={field.value}
                           onSelect={(selectedDate) => {
                             field.onChange(selectedDate);
-                            setIsDatePopoverOpen(false);
+                            setIsStartDatePopoverOpen(false);
                           }}
-                          disabled={(date) =>
-                            date < new Date("1900-01-01")
-                          }
+                          disabled={(date) => date < new Date("1900-01-01")}
                           locale={dateLocale}
+                          initialFocus
                         />
                       </PopoverContent>
                     </Popover>
@@ -261,6 +296,167 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
               />
             </div>
 
+            {/* Recurrence Section */}
+            <div className="space-y-2 border p-3 rounded-md">
+              <h3 className="text-sm font-medium">{t('recurrenceLabel')}</h3>
+              <FormField
+                control={form.control}
+                name="recurrence.type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('recurrenceTypeLabel')}</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value || 'none'}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={t('recurrenceNone')} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">{t('recurrenceNone')}</SelectItem>
+                        <SelectItem value="daily">{t('recurrenceDaily')}</SelectItem>
+                        <SelectItem value="weekly">{t('recurrenceWeekly')}</SelectItem>
+                        <SelectItem value="monthly">{t('recurrenceMonthly')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {recurrenceType === 'weekly' && (
+                <FormField
+                  control={form.control}
+                  name="recurrence.daysOfWeek"
+                  render={() => (
+                    <FormItem>
+                      <FormLabel>{t('recurrenceDaysOfWeekLabel')}</FormLabel>
+                      <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+                        {WEEK_DAYS.map(day => (
+                          <FormField
+                            key={day.id}
+                            control={form.control}
+                            name="recurrence.daysOfWeek"
+                            render={({ field }) => {
+                              return (
+                                <FormItem key={day.id} className="flex flex-row items-center space-x-1 space-y-0">
+                                  <FormControl>
+                                    <Checkbox
+                                      checked={field.value?.includes(day.id)}
+                                      onCheckedChange={(checked) => {
+                                        return checked
+                                          ? field.onChange([...(field.value || []), day.id])
+                                          : field.onChange(
+                                              (field.value || []).filter(
+                                                (value) => value !== day.id
+                                              )
+                                            )
+                                      }}
+                                    />
+                                  </FormControl>
+                                  <FormLabel className="text-xs font-normal">{t(day.labelKey as any)}</FormLabel>
+                                </FormItem>
+                              )
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {recurrenceType === 'monthly' && (
+                <FormField
+                  control={form.control}
+                  name="recurrence.dayOfMonth"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('recurrenceDayOfMonthLabel')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min="1"
+                          max="31"
+                          placeholder={t('recurrenceDayOfMonthPlaceholder')}
+                          {...field}
+                          value={field.value ?? ''}
+                          onChange={e => field.onChange(e.target.value === '' ? null : parseInt(e.target.value,10))}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {recurrenceType !== 'none' && (
+                <FormField
+                  control={form.control}
+                  name="recurrence.endDate"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>{t('recurrenceEndDateLabel')}</FormLabel>
+                      <Popover open={isRecurrenceEndDatePopoverOpen} onOpenChange={setIsRecurrenceEndDatePopoverOpen}>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant={"outline"}
+                              className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? (
+                                format(field.value, "PPP", { locale: dateLocale })
+                              ) : (
+                                <span>{t('recurrenceNoEndDate')}</span>
+                              )}
+                              <CalendarIcon className="ml-auto mr-2 h-4 w-4 opacity-50" />
+                               {field.value && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 p-0 hover:bg-muted"
+                                  onClick={(e) => {
+                                    e.stopPropagation(); // Prevent popover from closing
+                                    field.onChange(null);
+                                    setIsRecurrenceEndDatePopoverOpen(false);
+                                  }}
+                                  aria-label={t('recurrenceNoEndDate')}
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 z-[70]" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value || undefined}
+                            onSelect={(date) => {
+                              field.onChange(date);
+                              setIsRecurrenceEndDatePopoverOpen(false);
+                            }}
+                             // Prevent selecting dates before the activity's start date
+                            disabled={(date) => {
+                                const activityStartDate = form.getValues("activityDate");
+                                return date < activityStartDate || date < new Date("1900-01-01");
+                            }}
+                            locale={dateLocale}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+            </div>
+
+
             <FormField
               control={form.control}
               name="notes"
@@ -272,6 +468,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                       placeholder={t('activityNotesPlaceholder')}
                       className="resize-none"
                       {...field}
+                      value={field.value ?? ''}
                     />
                   </FormControl>
                   <FormMessage />
@@ -282,7 +479,6 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
             <div>
               <div className="flex justify-between items-center mb-2">
                 <FormLabel>{t('todosLabel')}</FormLabel>
-                {/* "Suggest Todos" button removed */}
               </div>
               <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
                 {fields.map((item, index) => (

@@ -2,32 +2,35 @@
 "use client";
 import type { ReactNode } from 'react';
 import React, { createContext, useState, useCallback, useEffect, useMemo } from 'react';
-import type { Activity, Todo, Category, AppMode } from '@/lib/types';
+import type { Activity, Todo, Category, AppMode, RecurrenceRule } from '@/lib/types';
 import { INITIAL_CATEGORIES } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
-import { isSameDay } from 'date-fns';
+import { isSameDay, formatISO } from 'date-fns';
 import * as Icons from 'lucide-react';
 import { useTranslations } from '@/contexts/language-context';
 
 export interface AppContextType {
-  activities: Activity[];
+  activities: Activity[]; // This will be the combined list of original and generated recurring instances for display
+  getRawActivities: () => Activity[]; // Function to get only the stored (master) activities
   categories: Category[];
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
   addActivity: (
-    activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'notes'> & {
+    activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'notes' | 'recurrence' | 'completedOccurrences'> & {
       todos?: Omit<Todo, 'id' | 'completed'>[];
       time?: string;
       notes?: string;
+      recurrence?: RecurrenceRule | null;
     },
     customCreatedAt?: number
   ) => void;
   updateActivity: (activityId: string, updates: Partial<Activity>) => void;
-  deleteActivity: (activityId: string) => void;
+  deleteActivity: (activityId: string) => void; // If recurring, deletes the whole series
+  toggleOccurrenceCompletion: (masterActivityId: string, occurrenceDateTimestamp: number, completed: boolean) => void;
   addTodoToActivity: (activityId: string, todoText: string) => void;
   updateTodoInActivity: (activityId: string, todoId: string, updates: Partial<Todo>) => void;
-  deleteTodoFromActivity: (activityId: string, todoId: string) => void;
+  deleteTodoFromActivity: (activityId: string, todoId: string, masterActivityId?: string) => void;
   getCategoryById: (categoryId: string) => Category | undefined;
   addCategory: (name: string, iconName: string, mode: AppMode | 'all') => void;
   updateCategory: (categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>) => void;
@@ -47,9 +50,9 @@ export interface AppContextType {
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities';
-const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities';
-const LOCAL_STORAGE_KEY_ALL_CATEGORIES = 'todoFlowAllCategories';
+const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities_v2'; // Updated key for new structure
+const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities_v2'; // Updated key
+const LOCAL_STORAGE_KEY_ALL_CATEGORIES = 'todoFlowAllCategories_v1'; // Versioning categories too
 const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode';
 const LOCAL_STORAGE_KEY_IS_AUTHENTICATED = 'todoFlowIsAuthenticated';
 const LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS = 'todoFlowLoginAttempts';
@@ -82,7 +85,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const { t } = useTranslations();
 
   const [lastNotificationCheckDay, setLastNotificationCheckDay] = useState<number | null>(null);
-  const [notifiedToday, setNotifiedToday] = useState<Set<string>>(new Set());
+  const [notifiedToday, setNotifiedToday] = useState<Set<string>>(new Set()); // Stores masterActivityId:occurrenceDateString
 
   const [isAuthenticated, setIsAuthenticatedState] = useState<boolean>(false);
   const [loginAttempts, setLoginAttemptsState] = useState<number>(0);
@@ -90,16 +93,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [sessionExpiryTimestamp, setSessionExpiryTimestampState] = useState<number | null>(null);
 
 
-  const activities = useMemo(() => {
+  // This provides the raw, stored activities for the current mode.
+  // Generation of recurring instances will happen in ActivityCalendarView based on these.
+   const currentRawActivities = useMemo(() => {
     return appMode === 'work' ? workActivities : personalActivities;
   }, [appMode, personalActivities, workActivities]);
+
+  const getRawActivities = useCallback(() => {
+    return appMode === 'work' ? workActivities : personalActivities;
+  }, [appMode, workActivities, personalActivities]);
+
 
   const currentActivitySetter = useMemo(() => {
     return appMode === 'work' ? setWorkActivities : setPersonalActivities;
   }, [appMode]);
 
   const filteredCategories = useMemo(() => {
-    if (isLoading) return [];
+    if (isLoading) return []; // Prevent filtering before categories are loaded
     return allCategories.filter(cat =>
       !cat.mode || cat.mode === 'all' || cat.mode === appMode
     );
@@ -128,14 +138,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setIsLoading(true);
     try {
       const storedPersonalActivities = localStorage.getItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES);
-      if (storedPersonalActivities) {
-        setPersonalActivities(JSON.parse(storedPersonalActivities));
-      }
-      const storedWorkActivities = localStorage.getItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES);
-      if (storedWorkActivities) {
-        setWorkActivities(JSON.parse(storedWorkActivities));
-      }
+      if (storedPersonalActivities) setPersonalActivities(JSON.parse(storedPersonalActivities));
 
+      const storedWorkActivities = localStorage.getItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES);
+      if (storedWorkActivities) setWorkActivities(JSON.parse(storedWorkActivities));
+      
       const storedAllCategories = localStorage.getItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES);
        if (storedAllCategories) {
         const parsedCategories = JSON.parse(storedAllCategories);
@@ -186,7 +193,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } finally {
       setIsLoading(false);
     }
-  }, [logout]);
+  }, [logout]); // Added logout as dependency
 
   useEffect(() => {
     if (!isLoading) {
@@ -255,7 +262,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     if (isLoading || !isAuthenticated) return;
-
+    // This notification logic needs to be updated to handle recurring instances correctly
     const intervalId = setInterval(() => {
       const now = new Date();
       const currentDay = now.getDate();
@@ -265,14 +272,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
       setLastNotificationCheckDay(currentDay);
 
-      activities.forEach(activity => {
-        if (!activity.time || notifiedToday.has(activity.id) || activity.completed) {
+      // TODO: Update this to iterate through generated instances for "today"
+      // For now, it will only notify based on the master activity's time if it's non-recurring
+      // and its `createdAt` is today. This is a simplification.
+      currentRawActivities.forEach(activity => {
+        if (activity.recurrence && activity.recurrence.type !== 'none') {
+          // Complex: need to generate today's instance and check its time
+          // For now, skip notifications for recurring master tasks in this simplified loop
           return;
         }
+
+        if (!activity.time || activity.completed) return;
+
         const activityDatePart = new Date(activity.createdAt);
-        if (!isSameDay(activityDatePart, now)) {
-          return;
-        }
+        if (!isSameDay(activityDatePart, now)) return;
+        
+        const notificationKey = `${activity.id}:${formatISO(now, { representation: 'date' })}`;
+        if (notifiedToday.has(notificationKey)) return;
+
         const [hours, minutes] = activity.time.split(':').map(Number);
         const activityDateTime = new Date(activityDatePart);
         activityDateTime.setHours(hours, minutes, 0, 0);
@@ -284,13 +301,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             title: t('toastActivityStartingSoonTitle'),
             description: t('toastActivityStartingSoonDescription', { activityTitle: activity.title, activityTime: activity.time })
           });
-          setNotifiedToday(prev => new Set(prev).add(activity.id));
+          setNotifiedToday(prev => new Set(prev).add(notificationKey));
         }
       });
-    }, 60000);
+    }, 60000); // Check every minute
 
     return () => clearInterval(intervalId);
-  }, [activities, isLoading, toast, notifiedToday, lastNotificationCheckDay, isAuthenticated, t]);
+  }, [currentRawActivities, isLoading, toast, notifiedToday, lastNotificationCheckDay, isAuthenticated, t]);
 
   useEffect(() => {
     if (!logoutChannel) return;
@@ -336,12 +353,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   const addActivity = useCallback((
-      activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'notes'> & {
+      activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'notes' | 'recurrence' | 'completedOccurrences'> & {
         todos?: Omit<Todo, 'id' | 'completed'>[];
         time?: string;
         notes?: string;
+        recurrence?: RecurrenceRule | null;
       },
-      customCreatedAt?: number
+      customCreatedAt?: number // This is the start date of the activity/recurrence
     ) => {
     const newActivity: Activity = {
       id: uuidv4(),
@@ -351,20 +369,57 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       createdAt: customCreatedAt !== undefined ? customCreatedAt : Date.now(),
       time: activityData.time || undefined,
       notes: activityData.notes || undefined,
-      completed: false,
+      completed: false, // Default for new activities
+      recurrence: activityData.recurrence || { type: 'none' },
+      completedOccurrences: {}, // Initialize empty for new activities
     };
     currentActivitySetter(prev => [...prev, newActivity]);
   }, [currentActivitySetter]);
 
   const updateActivity = useCallback((activityId: string, updates: Partial<Activity>) => {
     currentActivitySetter(prev =>
-      prev.map(act => (act.id === activityId ? { ...act, ...updates } : act))
+      prev.map(act => {
+        if (act.id === activityId) {
+          // If recurrence is being set to 'none', clear out specific recurrence fields
+          const updatedRecurrence = updates.recurrence?.type === 'none' 
+            ? { type: 'none' } 
+            : updates.recurrence || act.recurrence;
+
+          return { 
+            ...act, 
+            ...updates,
+            recurrence: updatedRecurrence as RecurrenceRule | null | undefined // Type assertion needed after conditional
+          };
+        }
+        return act;
+      })
     );
   }, [currentActivitySetter]);
 
   const deleteActivity = useCallback((activityId: string) => {
+    // This deletes the master activity, effectively deleting all its occurrences.
     currentActivitySetter(prev => prev.filter(act => act.id !== activityId));
   }, [currentActivitySetter]);
+
+  const toggleOccurrenceCompletion = useCallback((masterActivityId: string, occurrenceDateTimestamp: number, completedState: boolean) => {
+    const occurrenceDateKey = formatISO(new Date(occurrenceDateTimestamp), { representation: 'date' }); // YYYY-MM-DD
+
+    currentActivitySetter(prevActivities =>
+      prevActivities.map(act => {
+        if (act.id === masterActivityId) {
+          const updatedOccurrences = { ...act.completedOccurrences };
+          if (completedState) {
+            updatedOccurrences[occurrenceDateKey] = true;
+          } else {
+            delete updatedOccurrences[occurrenceDateKey]; // Or set to false: updatedOccurrences[occurrenceDateKey] = false;
+          }
+          return { ...act, completedOccurrences: updatedOccurrences };
+        }
+        return act;
+      })
+    );
+  }, [currentActivitySetter]);
+
 
   const addTodoToActivity = useCallback((activityId: string, todoText: string) => {
     const newTodo: Todo = { id: uuidv4(), text: todoText, completed: false };
@@ -475,13 +530,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   return (
     <AppContext.Provider
       value={{
-        activities,
+        activities: currentRawActivities, // Note: This provides raw activities. CalendarView will generate instances.
+        getRawActivities,
         categories: filteredCategories,
         appMode,
         setAppMode,
         addActivity,
         updateActivity,
         deleteActivity,
+        toggleOccurrenceCompletion,
         addTodoToActivity,
         updateTodoInActivity,
         deleteTodoFromActivity,

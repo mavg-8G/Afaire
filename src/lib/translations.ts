@@ -55,27 +55,37 @@ export type Translations = {
   activityTitleLabel: string;
   categoryLabel: string;
   selectCategoryPlaceholder: string;
-  activityDateLabel: string;
+  activityDateLabel: string; // For recurring, this is "Start Date"
   pickADate: string;
   activityTimeLabel: string;
   activityNotesLabel: string;
   activityNotesPlaceholder: string;
   todosLabel: string;
-  suggestTodos: string;
   addTodo: string;
   newTodoPlaceholder: string;
   toastActivityUpdatedTitle: string;
   toastActivityUpdatedDescription: string;
   toastActivityAddedTitle: string;
   toastActivityAddedDescription: string;
-  toastTitleNeeded: string;
-  toastTitleNeededDescription: string;
-  toastTodosSuggested: string;
-  toastTodosSuggestedDescription: string;
-  toastNoSuggestions: string;
-  toastNoSuggestionsDescription: string;
-  toastSuggestionError: string;
-  toastSuggestionErrorDescription: string;
+  recurrenceLabel: string;
+  recurrenceTypeLabel: string;
+  recurrenceNone: string;
+  recurrenceDaily: string;
+  recurrenceWeekly: string;
+  recurrenceMonthly: string;
+  recurrenceEndDateLabel: string;
+  recurrenceNoEndDate: string;
+  recurrencePickEndDate: string;
+  recurrenceDaysOfWeekLabel: string;
+  recurrenceDayOfMonthLabel: string;
+  recurrenceDayOfMonthPlaceholder: string;
+  daySun: string;
+  dayMon: string;
+  dayTue: string;
+  dayWed: string;
+  dayThu: string;
+  dayFri: string;
+  daySat: string;
 
 
   // ActivityCalendarView
@@ -211,27 +221,37 @@ export const translations: Record<Locale, Translations> = {
     activityTitleLabel: "Activity Title",
     categoryLabel: "Category",
     selectCategoryPlaceholder: "Select a category",
-    activityDateLabel: "Activity Date",
+    activityDateLabel: "Start Date / Date",
     pickADate: "Pick a date",
     activityTimeLabel: "Activity Time (HH:MM)",
     activityNotesLabel: "Notes",
     activityNotesPlaceholder: "Add any additional details or links here...",
     todosLabel: "Todos",
-    suggestTodos: "Suggest Todos",
     addTodo: "Add Todo",
     newTodoPlaceholder: "New todo item",
     toastActivityUpdatedTitle: "Activity Updated",
     toastActivityUpdatedDescription: "Your activity has been successfully updated.",
     toastActivityAddedTitle: "Activity Added",
     toastActivityAddedDescription: "Your new activity has been successfully added.",
-    toastTitleNeeded: "Title Needed",
-    toastTitleNeededDescription: "Please enter an activity title to get suggestions.",
-    toastTodosSuggested: "Todos Suggested",
-    toastTodosSuggestedDescription: "AI has added some todo suggestions.",
-    toastNoSuggestions: "No Suggestions",
-    toastNoSuggestionsDescription: "AI couldn't find any suggestions for this title.",
-    toastSuggestionError: "Suggestion Error",
-    toastSuggestionErrorDescription: "Could not fetch todo suggestions.",
+    recurrenceLabel: "Recurrence",
+    recurrenceTypeLabel: "Repeats",
+    recurrenceNone: "None",
+    recurrenceDaily: "Daily",
+    recurrenceWeekly: "Weekly",
+    recurrenceMonthly: "Monthly",
+    recurrenceEndDateLabel: "End Date",
+    recurrenceNoEndDate: "No end date",
+    recurrencePickEndDate: "Pick end date",
+    recurrenceDaysOfWeekLabel: "On Days",
+    recurrenceDayOfMonthLabel: "Day of Month",
+    recurrenceDayOfMonthPlaceholder: "e.g., 15",
+    daySun: "Sun",
+    dayMon: "Mon",
+    dayTue: "Tue",
+    dayWed: "Wed",
+    dayThu: "Thu",
+    dayFri: "Fri",
+    daySat: "Sat",
     activitiesForDate: (params) => `Activities for ${params.date}`,
     activitiesForWeek: (params) => `Activities for week: ${params.startDate} - ${params.endDate}`,
     activitiesForMonth: (params) => `Activities for ${params.month}`,
@@ -240,7 +260,7 @@ export const translations: Record<Locale, Translations> = {
     noActivitiesForPeriod: "No activities scheduled for this period.",
     selectDateToSeeActivities: "Select a date to see activities.",
     confirmDeleteActivityTitle: "Are you sure?",
-    confirmDeleteActivityDescription: (params) => `This action cannot be undone. This will permanently delete the activity "${params.activityTitle}" and all its associated todos.`,
+    confirmDeleteActivityDescription: (params) => `This action cannot be undone. This will permanently delete the activity "${params.activityTitle}" and all its associated todos. If it's a recurring activity, the entire series will be deleted.`,
     toastActivityDeletedTitle: "Activity Deleted",
     toastActivityDeletedDescription: (params) => `"${params.activityTitle}" has been removed.`,
     todayButton: "Today",
@@ -350,27 +370,37 @@ export const translations: Record<Locale, Translations> = {
     activityTitleLabel: "Título de la Actividad",
     categoryLabel: "Categoría",
     selectCategoryPlaceholder: "Selecciona una categoría",
-    activityDateLabel: "Fecha de la Actividad",
+    activityDateLabel: "Fecha de Inicio / Fecha",
     pickADate: "Elige una fecha",
     activityTimeLabel: "Hora de la Actividad (HH:MM)",
     activityNotesLabel: "Notas",
     activityNotesPlaceholder: "Añade detalles adicionales o enlaces aquí...",
     todosLabel: "Tareas",
-    suggestTodos: "Sugerir Tareas",
     addTodo: "Añadir Tarea",
     newTodoPlaceholder: "Nueva tarea",
     toastActivityUpdatedTitle: "Actividad Actualizada",
     toastActivityUpdatedDescription: "Tu actividad ha sido actualizada exitosamente.",
     toastActivityAddedTitle: "Actividad Añadida",
     toastActivityAddedDescription: "Tu nueva actividad ha sido añadida exitosamente.",
-    toastTitleNeeded: "Se Necesita un Título",
-    toastTitleNeededDescription: "Por favor, introduce un título para la actividad para obtener sugerencias.",
-    toastTodosSuggested: "Tareas Sugeridas",
-    toastTodosSuggestedDescription: "La IA ha añadido algunas sugerencias de tareas.",
-    toastNoSuggestions: "Sin Sugerencias",
-    toastNoSuggestionsDescription: "La IA no pudo encontrar sugerencias para este título.",
-    toastSuggestionError: "Error de Sugerencia",
-    toastSuggestionErrorDescription: "No se pudieron obtener sugerencias de tareas.",
+    recurrenceLabel: "Recurrencia",
+    recurrenceTypeLabel: "Se repite",
+    recurrenceNone: "Nunca",
+    recurrenceDaily: "Diariamente",
+    recurrenceWeekly: "Semanalmente",
+    recurrenceMonthly: "Mensualmente",
+    recurrenceEndDateLabel: "Fecha de Fin",
+    recurrenceNoEndDate: "Sin fecha de fin",
+    recurrencePickEndDate: "Elegir fecha de fin",
+    recurrenceDaysOfWeekLabel: "En los días",
+    recurrenceDayOfMonthLabel: "Día del Mes",
+    recurrenceDayOfMonthPlaceholder: "ej: 15",
+    daySun: "Dom",
+    dayMon: "Lun",
+    dayTue: "Mar",
+    dayWed: "Mié",
+    dayThu: "Jue",
+    dayFri: "Vie",
+    daySat: "Sáb",
     activitiesForDate: (params) => `Actividades para ${params.date}`,
     activitiesForWeek: (params) => `Actividades para la semana: ${params.startDate} - ${params.endDate}`,
     activitiesForMonth: (params) => `Actividades para ${params.month}`,
@@ -379,7 +409,7 @@ export const translations: Record<Locale, Translations> = {
     noActivitiesForPeriod: "No hay actividades programadas para este período.",
     selectDateToSeeActivities: "Selecciona una fecha para ver actividades.",
     confirmDeleteActivityTitle: "¿Estás seguro?",
-    confirmDeleteActivityDescription: (params) => `Esta acción no se puede deshacer. Esto eliminará permanentemente la actividad "${params.activityTitle}" y todas sus tareas asociadas.`,
+    confirmDeleteActivityDescription: (params) => `Esta acción no se puede deshacer. Esto eliminará permanentemente la actividad "${params.activityTitle}" y todas sus tareas asociadas. Si es una actividad recurrente, se eliminará toda la serie.`,
     toastActivityDeletedTitle: "Actividad Eliminada",
     toastActivityDeletedDescription: (params) => `Se ha eliminado "${params.activityTitle}".`,
     todayButton: "Hoy",
