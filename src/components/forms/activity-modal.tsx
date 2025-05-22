@@ -110,7 +110,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
 
   useEffect(() => {
     if (isOpen) {
-      const currentEffectiveDate = instanceDate || (activity ? new Date(activity.createdAt) : initialDate) || new Date();
+      // const currentEffectiveDate = instanceDate || (activity ? new Date(activity.createdAt) : initialDate) || new Date();
       if (activity) {
         form.reset({
           title: activity.title,
@@ -256,7 +256,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0 z-[80]" align="start" > {/* Increased z-index */}
+                      <PopoverContent className="w-auto p-0" align="start" > {/* Removed z-index, relies on global popover z-index */}
                         <Calendar
                           mode="single"
                           selected={field.value}
@@ -285,7 +285,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                     <FormLabel className="min-h-8">{t('activityTimeLabel')}</FormLabel>
                     <FormControl>
                       <div className="relative w-full">
-                        <Input type="time" {...field} className="w-full" />
+                        <Input type="time" {...field} className="w-full pr-7" />
                         <Clock className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
                       </div>
                     </FormControl>
@@ -416,7 +416,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                               </Button>
                           </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0 z-[80]" align="start">
+                        <PopoverContent className="w-auto p-0" align="start"> {/* Removed z-index */}
                            <Calendar
                             mode="single"
                             selected={field.value || undefined}
@@ -432,7 +432,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                             }}
                             locale={dateLocale}
                           />
-                          {field.value && (
+                           {field.value && (
                             <Button
                               type="button" 
                               variant="ghost"
@@ -544,5 +544,7 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
+
+    
 
     
