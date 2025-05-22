@@ -2,7 +2,7 @@
 "use client";
 import type { ReactNode } from 'react';
 import React, { createContext, useState, useCallback, useEffect, useMemo } from 'react';
-import type { Activity, Todo, Category, AppMode, RecurrenceRule } from '@/lib/types';
+import type { Activity, Todo, Category, AppMode, RecurrenceRule, UINotification } from '@/lib/types';
 import { INITIAL_CATEGORIES } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
@@ -12,17 +12,20 @@ import {
   subDays, subWeeks,
   startOfDay, endOfDay,
   isBefore, isAfter,
-  getDay, getDate, // getDate is for day of month
+  getDay, getDate, 
   isWithinInterval,
   setDate as setDayOfMonth,
-  addYears, isEqual
+  addYears, isEqual,
+  formatDistanceToNowStrict,
 } from 'date-fns';
 import * as Icons from 'lucide-react';
 import { useTranslations } from '@/contexts/language-context';
+import { enUS, es } from 'date-fns/locale';
+
 
 export interface AppContextType {
-  activities: Activity[]; // This will be the combined list of original and generated recurring instances for display
-  getRawActivities: () => Activity[]; // Function to get only the stored (master) activities
+  activities: Activity[]; 
+  getRawActivities: () => Activity[]; 
   categories: Category[];
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
@@ -36,7 +39,7 @@ export interface AppContextType {
     customCreatedAt?: number
   ) => void;
   updateActivity: (activityId: string, updates: Partial<Activity>) => void;
-  deleteActivity: (activityId: string) => void; // If recurring, deletes the whole series
+  deleteActivity: (activityId: string) => void; 
   toggleOccurrenceCompletion: (masterActivityId: string, occurrenceDateTimestamp: number, completed: boolean) => void;
   addTodoToActivity: (activityId: string, todoText: string) => void;
   updateTodoInActivity: (activityId: string, todoId: string, updates: Partial<Todo>) => void;
@@ -56,6 +59,12 @@ export interface AppContextType {
   setLockoutEndTime: (timestamp: number | null) => void;
   sessionExpiryTimestamp: number | null;
   logout: () => void;
+
+  uiNotifications: UINotification[];
+  addUINotification: (data: Omit<UINotification, 'id' | 'timestamp' | 'read'>) => void;
+  markUINotificationAsRead: (notificationId: string) => void;
+  markAllUINotificationsAsRead: () => void;
+  clearAllUINotifications: () => void;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -68,6 +77,8 @@ const LOCAL_STORAGE_KEY_IS_AUTHENTICATED = 'todoFlowIsAuthenticated';
 const LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS = 'todoFlowLoginAttempts';
 const LOCAL_STORAGE_KEY_LOCKOUT_END_TIME = 'todoFlowLockoutEndTime';
 const LOCAL_STORAGE_KEY_SESSION_EXPIRY = 'todoFlowSessionExpiry';
+const LOCAL_STORAGE_KEY_UI_NOTIFICATIONS = 'todoFlowUINotifications_v1';
+
 
 const SESSION_DURATION_24_HOURS_MS = 24 * 60 * 60 * 1000;
 const SESSION_DURATION_30_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -84,8 +95,7 @@ if (typeof window !== 'undefined') {
   logoutChannel = new BroadcastChannel('todoFlowLogoutChannel');
 }
 
-// Helper to create a clean Date object representing the start of a given date
-const getStartOfDay = (date: Date): Date => {
+const getStartOfDayUtil = (date: Date): Date => {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
   return d;
@@ -98,11 +108,10 @@ interface FutureInstance {
 
 function generateFutureInstancesForNotifications(
   masterActivity: Activity,
-  rangeStartDate: Date, // Start of the period to look for instances
-  rangeEndDate: Date    // End of the period
+  rangeStartDate: Date, 
+  rangeEndDate: Date    
 ): FutureInstance[] {
   if (!masterActivity.recurrence || masterActivity.recurrence.type === 'none') {
-    // For non-recurring, if it falls within range and is not completed
     const activityDate = new Date(masterActivity.createdAt);
     if (isWithinInterval(activityDate, { start: rangeStartDate, end: rangeEndDate }) && !masterActivity.completed) {
         return [{ instanceDate: activityDate, masterActivityId: masterActivity.id }];
@@ -114,18 +123,12 @@ function generateFutureInstancesForNotifications(
   const recurrence = masterActivity.recurrence;
   let currentDate = new Date(masterActivity.createdAt);
 
-  // Ensure currentDate is not before the master activity's own start date
-  // and align it to be at or after rangeStartDate for efficient generation.
   if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
     currentDate = new Date(masterActivity.createdAt);
   }
   
-  // Advance currentDate to be at least rangeStartDate, respecting recurrence pattern start
-  // This part is complex and needs to correctly find the first valid occurrence >= rangeStartDate
-  // For simplicity in this context, we'll advance day by day and check validity.
-  // A more optimized version would jump by week/month.
   let alignmentIterations = 0;
-  const maxAlignmentIterations = 366 * 2; // Max 2 years for alignment
+  const maxAlignmentIterations = 366 * 2; 
 
   while (isBefore(currentDate, rangeStartDate) && alignmentIterations < maxAlignmentIterations) {
       alignmentIterations++;
@@ -133,28 +136,22 @@ function generateFutureInstancesForNotifications(
       if (recurrence.type === 'daily') {
           nextPossibleDate = addDays(currentDate, 1);
       } else if (recurrence.type === 'weekly') {
-          // Simply advance by one day; validity check below will handle daysOfWeek
           nextPossibleDate = addDays(currentDate, 1); 
       } else if (recurrence.type === 'monthly') {
-          // For monthly, need more careful advancement to find next valid day
           if (recurrence.dayOfMonth) {
-            let tempDate = addDays(currentDate, 1); // Start checking from the next day
-            // Go to the next month if current day is already past the target dayOfMonth
-            if (getDate(tempDate) > recurrence.dayOfMonth) {
+            let tempDate = addDays(currentDate, 1); 
+            if (getDate(tempDate) > recurrence.dayOfMonth && getDate(tempDate) !== getDate(currentDate) ) { // check if we jumped past desired day of month
                 tempDate = addMonths(tempDate, 1);
             }
-            // Set to the specific dayOfMonth
             nextPossibleDate = setDayOfMonth(tempDate, recurrence.dayOfMonth);
           } else {
-            nextPossibleDate = addDays(currentDate, 1); // Fallback if dayOfMonth not set
+            nextPossibleDate = addDays(currentDate, 1); 
           }
       } else {
           break; 
       }
       
-      if (isEqual(nextPossibleDate, currentDate) && recurrence.type !== 'daily') {
-        // If date didn't advance (e.g. monthly logic couldn't find a new date), break to prevent infinite loop
-        // For daily, it's okay if it's equal if we are already at rangeStartDate
+      if (isEqual(nextPossibleDate, currentDate) && recurrence.type !== 'daily' && alignmentIterations > 1) {
         console.warn("generateFutureInstancesForNotifications: Date did not advance during alignment for activity:", masterActivity.id, "currentDate:", currentDate, "recurrence:", recurrence);
         break;
       }
@@ -162,29 +159,35 @@ function generateFutureInstancesForNotifications(
   }
   if (alignmentIterations >= maxAlignmentIterations) {
     console.warn("generateFutureInstancesForNotifications: Exceeded safety limit during date alignment for activity:", masterActivity.id);
-    return []; // Return empty if alignment takes too long
+    return []; 
   }
 
 
   const seriesEndDate = recurrence.endDate ? new Date(recurrence.endDate) : null;
   let iterations = 0;
-  const maxIterations = 366 * 1; // Look ahead up to 1 year for notifications
+  const maxIterations = 366 * 1; 
 
   while (iterations < maxIterations && !isAfter(currentDate, rangeEndDate)) {
     iterations++;
 
     if (seriesEndDate && isAfter(currentDate, seriesEndDate)) break;
     
-    // Ensure we don't generate instances before the original start date of the recurring activity.
     if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
         if (recurrence.type === 'daily') currentDate = addDays(currentDate, 1);
-        else if (recurrence.type === 'weekly') currentDate = addDays(currentDate, 1); // Check next day
-        else if (recurrence.type === 'monthly') { // More careful advance for monthly
+        else if (recurrence.type === 'weekly') currentDate = addDays(currentDate, 1); 
+        else if (recurrence.type === 'monthly') { 
              if (recurrence.dayOfMonth) {
                 let nextMonth = addMonths(currentDate, 1);
                 currentDate = setDayOfMonth(nextMonth, recurrence.dayOfMonth);
+                // Ensure if original start day was e.g. 31st, and currentMonth is Feb, we go to March 31st not Feb 28 then March 28
+                if(getDay(new Date(masterActivity.createdAt)) !== getDay(currentDate) && getDate(new Date(masterActivity.createdAt)) === recurrence.dayOfMonth) {
+                     if(isBefore(currentDate, setDayOfMonth(new Date(masterActivity.createdAt), recurrence.dayOfMonth))) {
+                         currentDate = setDayOfMonth(addMonths(new Date(masterActivity.createdAt), iterations), recurrence.dayOfMonth);
+                     }
+                }
+
              } else {
-                currentDate = addDays(currentDate,1); // fallback
+                currentDate = addDays(currentDate,1); 
              }
         } else break;
         continue;
@@ -208,40 +211,45 @@ function generateFutureInstancesForNotifications(
     }
 
     if (isValidOccurrence) {
-      // Check if this specific instance is completed
       const occurrenceDateKey = formatISO(currentDate, { representation: 'date' });
       const isInstanceCompleted = !!masterActivity.completedOccurrences?.[occurrenceDateKey];
       
       if (!isInstanceCompleted) {
            instances.push({
-            instanceDate: new Date(currentDate.getTime()), // Important to create new Date objects
+            instanceDate: new Date(currentDate.getTime()), 
             masterActivityId: masterActivity.id,
           });
       }
     }
 
-    // Advance current date
     if (recurrence.type === 'daily') {
         currentDate = addDays(currentDate, 1);
     } else if (recurrence.type === 'weekly') {
-        currentDate = addDays(currentDate, 1); // Check next day, loop will handle dayOfWeek
+        currentDate = addDays(currentDate, 1); 
     } else if (recurrence.type === 'monthly') {
         if (recurrence.dayOfMonth) {
-            let nextMonthDate = addMonths(currentDate, 1); // Go to next month
-            currentDate = setDayOfMonth(nextMonthDate, recurrence.dayOfMonth); // Set to the specific day
-            // If setting dayOfMonth made it jump to *another* month (e.g. day 31 in Feb -> Mar 3)
-            // or if the month isn't what we expect, we might need adjustment,
-            // but usually date-fns handles this gracefully by landing on the correct day in the target month.
-            // However, for safety if dayOfMonth is, e.g. 31 and next month is Feb, it will become Feb 28/29.
-            // This could be an issue if we strict-check month. For notifications, it might be okay.
-            // A simpler advance to ensure we cross into the next month then find the day:
-            // currentDate = addDays(currentDate, 1); // Go to next day
-            // while(getDate(currentDate) !== recurrence.dayOfMonth && !isAfter(currentDate, rangeEndDate)){
-            //   currentDate = addDays(currentDate, 1)
-            // }
-            // The current logic (setDayOfMonth(addMonths(...))) is usually more direct for monthly fixed day.
+            let nextIterationDate;
+            // ensure we are in the correct month first by adding a month, then setting day
+            const targetMonthCurrentDay = setDayOfMonth(currentDate, recurrence.dayOfMonth);
+            if(isAfter(targetMonthCurrentDay, currentDate) && getDate(targetMonthCurrentDay) === recurrence.dayOfMonth){
+                 nextIterationDate = targetMonthCurrentDay; // Still in current month, next valid day
+            } else {
+                 nextIterationDate = setDayOfMonth(addMonths(currentDate, 1), recurrence.dayOfMonth);
+            }
+            // If original day was e.g. 31, and next month is Feb, date-fns sets to Feb 28/29.
+            // We need to ensure we respect the original dayOfMonth intention if the month allows it.
+            if(getDate(nextIterationDate) !== recurrence.dayOfMonth && getDate(new Date(masterActivity.createdAt)) === recurrence.dayOfMonth) {
+                 let monthCounter = 1;
+                 let potentialDate = setDayOfMonth(addMonths(currentDate, monthCounter), recurrence.dayOfMonth);
+                 while(getDate(potentialDate) !== recurrence.dayOfMonth && monthCounter < 13) { // safety break for 12 months
+                    monthCounter++;
+                    potentialDate = setDayOfMonth(addMonths(currentDate, monthCounter), recurrence.dayOfMonth);
+                 }
+                 nextIterationDate = potentialDate;
+            }
+            currentDate = nextIterationDate;
         } else {
-            currentDate = addDays(currentDate, 1); // Fallback if no dayOfMonth
+            currentDate = addDays(currentDate, 1); 
         }
     } else {
       break;
@@ -259,7 +267,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations(); 
+  const dateLocale = locale === 'es' ? es : enUS;
 
   const [lastNotificationCheckDay, setLastNotificationCheckDay] = useState<number | null>(null);
   const [notifiedToday, setNotifiedToday] = useState<Set<string>>(new Set());
@@ -268,16 +277,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [loginAttempts, setLoginAttemptsState] = useState<number>(0);
   const [lockoutEndTime, setLockoutEndTimeState] = useState<number | null>(null);
   const [sessionExpiryTimestamp, setSessionExpiryTimestampState] = useState<number | null>(null);
+  
+  const [uiNotifications, setUINotifications] = useState<UINotification[]>([]);
 
-
-   const currentRawActivities = useMemo(() => {
-    return appMode === 'work' ? workActivities : personalActivities;
-  }, [appMode, personalActivities, workActivities]);
 
   const getRawActivities = useCallback(() => {
     return appMode === 'work' ? workActivities : personalActivities;
   }, [appMode, workActivities, personalActivities]);
-
 
   const currentActivitySetter = useMemo(() => {
     return appMode === 'work' ? setWorkActivities : setPersonalActivities;
@@ -289,7 +295,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       !cat.mode || cat.mode === 'all' || cat.mode === appMode
     );
   }, [allCategories, appMode, isLoading]);
-
 
   const logout = useCallback(() => {
     setIsAuthenticatedState(false);
@@ -351,7 +356,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           setSessionExpiryTimestampState(expiryTime);
         }
       } else {
-        // If no auth or no expiry, ensure user is logged out.
         if(isAuthenticated) logout(); 
       }
 
@@ -361,6 +365,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const storedLockoutTime = localStorage.getItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
       setLockoutEndTimeState(storedLockoutTime ? parseInt(storedLockoutTime, 10) : null);
 
+      const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
+      if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
+
     } catch (err) {
       console.error("Failed to load data from local storage", err);
       setError("Failed to load saved data.");
@@ -368,7 +375,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } finally {
       setIsLoading(false);
     }
-  }, [logout, isAuthenticated]); // Added isAuthenticated to dependency array for the auth check
+  }, [logout, isAuthenticated]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -434,13 +441,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [sessionExpiryTimestamp, isLoading]);
 
+  useEffect(() => {
+    if(!isLoading) {
+        localStorage.setItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS, JSON.stringify(uiNotifications));
+    }
+  }, [uiNotifications, isLoading]);
+
+
+  const addUINotification = useCallback((data: Omit<UINotification, 'id' | 'timestamp' | 'read'>) => {
+    const newNotification: UINotification = {
+      ...data,
+      id: uuidv4(),
+      timestamp: Date.now(),
+      read: false,
+    };
+    setUINotifications(prev => [newNotification, ...prev.slice(0, 49)]); // Keep max 50 notifications
+  }, []);
+
 
   useEffect(() => {
     if (isLoading || !isAuthenticated) return;
 
     const intervalId = setInterval(() => {
       const now = new Date();
-      const today = getStartOfDay(now);
+      const today = getStartOfDayUtil(now);
       const currentDayOfMonthFromNow = now.getDate();
 
       if (lastNotificationCheckDay !== null && lastNotificationCheckDay !== currentDayOfMonthFromNow) {
@@ -452,18 +476,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       activitiesToScan.forEach(masterActivity => {
         const activityTitle = masterActivity.title;
+        const masterId = masterActivity.id;
 
-        const todayInstances = generateFutureInstancesForNotifications(masterActivity, today, endOfDay(today));
-        const futureCheckEndDate = addDays(today, 8); 
-        const upcomingInstances = generateFutureInstancesForNotifications(masterActivity, addDays(today,1), futureCheckEndDate);
-
+        // 5-minute "starting soon" notification
         if (masterActivity.time) {
+          const todayInstances = generateFutureInstancesForNotifications(masterActivity, today, endOfDay(today));
           todayInstances.forEach(instance => {
             const occurrenceDateKey = formatISO(instance.instanceDate, { representation: 'date' });
-            const notificationKey5Min = `${instance.masterActivityId}:${occurrenceDateKey}:5min_soon`;
-            const isOccurrenceCompleted = !!masterActivity.completedOccurrences?.[occurrenceDateKey];
+            const notificationKey5Min = `${masterId}:${occurrenceDateKey}:5min_soon`;
+            const isInstanceCompleted = !!masterActivity.completedOccurrences?.[occurrenceDateKey];
 
-            if (!isOccurrenceCompleted && !notifiedToday.has(notificationKey5Min)) {
+            if (!isInstanceCompleted && !notifiedToday.has(notificationKey5Min)) {
               const [hours, minutes] = masterActivity.time!.split(':').map(Number);
               const activityDateTime = new Date(instance.instanceDate);
               activityDateTime.setHours(hours, minutes, 0, 0);
@@ -471,60 +494,56 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               const timeDiffMs = activityDateTime.getTime() - now.getTime();
 
               if (timeDiffMs >= 0 && timeDiffMs <= fiveMinutesInMs) {
-                toast({
-                  title: t('toastActivityStartingSoonTitle'),
-                  description: t('toastActivityStartingSoonDescription', { activityTitle, activityTime: masterActivity.time! })
-                });
+                const toastDesc = t('toastActivityStartingSoonDescription', { activityTitle, activityTime: masterActivity.time! });
+                toast({ title: t('toastActivityStartingSoonTitle'), description: toastDesc });
+                addUINotification({ title: t('toastActivityStartingSoonTitle'), description: toastDesc, activityId: masterId, instanceDate: instance.instanceDate.getTime() });
                 setNotifiedToday(prev => new Set(prev).add(notificationKey5Min));
               }
             }
           });
         }
         
+        // Advanced notifications for recurring tasks
         if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
           const recurrenceType = masterActivity.recurrence.type;
+          const futureCheckEndDate = addDays(today, 8); 
+          const upcomingInstances = generateFutureInstancesForNotifications(masterActivity, addDays(today,1), futureCheckEndDate);
 
           upcomingInstances.forEach(instance => {
             const instanceDateKey = formatISO(instance.instanceDate, { representation: 'date' });
             const isOccurrenceCompleted = !!masterActivity.completedOccurrences?.[instanceDateKey];
             if(isOccurrenceCompleted) return;
 
+            const notify = (typeKey: string, titleKey: keyof Translations, descKey: keyof Translations, params: { activityTitle: string }) => {
+              const notificationFullKey = `${masterId}:${instanceDateKey}:${typeKey}`;
+              if (!notifiedToday.has(notificationFullKey)) {
+                const notifTitle = t(titleKey as any, params);
+                const notifDesc = t(descKey as any, params);
+                toast({ title: notifTitle, description: notifDesc });
+                addUINotification({ title: notifTitle, description: notifDesc, activityId: masterId, instanceDate: instance.instanceDate.getTime() });
+                setNotifiedToday(prev => new Set(prev).add(notificationFullKey));
+              }
+            };
 
             if (recurrenceType === 'weekly') {
               const oneDayBefore = subDays(instance.instanceDate, 1);
               if (isSameDay(today, oneDayBefore)) {
-                const notificationKey = `${instance.masterActivityId}:${instanceDateKey}:1day_weekly`;
-                if (!notifiedToday.has(notificationKey)) {
-                  toast({ title: t('toastActivityTomorrowTitle'), description: t('toastActivityTomorrowDescription', { activityTitle }) });
-                  setNotifiedToday(prev => new Set(prev).add(notificationKey));
-                }
+                notify('1day_weekly', 'toastActivityTomorrowTitle', 'toastActivityTomorrowDescription', { activityTitle });
               }
             } else if (recurrenceType === 'monthly') {
               const oneWeekBefore = subWeeks(instance.instanceDate, 1);
               if (isSameDay(today, oneWeekBefore)) {
-                const notificationKey = `${instance.masterActivityId}:${instanceDateKey}:1week_monthly`;
-                if (!notifiedToday.has(notificationKey)) {
-                  toast({ title: t('toastActivityInOneWeekTitle'), description: t('toastActivityInOneWeekDescription', { activityTitle }) });
-                  setNotifiedToday(prev => new Set(prev).add(notificationKey));
-                }
+                 notify('1week_monthly', 'toastActivityInOneWeekTitle', 'toastActivityInOneWeekDescription', { activityTitle });
               }
               
               const twoDaysBefore = subDays(instance.instanceDate, 2);
               if (isSameDay(today, twoDaysBefore)) {
-                const notificationKey = `${instance.masterActivityId}:${instanceDateKey}:2days_monthly`;
-                if (!notifiedToday.has(notificationKey)) {
-                  toast({ title: t('toastActivityInTwoDaysTitle'), description: t('toastActivityInTwoDaysDescription', { activityTitle }) });
-                  setNotifiedToday(prev => new Set(prev).add(notificationKey));
-                }
+                 notify('2days_monthly', 'toastActivityInTwoDaysTitle', 'toastActivityInTwoDaysDescription', { activityTitle });
               }
 
               const oneDayBefore = subDays(instance.instanceDate, 1);
               if (isSameDay(today, oneDayBefore)) {
-                const notificationKey = `${instance.masterActivityId}:${instanceDateKey}:1day_monthly`;
-                if (!notifiedToday.has(notificationKey)) {
-                  toast({ title: t('toastActivityTomorrowTitle'), description: t('toastActivityTomorrowDescription', { activityTitle }) });
-                  setNotifiedToday(prev => new Set(prev).add(notificationKey));
-                }
+                 notify('1day_monthly', 'toastActivityTomorrowTitle', 'toastActivityTomorrowDescription', { activityTitle });
               }
             }
           });
@@ -533,7 +552,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, 60000); 
 
     return () => clearInterval(intervalId);
-  }, [personalActivities, workActivities, appMode, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday]);
+  }, [personalActivities, workActivities, appMode, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification]);
 
 
   useEffect(() => {
@@ -550,7 +569,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     };
   }, [isAuthenticated, logout]);
-
 
   const setAppMode = useCallback((mode: AppMode) => {
     setAppModeState(mode);
@@ -609,21 +627,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             : updates.recurrence || act.recurrence;
           
           let updatedCompletedOccurrences = act.completedOccurrences;
-          // If recurrence settings are cleared, clear completedOccurrences as well.
           if (updates.recurrence && updates.recurrence.type === 'none') {
             updatedCompletedOccurrences = {};
           } else if (updates.recurrence && 
                      (updates.recurrence.type !== act.recurrence?.type || 
                       updates.recurrence.dayOfMonth !== act.recurrence?.dayOfMonth ||
                       JSON.stringify(updates.recurrence.daysOfWeek) !== JSON.stringify(act.recurrence?.daysOfWeek) ||
-                      new Date(updates.createdAt || act.createdAt).getTime() !== new Date(act.createdAt).getTime()
+                      (updates.createdAt && new Date(updates.createdAt).getTime() !== new Date(act.createdAt).getTime())
                       )) {
-            // If recurrence rule (type, specific days/dates) or start date changes, clear old completions
-            // as they might no longer be valid for the new rule.
             updatedCompletedOccurrences = {};
           }
-
-
           return { ...act, ...updates, recurrence: updatedRecurrence as RecurrenceRule | undefined, completedOccurrences: updatedCompletedOccurrences };
         }
         return act;
@@ -706,10 +719,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       mode: mode,
     };
     setAllCategories(prev => [...prev, newCategory]);
-    toast({
-      title: t('toastCategoryAddedTitle'),
-      description: t('toastCategoryAddedDescription', { categoryName: name })
-    });
+    const toastDesc = t('toastCategoryAddedDescription', { categoryName: name });
+    toast({ title: t('toastCategoryAddedTitle'), description: toastDesc });
+    // addUINotification({ title: t('toastCategoryAddedTitle'), description: toastDesc }); // Example if you want category changes in notification center
   }, [toast, t]);
 
   const updateCategory = useCallback((categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>) => {
@@ -730,11 +742,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return cat;
       })
     );
-    toast({
-      title: t('toastCategoryUpdatedTitle'),
-      description: t('toastCategoryUpdatedDescription', { categoryName: updates.name || "" })
-    });
-  }, [toast, t]);
+    const catName = updates.name || allCategories.find(c=>c.id === categoryId)?.name || "";
+    const toastDesc = t('toastCategoryUpdatedDescription', { categoryName: catName });
+    toast({ title: t('toastCategoryUpdatedTitle'), description: toastDesc });
+    // addUINotification({ title: t('toastCategoryUpdatedTitle'), description: toastDesc });
+  }, [toast, t, allCategories]);
 
 
   const deleteCategory = useCallback((categoryId: string) => {
@@ -753,17 +765,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         act.categoryId === categoryId ? { ...act, categoryId: '' } : act
       )
     );
-    toast({
-      title: t('toastCategoryDeletedTitle'),
-      description: t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name })
-    });
+    const toastDesc = t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name });
+    toast({ title: t('toastCategoryDeletedTitle'), description: toastDesc });
+    // addUINotification({ title: t('toastCategoryDeletedTitle'), description: toastDesc });
   }, [toast, allCategories, t]);
+
+  const markUINotificationAsRead = useCallback((notificationId: string) => {
+    setUINotifications(prev => 
+      prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
+    );
+  }, []);
+
+  const markAllUINotificationsAsRead = useCallback(() => {
+    setUINotifications(prev => prev.map(n => ({ ...n, read: true })));
+  }, []);
+
+  const clearAllUINotifications = useCallback(() => {
+    setUINotifications([]);
+  }, []);
 
 
   return (
     <AppContext.Provider
       value={{
-        activities: currentRawActivities,
+        activities: getRawActivities(), // getRawActivities() to ensure it switches based on appMode
         getRawActivities,
         categories: filteredCategories,
         appMode,
@@ -789,6 +814,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setLockoutEndTime,
         sessionExpiryTimestamp,
         logout,
+        uiNotifications,
+        addUINotification,
+        markUINotificationAsRead,
+        markAllUINotificationsAsRead,
+        clearAllUINotifications,
       }}
     >
       {children}

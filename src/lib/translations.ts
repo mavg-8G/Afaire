@@ -20,6 +20,11 @@ export type Translations = {
   logout: string;
   changePassword: string;
   dashboard: string;
+  notificationsTitle: string;
+  noNotificationsYet: string;
+  markAllAsRead: string;
+  clearAllNotifications: string;
+  notificationBellLabel: string;
 
 
   // CategoriesPage
@@ -55,7 +60,7 @@ export type Translations = {
   activityTitleLabel: string;
   categoryLabel: string;
   selectCategoryPlaceholder: string;
-  activityDateLabel: string; // For recurring, this is "Start Date"
+  activityDateLabel: string; 
   pickADate: string;
   activityTimeLabel: string;
   activityNotesLabel: string;
@@ -204,6 +209,11 @@ export const translations: Record<Locale, Translations> = {
     logout: "Logout",
     changePassword: "Change Password",
     dashboard: "Dashboard",
+    notificationsTitle: "Notifications",
+    noNotificationsYet: "No new notifications.",
+    markAllAsRead: "Mark all as read",
+    clearAllNotifications: "Clear all",
+    notificationBellLabel: "View notifications",
     backToCalendar: "Back to Calendar",
     addCategory: "Add Category",
     editCategory: "Edit Category",
@@ -363,6 +373,11 @@ export const translations: Record<Locale, Translations> = {
     logout: "Cerrar Sesión",
     changePassword: "Cambiar Contraseña",
     dashboard: "Dashboard",
+    notificationsTitle: "Notificaciones",
+    noNotificationsYet: "No hay notificaciones nuevas.",
+    markAllAsRead: "Marcar todas como leídas",
+    clearAllNotifications: "Limpiar todas",
+    notificationBellLabel: "Ver notificaciones",
     backToCalendar: "Volver al Calendario",
     addCategory: "Añadir Categoría",
     editCategory: "Editar Categoría",
@@ -517,4 +532,3 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
-
