@@ -331,11 +331,11 @@ export const translations: Record<Locale, Translations> = {
     toastCategoryDeletedDescription: (params) => `Category "${params.categoryName}" has been removed.`,
     toastActivityStartingSoonTitle: "Activity Starting Soon!",
     toastActivityStartingSoonDescription: (params) => `"${params.activityTitle}" is scheduled for ${params.activityTime}.`,
-    toastActivityTomorrowTitle: "Activity Reminder",
+    toastActivityTomorrowTitle: "Activity Reminder: Tomorrow",
     toastActivityTomorrowDescription: (params) => `"${params.activityTitle}" is scheduled for tomorrow.`,
-    toastActivityInTwoDaysTitle: "Activity Reminder",
+    toastActivityInTwoDaysTitle: "Activity Reminder: In 2 Days",
     toastActivityInTwoDaysDescription: (params) => `"${params.activityTitle}" is scheduled in 2 days.`,
-    toastActivityInOneWeekTitle: "Activity Reminder",
+    toastActivityInOneWeekTitle: "Activity Reminder: In 1 Week",
     toastActivityInOneWeekDescription: (params) => `"${params.activityTitle}" is scheduled in one week.`,
     dashboardTitle: "Activity Dashboard",
     dashboardViewWeekly: "Last 7 Days",
@@ -490,11 +490,11 @@ export const translations: Record<Locale, Translations> = {
     toastCategoryDeletedDescription: (params) => `La categoría "${params.categoryName}" ha sido eliminada.`,
     toastActivityStartingSoonTitle: "¡Actividad Comienza Pronto!",
     toastActivityStartingSoonDescription: (params) => `"${params.activityTitle}" está programada para las ${params.activityTime}.`,
-    toastActivityTomorrowTitle: "Recordatorio de Actividad",
+    toastActivityTomorrowTitle: "Recordatorio: Mañana",
     toastActivityTomorrowDescription: (params) => `"${params.activityTitle}" está programada para mañana.`,
-    toastActivityInTwoDaysTitle: "Recordatorio de Actividad",
+    toastActivityInTwoDaysTitle: "Recordatorio: En 2 Días",
     toastActivityInTwoDaysDescription: (params) => `"${params.activityTitle}" está programada en 2 días.`,
-    toastActivityInOneWeekTitle: "Recordatorio de Actividad",
+    toastActivityInOneWeekTitle: "Recordatorio: En 1 Semana",
     toastActivityInOneWeekDescription: (params) => `"${params.activityTitle}" está programada en una semana.`,
     dashboardTitle: "Panel de Actividades",
     dashboardViewWeekly: "Últimos 7 Días",
@@ -517,3 +517,4 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
+

@@ -196,7 +196,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
     ? t('editActivityDescription')
     : t('addActivityDescription', { initialDateMsg: ` ${t('locale') === 'es' ? 'Fecha por defecto:' : 'Default date:'} ${format(initialDate || new Date(), "PPP", { locale: dateLocale })}.` });
 
-  const maxRecurrenceEndDate = activityStartDate ? addDays(addMonths(activityStartDate, 5), 0) : undefined; // 5 months from start date, 0 additional days
+  const maxRecurrenceEndDate = activityStartDate ? addDays(addMonths(activityStartDate, 5), 1) : undefined;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -410,23 +410,23 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                             <Button
                               variant={"outline"}
                               className={cn(
-                                "w-full pl-3 text-left font-normal flex justify-between items-center", // Ensure flex and justify-between
+                                "w-full pl-3 text-left font-normal flex justify-between items-center", 
                                 !field.value && "text-muted-foreground"
                               )}
                             >
-                              <span className="flex-grow"> {/* Allow text to take space */}
+                              <span className="flex-grow"> 
                                 {field.value ? (
                                   format(field.value, "PPP", { locale: dateLocale })
                                 ) : (
                                   <span>{t('recurrenceNoEndDate')}</span>
                                 )}
                               </span>
-                              <CalendarIcon className="ml-2 h-4 w-4 opacity-50" /> {/* Ensure calendar icon is present */}
+                              <CalendarIcon className="ml-2 h-4 w-4 opacity-50" /> 
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0 z-[70]" align="start">
-                          <div className="flex flex-col"> {/* Wrapper for calendar and clear button */}
+                          <div className="flex flex-col"> 
                             <Calendar
                               mode="single"
                               selected={field.value || undefined}
@@ -446,15 +446,15 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                               <Button
                                 variant="ghost"
                                 size="sm" 
-                                className="w-full rounded-t-none border-t" // Style for clear button
+                                className="w-full rounded-t-none border-t" 
                                 onClick={(e) => {
-                                  e.stopPropagation(); // Prevent popover from closing if it's part of it
+                                  e.stopPropagation(); 
                                   field.onChange(null);
-                                  setIsRecurrenceEndDatePopoverOpen(false); // Close popover after clearing
+                                  setIsRecurrenceEndDatePopoverOpen(false); 
                                 }}
-                                aria-label={t('recurrenceNoEndDate')}
+                                aria-label={t('recurrenceClearEndDate')}
                               >
-                                <X className="mr-2 h-4 w-4" /> {t('recurrenceClearEndDate', {defaultValue: "Clear end date"})}
+                                <X className="mr-2 h-4 w-4" /> {t('recurrenceClearEndDate')}
                               </Button>
                             )}
                           </div>
@@ -548,3 +548,4 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
     </Dialog>
   );
 }
+
