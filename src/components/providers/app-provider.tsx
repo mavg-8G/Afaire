@@ -21,6 +21,7 @@ import {
 import * as Icons from 'lucide-react';
 import { useTranslations } from '@/contexts/language-context';
 import { enUS, es } from 'date-fns/locale';
+import { useTheme } from 'next-themes';
 
 
 export interface AppContextType {
@@ -140,7 +141,7 @@ function generateFutureInstancesForNotifications(
       } else if (recurrence.type === 'monthly') {
           if (recurrence.dayOfMonth) {
             let tempDate = addDays(currentDate, 1); 
-            if (getDate(tempDate) > recurrence.dayOfMonth && getDate(tempDate) !== getDate(currentDate) ) { // check if we jumped past desired day of month
+            if (getDate(tempDate) > recurrence.dayOfMonth && getDate(tempDate) !== getDate(currentDate) ) { 
                 tempDate = addMonths(tempDate, 1);
             }
             nextPossibleDate = setDayOfMonth(tempDate, recurrence.dayOfMonth);
@@ -179,7 +180,6 @@ function generateFutureInstancesForNotifications(
              if (recurrence.dayOfMonth) {
                 let nextMonth = addMonths(currentDate, 1);
                 currentDate = setDayOfMonth(nextMonth, recurrence.dayOfMonth);
-                // Ensure if original start day was e.g. 31st, and currentMonth is Feb, we go to March 31st not Feb 28 then March 28
                 if(getDay(new Date(masterActivity.createdAt)) !== getDay(currentDate) && getDate(new Date(masterActivity.createdAt)) === recurrence.dayOfMonth) {
                      if(isBefore(currentDate, setDayOfMonth(new Date(masterActivity.createdAt), recurrence.dayOfMonth))) {
                          currentDate = setDayOfMonth(addMonths(new Date(masterActivity.createdAt), iterations), recurrence.dayOfMonth);
@@ -229,19 +229,16 @@ function generateFutureInstancesForNotifications(
     } else if (recurrence.type === 'monthly') {
         if (recurrence.dayOfMonth) {
             let nextIterationDate;
-            // ensure we are in the correct month first by adding a month, then setting day
             const targetMonthCurrentDay = setDayOfMonth(currentDate, recurrence.dayOfMonth);
             if(isAfter(targetMonthCurrentDay, currentDate) && getDate(targetMonthCurrentDay) === recurrence.dayOfMonth){
-                 nextIterationDate = targetMonthCurrentDay; // Still in current month, next valid day
+                 nextIterationDate = targetMonthCurrentDay; 
             } else {
                  nextIterationDate = setDayOfMonth(addMonths(currentDate, 1), recurrence.dayOfMonth);
             }
-            // If original day was e.g. 31, and next month is Feb, date-fns sets to Feb 28/29.
-            // We need to ensure we respect the original dayOfMonth intention if the month allows it.
             if(getDate(nextIterationDate) !== recurrence.dayOfMonth && getDate(new Date(masterActivity.createdAt)) === recurrence.dayOfMonth) {
                  let monthCounter = 1;
                  let potentialDate = setDayOfMonth(addMonths(currentDate, monthCounter), recurrence.dayOfMonth);
-                 while(getDate(potentialDate) !== recurrence.dayOfMonth && monthCounter < 13) { // safety break for 12 months
+                 while(getDate(potentialDate) !== recurrence.dayOfMonth && monthCounter < 13) { 
                     monthCounter++;
                     potentialDate = setDayOfMonth(addMonths(currentDate, monthCounter), recurrence.dayOfMonth);
                  }
@@ -258,13 +255,45 @@ function generateFutureInstancesForNotifications(
   return instances;
 }
 
+// Helper function to convert HSL string to HSL object
+function parseHslString(hslString: string): { h: number; s: number; l: number } | null {
+  if (!hslString) return null;
+  // Regex to capture H, S, L values, accommodating for optional "hsl()" wrapper and percentages
+  const match = hslString.match(/^(?:hsl\(\s*)?(-?\d*\.?\d+)(?:deg|rad|turn|)?\s*[, ]?\s*(-?\d*\.?\d+)%?\s*[, ]?\s*(-?\d*\.?\d+)%?(?:\s*[,/]\s*(-?\d*\.?\d+)\%?)?(?:\s*\))?$/i);
+  if (!match) return null;
+
+  const h = parseFloat(match[1]);
+  const s = parseFloat(match[2]);
+  const l = parseFloat(match[3]);
+
+  if (isNaN(h) || isNaN(s) || isNaN(l)) return null;
+  return { h, s, l };
+}
+
+// Helper function to convert HSL object to HEX string
+function hslToHex(h: number, s: number, l: number): string {
+  s /= 100;
+  l /= 100;
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) =>
+    l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  
+  const toHexByte = (c: number) => {
+    const hex = Math.round(c * 255).toString(16);
+    return hex.length === 1 ? '0' + hex : hex;
+  };
+  
+  return `#${toHexByte(f(0))}${toHexByte(f(8))}${toHexByte(f(4))}`;
+}
+
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [personalActivities, setPersonalActivities] = useState<Activity[]>([]);
   const [workActivities, setWorkActivities] = useState<Activity[]>([]);
   const [allCategories, setAllCategories] = useState<Category[]>([]);
-  const [appMode, setAppModeState] = useState<AppMode>('personal');
-  const [isLoading, setIsLoading] = useState<boolean>(true); // Initialize to true
+  const [appModeState, setAppModeState] = useState<AppMode>('personal');
+  const [isLoading, setIsLoading] = useState<boolean>(true); 
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const { t, locale } = useTranslations(); 
@@ -279,22 +308,58 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [sessionExpiryTimestamp, setSessionExpiryTimestampState] = useState<number | null>(null);
   
   const [uiNotifications, setUINotifications] = useState<UINotification[]>([]);
+  const { theme, resolvedTheme } = useTheme();
+
+
+  // Dynamic theme-color update
+  useEffect(() => {
+    if (typeof window === 'undefined' || isLoading) {
+      return;
+    }
+    // Ensure classes are applied before getting computed style
+    // This timeout allows the DOM to update with theme/mode classes
+    const timerId = setTimeout(() => {
+        const computedStyle = getComputedStyle(document.documentElement);
+        const backgroundHslString = computedStyle.getPropertyValue('--background').trim();
+        
+        const hslValues = parseHslString(backgroundHslString);
+
+        if (hslValues) {
+        const hexColor = hslToHex(hslValues.h, hslValues.s, hslValues.l);
+        
+        let metaThemeColor = document.querySelector('meta[name="theme-color"]');
+        if (!metaThemeColor) {
+            metaThemeColor = document.createElement('meta');
+            metaThemeColor.setAttribute('name', 'theme-color');
+            document.getElementsByTagName('head')[0].appendChild(metaThemeColor);
+        }
+        metaThemeColor.setAttribute('content', hexColor);
+        } else {
+            // Fallback or error logging if HSL parsing fails
+            console.warn("Could not parse --background HSL string:", backgroundHslString);
+        }
+    }, 0); // setTimeout with 0ms defers execution until after current call stack clears
+
+    return () => clearTimeout(timerId);
+
+  }, [theme, resolvedTheme, appModeState, isLoading]);
+
 
 
   const getRawActivities = useCallback(() => {
-    return appMode === 'work' ? workActivities : personalActivities;
-  }, [appMode, workActivities, personalActivities]);
+    return appModeState === 'work' ? workActivities : personalActivities;
+  }, [appModeState, workActivities, personalActivities]);
 
   const currentActivitySetter = useMemo(() => {
-    return appMode === 'work' ? setWorkActivities : setPersonalActivities;
-  }, [appMode]);
+    return appModeState === 'work' ? setWorkActivities : setPersonalActivities;
+  }, [appModeState]);
 
   const filteredCategories = useMemo(() => {
     if (isLoading) return [];
     return allCategories.filter(cat =>
-      !cat.mode || cat.mode === 'all' || cat.mode === appMode
+      !cat.mode || cat.mode === 'all' || cat.mode === appModeState
     );
-  }, [allCategories, appMode, isLoading]);
+  }, [allCategories, appModeState, isLoading]);
 
   const logout = useCallback(() => {
     setIsAuthenticatedState(false);
@@ -314,7 +379,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, []);
 
-  // Effect for initial loading from localStorage - runs once on mount
   useEffect(() => {
     let initialAuth = false;
     try {
@@ -351,7 +415,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (storedAuth === 'true' && storedExpiry) {
         const expiryTime = parseInt(storedExpiry, 10);
         if (Date.now() > expiryTime) {
-          // Session expired, trigger logout logic but don't call logout() directly here to avoid state update during render
           initialAuth = false; 
           localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
           localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
@@ -377,10 +440,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setError("Failed to load saved data.");
       setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
     } finally {
-      setIsLoading(false); // Set isLoading to false after all initial loading logic
+      setIsLoading(false); 
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array means this runs only once on mount
+  }, []); 
 
 
   useEffect(() => {
@@ -404,12 +466,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     if (!isLoading) {
-      localStorage.setItem(LOCAL_STORAGE_KEY_APP_MODE, appMode);
+      localStorage.setItem(LOCAL_STORAGE_KEY_APP_MODE, appModeState);
       const root = document.documentElement;
       root.classList.remove('mode-personal', 'mode-work');
-      root.classList.add(appMode === 'work' ? 'mode-work' : 'mode-personal');
+      root.classList.add(appModeState === 'work' ? 'mode-work' : 'mode-personal');
     }
-  }, [appMode, isLoading]);
+  }, [appModeState, isLoading]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -461,7 +523,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       timestamp: Date.now(),
       read: false,
     };
-    setUINotifications(prev => [newNotification, ...prev.slice(0, 49)]); // Keep max 50 notifications
+    setUINotifications(prev => [newNotification, ...prev.slice(0, 49)]); 
   }, []);
 
 
@@ -478,13 +540,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
       setLastNotificationCheckDay(currentDayOfMonthFromNow);
 
-      const activitiesToScan = appMode === 'work' ? workActivities : personalActivities;
+      const activitiesToScan = appModeState === 'work' ? workActivities : personalActivities;
 
       activitiesToScan.forEach(masterActivity => {
         const activityTitle = masterActivity.title;
         const masterId = masterActivity.id;
 
-        // 5-minute "starting soon" notification
         if (masterActivity.time) {
           const todayInstances = generateFutureInstancesForNotifications(masterActivity, today, endOfDay(today));
           todayInstances.forEach(instance => {
@@ -509,7 +570,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
         }
         
-        // Advanced notifications for recurring tasks
         if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
           const recurrenceType = masterActivity.recurrence.type;
           const futureCheckEndDate = addDays(today, 8); 
@@ -558,7 +618,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, 60000); 
 
     return () => clearInterval(intervalId);
-  }, [personalActivities, workActivities, appMode, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification]);
+  }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification]);
 
 
   useEffect(() => {
@@ -615,7 +675,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       categoryId: activityData.categoryId,
       todos: (activityData.todos || []).map(todo => ({ ...todo, id: uuidv4(), completed: false })),
       createdAt: customCreatedAt !== undefined ? customCreatedAt : Date.now(),
-      time: activityData.time || undefined,
+      time: activityData.time === "" ? undefined : activityData.time,
       notes: activityData.notes || undefined,
       completed: false,
       recurrence: activityData.recurrence || { type: 'none' },
@@ -727,7 +787,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setAllCategories(prev => [...prev, newCategory]);
     const toastDesc = t('toastCategoryAddedDescription', { categoryName: name });
     toast({ title: t('toastCategoryAddedTitle'), description: toastDesc });
-    // addUINotification({ title: t('toastCategoryAddedTitle'), description: toastDesc }); // Example if you want category changes in notification center
   }, [toast, t]);
 
   const updateCategory = useCallback((categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>) => {
@@ -751,7 +810,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const catName = updates.name || allCategories.find(c=>c.id === categoryId)?.name || "";
     const toastDesc = t('toastCategoryUpdatedDescription', { categoryName: catName });
     toast({ title: t('toastCategoryUpdatedTitle'), description: toastDesc });
-    // addUINotification({ title: t('toastCategoryUpdatedTitle'), description: toastDesc });
   }, [toast, t, allCategories]);
 
 
@@ -773,7 +831,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
     const toastDesc = t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name });
     toast({ title: t('toastCategoryDeletedTitle'), description: toastDesc });
-    // addUINotification({ title: t('toastCategoryDeletedTitle'), description: toastDesc });
   }, [toast, allCategories, t]);
 
   const markUINotificationAsRead = useCallback((notificationId: string) => {
@@ -794,10 +851,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   return (
     <AppContext.Provider
       value={{
-        activities: getRawActivities(), // getRawActivities() to ensure it switches based on appMode
+        activities: getRawActivities(), 
         getRawActivities,
         categories: filteredCategories,
-        appMode,
+        appMode: appModeState,
         setAppMode,
         addActivity,
         updateActivity,
@@ -831,3 +888,4 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+
