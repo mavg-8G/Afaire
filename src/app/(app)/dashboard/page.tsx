@@ -7,7 +7,7 @@ import { BarChart } from '@/components/ui/chart';
 import type { BarChartDataItem, BarProps as ChartBarProps } from '@/components/ui/chart';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Activity, Category } from '@/lib/types';
 import { useTranslations } from '@/contexts/language-context';
@@ -38,6 +38,7 @@ const isActivityChartCompleted = (activity: Activity): boolean => {
   if (activity.todos && activity.todos.length > 0) {
     return activity.todos.every(todo => todo.completed);
   } else {
+    // If no todos, check the activity's own completed status
     return !!activity.completed;
   }
 };
@@ -141,10 +142,10 @@ export default function DashboardPage() {
   if (!hasMounted) {
     return (
       <div className="container mx-auto py-8 px-4">
-        <div className="mb-6 flex justify-start">
+        <div className="mb-6 flex flex-col md:flex-row md:justify-between md:items-center">
            <Skeleton className="h-10 w-36" />
+           <Skeleton className="h-10 w-full md:w-auto md:max-w-xs mt-4 md:mt-0" />
         </div>
-        <Skeleton className="h-10 w-full md:w-1/2 mb-6" />
         <Card className="shadow-lg">
           <CardHeader>
             <Skeleton className="h-8 w-3/4" />
@@ -160,39 +161,41 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto py-8 px-4">
-      <div className="mb-6 flex justify-start">
+      <div className="mb-6 flex flex-col gap-4 md:flex-row md:justify-between md:items-center">
         <Link href="/" passHref>
           <Button variant="outline">
             <ArrowLeft className="mr-2 h-4 w-4" />
             {t('backToCalendar')}
           </Button>
         </Link>
+        <Tabs value={dashboardMainView} onValueChange={(value) => setDashboardMainView(value as DashboardMainView)} className="w-full md:w-auto">
+          <TabsList className="grid w-full grid-cols-2 md:w-auto mt-4 md:mt-0">
+            <TabsTrigger value="chart">
+              <BarChart3 className="mr-2 h-4 w-4" />
+              {t('dashboardChartView')}
+            </TabsTrigger>
+            <TabsTrigger value="list">
+              <ListChecks className="mr-2 h-4 w-4" />
+              {t('dashboardListView')}
+            </TabsTrigger>
+          </TabsList>
+          {/* No TabsContent here, content is rendered conditionally below */}
+        </Tabs>
       </div>
 
-      <Tabs value={dashboardMainView} onValueChange={(value) => setDashboardMainView(value as DashboardMainView)} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:w-1/2 mb-6">
-          <TabsTrigger value="chart">
-            <BarChart3 className="mr-2 h-4 w-4" />
-            {t('dashboardChartView')}
-          </TabsTrigger>
-          <TabsTrigger value="list">
-            <ListChecks className="mr-2 h-4 w-4" />
-            {t('dashboardListView')}
-          </TabsTrigger>
-        </TabsList>
-
-        <Card className="shadow-lg">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <LayoutDashboard className="h-6 w-6 text-primary" />
-              <CardTitle>{t('dashboardTitle')}</CardTitle>
-            </div>
-            <CardDescription>
-              {t('dashboardMainDescription')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-2">
-            <TabsContent value="chart" className="mt-0">
+      <Card className="shadow-lg">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <LayoutDashboard className="h-6 w-6 text-primary" />
+            <CardTitle>{t('dashboardTitle')}</CardTitle>
+          </div>
+          <CardDescription>
+            {t('dashboardMainDescription')}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-2">
+          {dashboardMainView === 'chart' && (
+            <div> {/* Replaces TabsContent value="chart" */}
               <p className="text-sm text-muted-foreground mb-4">
                 {chartViewMode === 'weekly' ? t('dashboardViewWeekly') : t('dashboardViewMonthly')}
               </p>
@@ -209,9 +212,11 @@ export default function DashboardPage() {
                   {t('dashboardNoData')}
                 </div>
               )}
-            </TabsContent>
+            </div>
+          )}
 
-            <TabsContent value="list" className="mt-0">
+          {dashboardMainView === 'list' && (
+            <div> {/* Replaces TabsContent value="list" */}
               <Tabs value={listViewTimeRange} onValueChange={(value) => setListViewTimeRange(value as ListViewTimeRange)} className="mb-4">
                 <TabsList className="grid w-full grid-cols-2 md:w-1/2">
                   <TabsTrigger value="last7days">{t('dashboardListLast7Days')}</TabsTrigger>
@@ -268,10 +273,10 @@ export default function DashboardPage() {
                   {t('dashboardNoActivitiesForList')}
                 </div>
               )}
-            </TabsContent>
-          </CardContent>
-        </Card>
-      </Tabs>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
