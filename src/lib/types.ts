@@ -19,15 +19,15 @@ export interface Activity {
   title: string;
   categoryId: string;
   todos: Todo[];
-  createdAt: number; 
-  time?: string; 
-  completed?: boolean; 
-  notes?: string; 
+  createdAt: number;
+  time?: string;
+  completed?: boolean;
+  notes?: string;
   recurrence?: RecurrenceRule | null;
   completedOccurrences?: Record<string, boolean>;
-  isRecurringInstance?: boolean; 
-  originalInstanceDate?: number; 
-  masterActivityId?: string; 
+  isRecurringInstance?: boolean;
+  originalInstanceDate?: number;
+  masterActivityId?: string;
 }
 
 export type AppMode = 'personal' | 'work';
@@ -46,6 +46,36 @@ export interface UINotification {
   description: string;
   timestamp: number;
   read: boolean;
-  activityId?: string; // Optional: to link notification to an activity
-  instanceDate?: number; // Optional: if it's for a specific recurring instance
+  activityId?: string;
+  instanceDate?: number;
+}
+
+export type HistoryLogActionKey =
+  | 'historyLogLogin'
+  | 'historyLogLogout'
+  | 'historyLogAddActivityPersonal'
+  | 'historyLogAddActivityWork'
+  | 'historyLogUpdateActivityPersonal'
+  | 'historyLogUpdateActivityWork'
+  | 'historyLogDeleteActivityPersonal'
+  | 'historyLogDeleteActivityWork'
+  | 'historyLogToggleActivityCompletionPersonal'
+  | 'historyLogToggleActivityCompletionWork'
+  | 'historyLogAddCategoryPersonal'
+  | 'historyLogAddCategoryWork'
+  | 'historyLogAddCategoryAll'
+  | 'historyLogUpdateCategoryPersonal'
+  | 'historyLogUpdateCategoryWork'
+  | 'historyLogUpdateCategoryAll'
+  | 'historyLogDeleteCategory'
+  | 'historyLogSwitchToPersonalMode'
+  | 'historyLogSwitchToWorkMode'
+  | 'historyLogPasswordChange';
+
+export interface HistoryLogEntry {
+  id: string;
+  timestamp: number;
+  actionKey: HistoryLogActionKey;
+  details?: Record<string, string | number | boolean | undefined>;
+  scope: 'account' | 'personal' | 'work' | 'category';
 }

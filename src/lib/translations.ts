@@ -26,6 +26,7 @@ export type Translations = {
   markAllAsRead: string;
   clearAllNotifications: string;
   notificationBellLabel: string;
+  viewHistory: string;
 
 
   // CategoriesPage
@@ -61,7 +62,7 @@ export type Translations = {
   activityTitleLabel: string;
   categoryLabel: string;
   selectCategoryPlaceholder: string;
-  loadingCategoriesPlaceholder: string; // New key
+  loadingCategoriesPlaceholder: string;
   activityDateLabel: string;
   pickADate: string;
   activityTimeLabel: string;
@@ -188,16 +189,45 @@ export type Translations = {
   dashboardMainDescription: string;
   dashboardChartView: string;
   dashboardListView: string;
-  dashboardViewWeekly: string; // Used for chart time range
-  dashboardViewMonthly: string; // Used for chart time range
+  dashboardViewWeekly: string;
+  dashboardViewMonthly: string;
   dashboardChartTotalActivities: string;
   dashboardChartCompletedActivities: string;
   dashboardWeekLabel: string;
-  dashboardNoData: string; // For chart
-  dashboardListLast7Days: string; // For list time range
-  dashboardListCurrentMonth: string; // For list time range
-  dashboardNoActivitiesForList: string; // For list view
+  dashboardNoData: string;
+  dashboardListLast7Days: string;
+  dashboardListCurrentMonth: string;
+  dashboardNoActivitiesForList: string;
   dashboardNotesLabel: string;
+
+  // History Page
+  historyPageTitle: string;
+  historyPageDescription: string;
+  noHistoryYet: string;
+  historyLogLogin: string;
+  historyLogLogout: string;
+  historyLogAddActivityPersonal: (params: { title: string }) => string;
+  historyLogAddActivityWork: (params: { title: string }) => string;
+  historyLogUpdateActivityPersonal: (params: { title: string }) => string;
+  historyLogUpdateActivityWork: (params: { title: string }) => string;
+  historyLogDeleteActivityPersonal: (params: { title: string }) => string;
+  historyLogDeleteActivityWork: (params: { title: string }) => string;
+  historyLogToggleActivityCompletionPersonal: (params: { title: string, completed: boolean }) => string;
+  historyLogToggleActivityCompletionWork: (params: { title: string, completed: boolean }) => string;
+  historyLogAddCategoryPersonal: (params: { name: string }) => string;
+  historyLogAddCategoryWork: (params: { name: string }) => string;
+  historyLogAddCategoryAll: (params: { name: string }) => string;
+  historyLogUpdateCategoryPersonal: (params: { name: string }) => string;
+  historyLogUpdateCategoryWork: (params: { name: string }) => string;
+  historyLogUpdateCategoryAll: (params: { name: string }) => string;
+  historyLogDeleteCategory: (params: { name: string }) => string;
+  historyLogSwitchToPersonalMode: string;
+  historyLogSwitchToWorkMode: string;
+  historyLogPasswordChange: string;
+  historyScopeAccount: string;
+  historyScopePersonal: string;
+  historyScopeWork: string;
+  historyScopeCategory: string;
 
 };
 
@@ -226,6 +256,7 @@ export const translations: Record<Locale, Translations> = {
     markAllAsRead: "Mark all as read",
     clearAllNotifications: "Clear all",
     notificationBellLabel: "View notifications",
+    viewHistory: "View History",
     backToCalendar: "Back to Calendar",
     addCategory: "Add Category",
     editCategory: "Edit Category",
@@ -366,16 +397,43 @@ export const translations: Record<Locale, Translations> = {
     dashboardMainDescription: "Track your activity progress and view summaries.",
     dashboardChartView: "Chart View",
     dashboardListView: "List View",
-    dashboardViewWeekly: "Last 7 Days", // Used for chart time range and list filter
-    dashboardViewMonthly: "Current Month (by Week)", // Used for chart time range
+    dashboardViewWeekly: "Last 7 Days",
+    dashboardViewMonthly: "Current Month (by Week)",
     dashboardChartTotalActivities: "Total Activities",
     dashboardChartCompletedActivities: "Completed Activities",
     dashboardWeekLabel: "W",
-    dashboardNoData: "No activity data available for the selected period.", // For chart
-    dashboardListLast7Days: "Last 7 Days", // For list time range
-    dashboardListCurrentMonth: "Current Month", // For list time range
-    dashboardNoActivitiesForList: "No activities found for the selected period.", // For list view
+    dashboardNoData: "No activity data available for the selected period.",
+    dashboardListLast7Days: "Last 7 Days",
+    dashboardListCurrentMonth: "Current Month",
+    dashboardNoActivitiesForList: "No activities found for the selected period.",
     dashboardNotesLabel: "Notes",
+    historyPageTitle: "Activity History",
+    historyPageDescription: "Recent actions performed during this session.",
+    noHistoryYet: "No activity recorded in this session yet.",
+    historyLogLogin: "Logged in.",
+    historyLogLogout: "Logged out.",
+    historyLogAddActivityPersonal: (params) => `Added Personal Activity: "${params.title}".`,
+    historyLogAddActivityWork: (params) => `Added Work Activity: "${params.title}".`,
+    historyLogUpdateActivityPersonal: (params) => `Updated Personal Activity: "${params.title}".`,
+    historyLogUpdateActivityWork: (params) => `Updated Work Activity: "${params.title}".`,
+    historyLogDeleteActivityPersonal: (params) => `Deleted Personal Activity: "${params.title}".`,
+    historyLogDeleteActivityWork: (params) => `Deleted Work Activity: "${params.title}".`,
+    historyLogToggleActivityCompletionPersonal: (params) => `Marked Personal Activity "${params.title}" as ${params.completed ? 'completed' : 'incomplete'}.`,
+    historyLogToggleActivityCompletionWork: (params) => `Marked Work Activity "${params.title}" as ${params.completed ? 'completed' : 'incomplete'}.`,
+    historyLogAddCategoryPersonal: (params) => `Added Personal Category: "${params.name}".`,
+    historyLogAddCategoryWork: (params) => `Added Work Category: "${params.name}".`,
+    historyLogAddCategoryAll: (params) => `Added Category (All Modes): "${params.name}".`,
+    historyLogUpdateCategoryPersonal: (params) => `Updated Personal Category: "${params.name}".`,
+    historyLogUpdateCategoryWork: (params) => `Updated Work Category: "${params.name}".`,
+    historyLogUpdateCategoryAll: (params) => `Updated Category (All Modes): "${params.name}".`,
+    historyLogDeleteCategory: (params) => `Deleted Category: "${params.name}".`,
+    historyLogSwitchToPersonalMode: "Switched to Personal Mode.",
+    historyLogSwitchToWorkMode: "Switched to Work Mode.",
+    historyLogPasswordChange: "Password changed.",
+    historyScopeAccount: "Account",
+    historyScopePersonal: "Personal",
+    historyScopeWork: "Work",
+    historyScopeCategory: "Category",
   },
   es: {
     addActivity: "Añadir Actividad",
@@ -401,6 +459,7 @@ export const translations: Record<Locale, Translations> = {
     markAllAsRead: "Marcar todas como leídas",
     clearAllNotifications: "Limpiar todas",
     notificationBellLabel: "Ver notificaciones",
+    viewHistory: "Ver Historial",
     backToCalendar: "Volver al Calendario",
     addCategory: "Añadir Categoría",
     editCategory: "Editar Categoría",
@@ -541,16 +600,43 @@ export const translations: Record<Locale, Translations> = {
     dashboardMainDescription: "Sigue el progreso de tus actividades y visualiza resúmenes.",
     dashboardChartView: "Vista de Gráfico",
     dashboardListView: "Vista de Lista",
-    dashboardViewWeekly: "Últimos 7 Días", // Usado para rango de gráfico y filtro de lista
-    dashboardViewMonthly: "Mes Actual (por Semana)", // Usado para rango de gráfico
+    dashboardViewWeekly: "Últimos 7 Días",
+    dashboardViewMonthly: "Mes Actual (por Semana)",
     dashboardChartTotalActivities: "Actividades Totales",
     dashboardChartCompletedActivities: "Actividades Completadas",
     dashboardWeekLabel: "S",
-    dashboardNoData: "No hay datos de actividad disponibles para el período seleccionado.", // Para gráfico
-    dashboardListLast7Days: "Últimos 7 Días", // Para rango de lista
-    dashboardListCurrentMonth: "Mes Actual", // Para rango de lista
-    dashboardNoActivitiesForList: "No se encontraron actividades para el período seleccionado.", // Para vista de lista
+    dashboardNoData: "No hay datos de actividad disponibles para el período seleccionado.",
+    dashboardListLast7Days: "Últimos 7 Días",
+    dashboardListCurrentMonth: "Mes Actual",
+    dashboardNoActivitiesForList: "No se encontraron actividades para el período seleccionado.",
     dashboardNotesLabel: "Notas",
+    historyPageTitle: "Historial de Actividad",
+    historyPageDescription: "Acciones recientes realizadas durante esta sesión.",
+    noHistoryYet: "Aún no se ha registrado actividad en esta sesión.",
+    historyLogLogin: "Sesión iniciada.",
+    historyLogLogout: "Sesión cerrada.",
+    historyLogAddActivityPersonal: (params) => `Actividad Personal añadida: "${params.title}".`,
+    historyLogAddActivityWork: (params) => `Actividad de Trabajo añadida: "${params.title}".`,
+    historyLogUpdateActivityPersonal: (params) => `Actividad Personal actualizada: "${params.title}".`,
+    historyLogUpdateActivityWork: (params) => `Actividad de Trabajo actualizada: "${params.title}".`,
+    historyLogDeleteActivityPersonal: (params) => `Actividad Personal eliminada: "${params.title}".`,
+    historyLogDeleteActivityWork: (params) => `Actividad de Trabajo eliminada: "${params.title}".`,
+    historyLogToggleActivityCompletionPersonal: (params) => `Actividad Personal "${params.title}" marcada como ${params.completed ? 'completada' : 'incompleta'}.`,
+    historyLogToggleActivityCompletionWork: (params) => `Actividad de Trabajo "${params.title}" marcada como ${params.completed ? 'completada' : 'incompleta'}.`,
+    historyLogAddCategoryPersonal: (params) => `Categoría Personal añadida: "${params.name}".`,
+    historyLogAddCategoryWork: (params) => `Categoría de Trabajo añadida: "${params.name}".`,
+    historyLogAddCategoryAll: (params) => `Categoría (Todos los Modos) añadida: "${params.name}".`,
+    historyLogUpdateCategoryPersonal: (params) => `Categoría Personal actualizada: "${params.name}".`,
+    historyLogUpdateCategoryWork: (params) => `Categoría de Trabajo actualizada: "${params.name}".`,
+    historyLogUpdateCategoryAll: (params) => `Categoría (Todos los Modos) actualizada: "${params.name}".`,
+    historyLogDeleteCategory: (params) => `Categoría eliminada: "${params.name}".`,
+    historyLogSwitchToPersonalMode: "Cambiado a Modo Personal.",
+    historyLogSwitchToWorkMode: "Cambiado a Modo Trabajo.",
+    historyLogPasswordChange: "Contraseña cambiada.",
+    historyScopeAccount: "Cuenta",
+    historyScopePersonal: "Personal",
+    historyScopeWork: "Trabajo",
+    historyScopeCategory: "Categoría",
   },
 };
 

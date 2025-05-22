@@ -2,7 +2,7 @@
 "use client";
 import type { ReactNode } from 'react';
 import React, { createContext, useState, useCallback, useEffect, useMemo } from 'react';
-import type { Activity, Todo, Category, AppMode, RecurrenceRule, UINotification } from '@/lib/types';
+import type { Activity, Todo, Category, AppMode, RecurrenceRule, UINotification, HistoryLogEntry, HistoryLogActionKey } from '@/lib/types';
 import { INITIAL_CATEGORIES } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
@@ -14,7 +14,7 @@ import {
   isBefore, isAfter,
   getDay, getDate,
   isWithinInterval,
-  setDate as setDayOfMonthFn, 
+  setDate as setDayOfMonthFn,
   addYears, isEqual,
   formatDistanceToNowStrict,
 } from 'date-fns';
@@ -39,7 +39,7 @@ export interface AppContextType {
     },
     customCreatedAt?: number
   ) => void;
-  updateActivity: (activityId: string, updates: Partial<Activity>) => void;
+  updateActivity: (activityId: string, updates: Partial<Activity>, originalActivity?: Activity) => void;
   deleteActivity: (activityId: string) => void;
   toggleOccurrenceCompletion: (masterActivityId: string, occurrenceDateTimestamp: number, completed: boolean) => void;
   addTodoToActivity: (activityId: string, todoText: string) => void;
@@ -47,7 +47,7 @@ export interface AppContextType {
   deleteTodoFromActivity: (activityId: string, todoId: string, masterActivityId?: string) => void;
   getCategoryById: (categoryId: string) => Category | undefined;
   addCategory: (name: string, iconName: string, mode: AppMode | 'all') => void;
-  updateCategory: (categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>) => void;
+  updateCategory: (categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData: Category) => void;
   deleteCategory: (categoryId: string) => void;
   isLoading: boolean;
   error: string | null;
@@ -60,12 +60,16 @@ export interface AppContextType {
   setLockoutEndTime: (timestamp: number | null) => void;
   sessionExpiryTimestamp: number | null;
   logout: () => void;
+  logPasswordChange: () => void;
 
   uiNotifications: UINotification[];
   addUINotification: (data: Omit<UINotification, 'id' | 'timestamp' | 'read'>) => void;
   markUINotificationAsRead: (notificationId: string) => void;
   markAllUINotificationsAsRead: () => void;
   clearAllUINotifications: () => void;
+
+  historyLog: HistoryLogEntry[];
+  addHistoryLogEntry: (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope?: HistoryLogEntry['scope']) => void;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -79,6 +83,7 @@ const LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS = 'todoFlowLoginAttempts';
 const LOCAL_STORAGE_KEY_LOCKOUT_END_TIME = 'todoFlowLockoutEndTime';
 const LOCAL_STORAGE_KEY_SESSION_EXPIRY = 'todoFlowSessionExpiry';
 const LOCAL_STORAGE_KEY_UI_NOTIFICATIONS = 'todoFlowUINotifications_v1';
+const SESSION_STORAGE_KEY_HISTORY_LOG = 'todoFlowHistoryLog_v1';
 
 
 const SESSION_DURATION_24_HOURS_MS = 24 * 60 * 60 * 1000;
@@ -128,7 +133,7 @@ function generateFutureInstancesForNotifications(
       if (recurrence.type === 'daily') {
           currentDate = rangeStartDate;
       } else if (recurrence.type === 'weekly' && recurrence.daysOfWeek && recurrence.daysOfWeek.length > 0) {
-          let tempDate = startOfDay(rangeStartDate); 
+          let tempDate = startOfDay(rangeStartDate);
           while(isBefore(tempDate, new Date(masterActivity.createdAt)) || !recurrence.daysOfWeek.includes(getDay(tempDate)) || isBefore(tempDate, rangeStartDate)) {
               tempDate = addDays(tempDate, 1);
               if (isAfter(tempDate, rangeEndDate)) break;
@@ -139,10 +144,10 @@ function generateFutureInstancesForNotifications(
           if (isBefore(tempMasterStartMonthDay, new Date(masterActivity.createdAt))) {
               tempMasterStartMonthDay = addMonths(tempMasterStartMonthDay, 1);
           }
-          
+
           currentDate = setDayOfMonthFn(rangeStartDate, recurrence.dayOfMonth);
-          if (isBefore(currentDate, rangeStartDate)) currentDate = addMonths(currentDate,1); 
-          if (isBefore(currentDate, tempMasterStartMonthDay)) { 
+          if (isBefore(currentDate, rangeStartDate)) currentDate = addMonths(currentDate,1);
+          if (isBefore(currentDate, tempMasterStartMonthDay)) {
              currentDate = tempMasterStartMonthDay;
           }
       }
@@ -151,7 +156,7 @@ function generateFutureInstancesForNotifications(
 
   const seriesEndDate = recurrence.endDate ? new Date(recurrence.endDate) : null;
   let iterations = 0;
-  const maxIterations = 366 * 1; 
+  const maxIterations = 366 * 1;
 
   while (iterations < maxIterations && !isAfter(currentDate, rangeEndDate)) {
     iterations++;
@@ -201,7 +206,7 @@ function generateFutureInstancesForNotifications(
     if (recurrence.type === 'daily') {
         currentDate = addDays(currentDate, 1);
     } else if (recurrence.type === 'weekly') {
-        currentDate = addDays(currentDate, 1); 
+        currentDate = addDays(currentDate, 1);
     } else if (recurrence.type === 'monthly') {
         if (recurrence.dayOfMonth) {
             let nextIterationDate;
@@ -215,7 +220,7 @@ function generateFutureInstancesForNotifications(
             }
             currentDate = nextIterationDate;
         } else {
-            currentDate = addDays(currentDate, 1); 
+            currentDate = addDays(currentDate, 1);
         }
     } else {
       break;
@@ -274,6 +279,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [sessionExpiryTimestamp, setSessionExpiryTimestampState] = useState<number | null>(null);
 
   const [uiNotifications, setUINotifications] = useState<UINotification[]>([]);
+  const [historyLog, setHistoryLog] = useState<HistoryLogEntry[]>([]);
   const { theme, resolvedTheme } = useTheme();
 
 
@@ -316,7 +322,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [appModeState]);
 
   const filteredCategories = useMemo(() => {
-    if (isLoading) { // Ensure categories are empty if AppProvider is still loading
+    if (isLoading) {
       return [];
     }
     return allCategories.filter(cat =>
@@ -324,23 +330,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
   }, [allCategories, appModeState, isLoading]);
 
+  const addHistoryLogEntry = useCallback((actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope: HistoryLogEntry['scope'] = 'account') => {
+    const newEntry: HistoryLogEntry = {
+      id: uuidv4(),
+      timestamp: Date.now(),
+      actionKey,
+      details,
+      scope,
+    };
+    setHistoryLog(prevLog => [newEntry, ...prevLog.slice(0, 99)]); // Keep last 100 entries
+  }, []);
+
   const logout = useCallback(() => {
+    addHistoryLogEntry('historyLogLogout', undefined, 'account');
     setIsAuthenticatedState(false);
     setLoginAttemptsState(0);
     setLockoutEndTimeState(null);
     setSessionExpiryTimestampState(null);
+    setHistoryLog([]); // Clear history on logout
 
     if (typeof window !== 'undefined') {
         localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
         localStorage.removeItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
         localStorage.removeItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
         localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
+        sessionStorage.removeItem(SESSION_STORAGE_KEY_HISTORY_LOG);
     }
 
     if (logoutChannel) {
       logoutChannel.postMessage('logout_event');
     }
-  }, []);
+  }, [addHistoryLogEntry]);
 
  useEffect(() => {
     let initialAuth = false;
@@ -385,16 +405,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (storedAuth === 'true' && storedExpiry) {
         const expiryTime = parseInt(storedExpiry, 10);
         if (Date.now() > expiryTime) {
-          initialAuth = false; // Session expired
-           // No need to call full logout() here, just clear the flags
+          initialAuth = false;
           localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
           localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
+          sessionStorage.removeItem(SESSION_STORAGE_KEY_HISTORY_LOG); // Clear history if session expired
         } else {
           initialAuth = true;
           setSessionExpiryTimestampState(expiryTime);
         }
       }
       setIsAuthenticatedState(initialAuth);
+      if (initialAuth) {
+        // Load history log from session storage only if authenticated
+        const storedHistoryLog = sessionStorage.getItem(SESSION_STORAGE_KEY_HISTORY_LOG);
+        if (storedHistoryLog) setHistoryLog(JSON.parse(storedHistoryLog));
+      }
 
 
       const storedAttempts = localStorage.getItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
@@ -409,7 +434,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (err) {
       console.error("Failed to load data from local storage", err);
       setError("Failed to load saved data.");
-       if (allCategories.length === 0) { 
+       if (allCategories.length === 0) {
         setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
       }
     } finally {
@@ -488,6 +513,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [uiNotifications, isLoading]);
 
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) { // Only save history if authenticated
+      sessionStorage.setItem(SESSION_STORAGE_KEY_HISTORY_LOG, JSON.stringify(historyLog));
+    }
+  }, [historyLog, isLoading, isAuthenticated]);
+
 
   const addUINotification = useCallback((data: Omit<UINotification, 'id' | 'timestamp' | 'read'>) => {
     const newNotification: UINotification = {
@@ -545,7 +576,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
           const recurrenceType = masterActivity.recurrence.type;
-          const futureCheckEndDate = addDays(today, 8); 
+          const futureCheckEndDate = addDays(today, 8);
           const upcomingInstances = generateFutureInstancesForNotifications(masterActivity, addDays(today,1), futureCheckEndDate);
 
           upcomingInstances.forEach(instance => {
@@ -610,10 +641,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [isAuthenticated, logout]);
 
   const setAppMode = useCallback((mode: AppMode) => {
+    if (mode !== appModeState) {
+        addHistoryLogEntry(mode === 'personal' ? 'historyLogSwitchToPersonalMode' : 'historyLogSwitchToWorkMode', undefined, 'account');
+    }
     setAppModeState(mode);
-  }, []);
+  }, [appModeState, addHistoryLogEntry]);
 
   const setIsAuthenticated = useCallback((value: boolean, rememberMe: boolean = false) => {
+    if (value && !isAuthenticated) { // Log only on actual login event
+        addHistoryLogEntry('historyLogLogin', undefined, 'account');
+        // Clear history log from previous session if any
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem(SESSION_STORAGE_KEY_HISTORY_LOG);
+        }
+        setHistoryLog([]);
+    }
     setIsAuthenticatedState(value);
     if (value) {
       const nowTime = Date.now();
@@ -623,7 +665,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } else {
       setSessionExpiryTimestampState(null);
     }
-  }, []);
+  }, [isAuthenticated, addHistoryLogEntry]);
+
+  const logPasswordChange = useCallback(() => {
+    addHistoryLogEntry('historyLogPasswordChange', undefined, 'account');
+  }, [addHistoryLogEntry]);
 
   const setLoginAttempts = useCallback((attempts: number) => {
     setLoginAttemptsState(attempts);
@@ -655,12 +701,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       completedOccurrences: {},
     };
     currentActivitySetter(prev => [...prev, newActivity]);
-  }, [currentActivitySetter]);
+    addHistoryLogEntry(
+      appModeState === 'personal' ? 'historyLogAddActivityPersonal' : 'historyLogAddActivityWork',
+      { title: newActivity.title },
+      appModeState
+    );
+  }, [currentActivitySetter, appModeState, addHistoryLogEntry]);
 
-  const updateActivity = useCallback((activityId: string, updates: Partial<Activity>) => {
+  const updateActivity = useCallback((activityId: string, updates: Partial<Activity>, originalActivity?: Activity) => {
+    let activityTitleForLog = updates.title || originalActivity?.title || 'Unknown Activity';
     currentActivitySetter(prev =>
       prev.map(act => {
         if (act.id === activityId) {
+          if (!originalActivity) originalActivity = act; // Capture original if not passed
+          activityTitleForLog = updates.title || originalActivity.title; // Ensure title is captured
+
           const updatedRecurrence = updates.recurrence?.type === 'none'
             ? { type: 'none' }
             : updates.recurrence || act.recurrence;
@@ -681,13 +736,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return act;
       })
     );
-  }, [currentActivitySetter]);
+     addHistoryLogEntry(
+      appModeState === 'personal' ? 'historyLogUpdateActivityPersonal' : 'historyLogUpdateActivityWork',
+      { title: activityTitleForLog }, // Log with potentially updated title
+      appModeState
+    );
+  }, [currentActivitySetter, appModeState, addHistoryLogEntry]);
 
   const deleteActivity = useCallback((activityId: string) => {
+    let deletedActivityTitle = 'Unknown Activity';
+    const currentActivities = appModeState === 'work' ? workActivities : personalActivities;
+    const activityToDelete = currentActivities.find(act => act.id === activityId);
+    if (activityToDelete) {
+        deletedActivityTitle = activityToDelete.title;
+    }
+
     currentActivitySetter(prev => prev.filter(act => act.id !== activityId));
-  }, [currentActivitySetter]);
+    addHistoryLogEntry(
+        appModeState === 'personal' ? 'historyLogDeleteActivityPersonal' : 'historyLogDeleteActivityWork',
+        { title: deletedActivityTitle },
+        appModeState
+    );
+  }, [currentActivitySetter, appModeState, addHistoryLogEntry, personalActivities, workActivities]);
 
   const toggleOccurrenceCompletion = useCallback((masterActivityId: string, occurrenceDateTimestamp: number, completedState: boolean) => {
+    let activityTitleForLog = 'Unknown Activity';
+    const currentActivities = appModeState === 'work' ? workActivities : personalActivities;
+    const masterActivity = currentActivities.find(act => act.id === masterActivityId);
+    if (masterActivity) {
+      activityTitleForLog = masterActivity.title;
+    }
+
     const occurrenceDateKey = formatISO(new Date(occurrenceDateTimestamp), { representation: 'date' });
     currentActivitySetter(prevActivities =>
       prevActivities.map(act => {
@@ -703,7 +782,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return act;
       })
     );
-  }, [currentActivitySetter]);
+    addHistoryLogEntry(
+        appModeState === 'personal' ? 'historyLogToggleActivityCompletionPersonal' : 'historyLogToggleActivityCompletionWork',
+        { title: activityTitleForLog, completed: completedState },
+        appModeState
+    );
+  }, [currentActivitySetter, appModeState, addHistoryLogEntry, personalActivities, workActivities]);
 
 
   const addTodoToActivity = useCallback((activityId: string, todoText: string) => {
@@ -745,7 +829,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const getCategoryById = useCallback(
     (categoryId: string) => {
-      // Use allCategories here because filteredCategories might not yet be updated if appMode changed recently
       return allCategories.find(cat => cat.id === categoryId)
     },
     [allCategories]
@@ -763,9 +846,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setAllCategories(prev => [...prev, newCategory]);
     const toastDesc = t('toastCategoryAddedDescription', { categoryName: name });
     toast({ title: t('toastCategoryAddedTitle'), description: toastDesc });
-  }, [toast, t]);
 
-  const updateCategory = useCallback((categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>) => {
+    let actionKey: HistoryLogActionKey;
+    if (mode === 'personal') actionKey = 'historyLogAddCategoryPersonal';
+    else if (mode === 'work') actionKey = 'historyLogAddCategoryWork';
+    else actionKey = 'historyLogAddCategoryAll';
+    addHistoryLogEntry(actionKey, { name }, 'category');
+
+  }, [toast, t, addHistoryLogEntry]);
+
+  const updateCategory = useCallback((categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData: Category) => {
     setAllCategories(prev =>
       prev.map(cat => {
         if (cat.id === categoryId) {
@@ -783,15 +873,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return cat;
       })
     );
-    const catName = updates.name || allCategories.find(c=>c.id === categoryId)?.name || "";
+    const catName = updates.name || oldCategoryData.name || "";
+    const catMode = updates.mode || oldCategoryData.mode || "all";
     const toastDesc = t('toastCategoryUpdatedDescription', { categoryName: catName });
     toast({ title: t('toastCategoryUpdatedTitle'), description: toastDesc });
-  }, [toast, t, allCategories]);
+
+    let actionKey: HistoryLogActionKey;
+    if (catMode === 'personal') actionKey = 'historyLogUpdateCategoryPersonal';
+    else if (catMode === 'work') actionKey = 'historyLogUpdateCategoryWork';
+    else actionKey = 'historyLogUpdateCategoryAll';
+    addHistoryLogEntry(actionKey, { name: catName }, 'category');
+
+  }, [toast, t, addHistoryLogEntry, allCategories]);
 
 
   const deleteCategory = useCallback((categoryId: string) => {
     const categoryToDelete = allCategories.find(cat => cat.id === categoryId);
     if (!categoryToDelete) return;
+
+    addHistoryLogEntry('historyLogDeleteCategory', { name: categoryToDelete.name }, 'category');
 
     setAllCategories(prev => prev.filter(cat => cat.id !== categoryId));
 
@@ -807,7 +907,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
     const toastDesc = t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name });
     toast({ title: t('toastCategoryDeletedTitle'), description: toastDesc });
-  }, [toast, allCategories, t]);
+  }, [toast, allCategories, t, addHistoryLogEntry]);
 
   const markUINotificationAsRead = useCallback((notificationId: string) => {
     setUINotifications(prev =>
@@ -853,16 +953,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setLockoutEndTime,
         sessionExpiryTimestamp,
         logout,
+        logPasswordChange,
         uiNotifications,
         addUINotification,
         markUINotificationAsRead,
         markAllUINotificationsAsRead,
         clearAllUINotifications,
+        historyLog,
+        addHistoryLogEntry,
       }}
     >
       {children}
     </AppContext.Provider>
   );
 };
-
-    

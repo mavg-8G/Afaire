@@ -28,6 +28,7 @@ import { useTranslations } from '@/contexts/language-context';
 import { HARDCODED_PASSWORD } from '@/lib/constants';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Terminal, Eye, EyeOff } from 'lucide-react';
+import { useAppStore } from '@/hooks/use-app-store';
 
 
 const PASSWORD_MIN_LENGTH = 6;
@@ -40,13 +41,14 @@ interface ChangePasswordModalProps {
 export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProps) {
   const { t } = useTranslations();
   const { toast } = useToast();
+  const { logPasswordChange } = useAppStore(); // Get the logging function
   const [serverError, setServerError] = useState<string | null>(null);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
 
   const changePasswordFormSchema = z.object({
-    currentPassword: z.string().min(1, t('passwordUpdateErrorIncorrectCurrent')), 
+    currentPassword: z.string().min(1, t('passwordUpdateErrorIncorrectCurrent')),
     newPassword: z.string().min(PASSWORD_MIN_LENGTH, t('passwordMinLength', { length: PASSWORD_MIN_LENGTH })),
     confirmNewPassword: z.string().min(1, t('passwordUpdateErrorConfirmPasswordRequired')),
   }).refine(data => data.newPassword === data.confirmNewPassword, {
@@ -74,6 +76,9 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
       setServerError(t('passwordUpdateErrorIncorrectCurrent'));
       return;
     }
+
+    // Log the password change event
+    logPasswordChange();
 
     toast({
       title: t('passwordUpdateSuccessTitle'),
@@ -214,4 +219,3 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
     </Dialog>
   );
 }
-

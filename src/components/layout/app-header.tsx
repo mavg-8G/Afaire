@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Settings, Languages, Sun, Moon, Laptop, MoreVertical, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal } from 'lucide-react';
+import { Layers, Languages, Sun, Moon, Laptop, MoreVertical, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon } from 'lucide-react';
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { APP_NAME } from '@/lib/constants';
 import ChangePasswordModal from '@/components/forms/change-password-modal';
@@ -31,14 +31,14 @@ export default function AppHeader() {
   const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
   const { t, setLocale, locale } = useTranslations();
   const { setTheme, theme } = useTheme();
-  const { 
-    appMode, 
-    setAppMode, 
-    logout, 
-    uiNotifications, 
-    markUINotificationAsRead, 
-    markAllUINotificationsAsRead, 
-    clearAllUINotifications 
+  const {
+    appMode,
+    setAppMode,
+    logout,
+    uiNotifications,
+    markUINotificationAsRead,
+    markAllUINotificationsAsRead,
+    clearAllUINotifications
   } = useAppStore();
   const router = useRouter();
   const dateLocale = locale === 'es' ? es : enUS;
@@ -70,7 +70,7 @@ export default function AppHeader() {
       </Label>
     </div>
   );
-  
+
   const desktopAppModeToggleSwitch = (
     <div className="flex items-center space-x-2">
       <Label htmlFor="app-mode-toggle-desktop" className="text-sm font-medium text-muted-foreground flex items-center">
@@ -90,8 +90,8 @@ export default function AppHeader() {
 
 
   const unreadNotificationsCount = useMemo(() => uiNotifications.filter(n => !n.read).length, [uiNotifications]);
-  const sortedNotifications = useMemo(() => 
-    [...uiNotifications].sort((a, b) => b.timestamp - a.timestamp), 
+  const sortedNotifications = useMemo(() =>
+    [...uiNotifications].sort((a, b) => b.timestamp - a.timestamp),
   [uiNotifications]);
 
   const notificationDropdownContent = (
@@ -107,8 +107,8 @@ export default function AppHeader() {
         <>
           <ScrollArea className="flex-grow overflow-y-auto pr-1">
             {sortedNotifications.map(notification => (
-              <DropdownMenuItem 
-                key={notification.id} 
+              <DropdownMenuItem
+                key={notification.id}
                 className={cn("flex flex-col items-start gap-1 cursor-pointer hover:bg-accent/50", !notification.read && "bg-accent/30 font-medium")}
                 onClick={() => markUINotificationAsRead(notification.id)}
                 style={{ whiteSpace: 'normal', height: 'auto', lineHeight: 'normal', padding: '0.5rem 0.75rem'}}
@@ -139,6 +139,13 @@ export default function AppHeader() {
 
   const sharedOptionsItems = (
     <>
+      <DropdownMenuItem asChild>
+        <Link href="/history" className="flex items-center w-full">
+            <HistoryIcon className="mr-2 h-4 w-4" />
+            {t('viewHistory')}
+        </Link>
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
       <DropdownMenuLabel>{t('theme')}</DropdownMenuLabel>
       <DropdownMenuItem onClick={() => setTheme('light')} disabled={theme === 'light'}>
         <Sun className="mr-2 h-4 w-4" />
@@ -189,7 +196,7 @@ export default function AppHeader() {
           <div className="hidden md:flex">
             {desktopAppModeToggleSwitch}
           </div>
-            
+
           {/* Right Group - This will be pushed to the far right by justify-between */}
           <div className="flex items-center gap-x-1 sm:gap-x-2 mr-4">
             {/* Notification Bell - Visible on all screen sizes */}
@@ -208,7 +215,7 @@ export default function AppHeader() {
               </DropdownMenuTrigger>
               {notificationDropdownContent}
             </DropdownMenu>
-            
+
             {/* Desktop only action buttons and new Options Menu */}
             <div className="hidden md:flex items-center gap-x-1">
                <Link href="/dashboard" passHref>
@@ -218,10 +225,10 @@ export default function AppHeader() {
               </Link>
               <Link href="/categories" passHref>
                 <Button variant="outline" size="icon" aria-label={t('manageCategories')}>
-                  <Settings className="h-5 w-5" />
+                  <Layers className="h-5 w-5" />
                 </Button>
               </Link>
-              
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="icon" aria-label={t('moreOptions')}>
@@ -256,11 +263,10 @@ export default function AppHeader() {
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/categories" className="flex items-center w-full">
-                      <Settings className="mr-2 h-4 w-4" />
+                      <Layers className="mr-2 h-4 w-4" />
                       {t('manageCategories')}
                     </Link>
                   </DropdownMenuItem>
-                  {/* Separator was here, moving it to sharedOptionsItems logic if needed */}
                   {sharedOptionsItems}
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -273,4 +279,3 @@ export default function AppHeader() {
     </>
   );
 }
-
