@@ -87,7 +87,8 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
   const [isRecurrenceEndDatePopoverOpen, setIsRecurrenceEndDatePopoverOpen] = useState(false);
 
   const dateLocale = locale === 'es' ? es : enUS;
-  const effectiveInitialDate = instanceDate || activity?.createdAt || initialDate || new Date();
+  const effectiveInitialDate = instanceDate || (activity ? new Date(activity.createdAt) : initialDate) || new Date();
+
 
   const form = useForm<ActivityFormData>({
     resolver: zodResolver(activityFormSchema),
@@ -102,7 +103,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
         type: 'none',
         endDate: null,
         daysOfWeek: [],
-        dayOfMonth: undefined,
+        dayOfMonth: new Date(effectiveInitialDate).getDate(),
       },
     },
   });
@@ -113,15 +114,16 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
   });
 
   const recurrenceType = form.watch('recurrence.type');
-  const activityStartDate = form.watch('activityDate'); // Watch for changes to the activity's start date
+  const activityStartDate = form.watch('activityDate'); 
 
   useEffect(() => {
     if (isOpen) {
+      const currentEffectiveDate = instanceDate || (activity ? new Date(activity.createdAt) : initialDate) || new Date();
       if (activity) {
         form.reset({
           title: activity.title,
           categoryId: activity.categoryId,
-          activityDate: new Date(activity.createdAt), // This is the original start date of the series
+          activityDate: new Date(activity.createdAt), 
           time: activity.time || "",
           todos: activity.todos?.map(t => ({ id: t.id, text: t.text, completed: t.completed })) || [],
           notes: activity.notes || "",
@@ -129,11 +131,10 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
             type: activity.recurrence?.type || 'none',
             endDate: activity.recurrence?.endDate ? new Date(activity.recurrence.endDate) : null,
             daysOfWeek: activity.recurrence?.daysOfWeek || [],
-            dayOfMonth: activity.recurrence?.dayOfMonth || undefined,
+            dayOfMonth: activity.recurrence?.dayOfMonth || new Date(activity.createdAt).getDate(),
           }
         });
       } else {
-        // For new activity, use initialDate (from FAB or calendar selection)
         form.reset({
           title: "",
           categoryId: "",
@@ -145,7 +146,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
             type: 'none',
             endDate: null,
             daysOfWeek: [],
-            dayOfMonth: new Date().getDate(), // Default to current day of month
+            dayOfMonth: (initialDate || new Date()).getDate(), 
           }
         });
       }
@@ -166,24 +167,24 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
       title: data.title,
       categoryId: data.categoryId,
       todos: data.todos?.map(t => ({
-        id: t.id || undefined, // Let backend generate ID if new
+        id: t.id || undefined, 
         text: t.text,
         completed: t.completed || false
       })) || [],
-      createdAt: data.activityDate.getTime(), // This is the start date for recurrence
+      createdAt: data.activityDate.getTime(), 
       time: data.time === "" ? undefined : data.time,
       notes: data.notes,
       recurrence: recurrenceRule,
-      completedOccurrences: activity?.completedOccurrences || {}, // Preserve existing completions
+      completedOccurrences: activity?.completedOccurrences || {}, 
     };
 
-    if (activity) { // activity is the master activity if editing a recurring series
+    if (activity) { 
       updateActivity(activity.id, activityPayload as Partial<Activity>);
       toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
     } else {
       addActivity(
         activityPayload as Omit<Activity, 'id' | 'completedOccurrences'> & { todos?: Omit<Todo, 'id' | 'completed'>[] },
-        data.activityDate.getTime() // This is effectively the same as activityPayload.createdAt
+        data.activityDate.getTime() 
       );
       toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
     }
@@ -195,12 +196,12 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
   const dialogDescriptionText = activity
     ? t('editActivityDescription')
     : t('addActivityDescription', { initialDateMsg: ` ${t('locale') === 'es' ? 'Fecha por defecto:' : 'Default date:'} ${format(initialDate || new Date(), "PPP", { locale: dateLocale })}.` });
-
+  
   const maxRecurrenceEndDate = activityStartDate ? addDays(addMonths(activityStartDate, 5), 1) : undefined;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col z-[70]">
         <DialogHeader>
           <DialogTitle>{activity ? t('editActivityTitle') : t('addActivityTitle')}</DialogTitle>
           <DialogDescription>
@@ -240,7 +241,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="activityDate" // Start Date for recurring activities
+                name="activityDate" 
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel className="min-h-8">{t('activityDateLabel')}</FormLabel>
@@ -268,8 +269,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                           mode="single"
                           selected={field.value}
                           onSelect={(selectedDate) => {
-                            field.onChange(selectedDate);
-                            // If end date was before new start date, clear it or adjust
+                            if (selectedDate) field.onChange(selectedDate);
                             const currentEndDate = form.getValues("recurrence.endDate");
                             if (selectedDate && currentEndDate && currentEndDate < selectedDate) {
                                 form.setValue("recurrence.endDate", null);
@@ -292,8 +292,8 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                   <FormItem className="flex flex-col min-w-0">
                     <FormLabel className="min-h-8">{t('activityTimeLabel')}</FormLabel>
                     <FormControl>
-                      <div className="relative">
-                        <Input type="time" {...field} className="pr-6" />
+                      <div className="relative w-full">
+                        <Input type="time" {...field} className="pr-6 w-full" />
                         <Clock className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
                       </div>
                     </FormControl>
@@ -425,7 +425,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0 z-[70]" align="start">
+                        <PopoverContent className="w-auto p-0 z-[80]" align="start"> {/* Increased z-index to 80 */}
                           <div className="flex flex-col"> 
                             <Calendar
                               mode="single"
