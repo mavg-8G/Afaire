@@ -308,8 +308,12 @@ export default function ActivityCalendarView() {
 
   const handleAddNewActivityGeneric = () => {
     setEditingActivity(undefined);
-    setDateForModal(selectedDate || new Date()); // Use selectedDate if available, else today
-    setEditingInstanceDate(undefined);
+    // When adding a new activity via FAB, the date in the modal should default to today,
+    // but allow the user to pick any date. The `initialDate` prop for ActivityModal
+    // will be set to `dateForModal`, which is initialized/updated to `selectedDate` or today.
+    // For a new activity, we want it to default to today's date for the modal.
+    setDateForModal(selectedDate || new Date());
+    setEditingInstanceDate(undefined); // No specific instance for a new activity
     setIsActivityModalOpen(true);
   };
 
@@ -361,12 +365,17 @@ export default function ActivityCalendarView() {
     } else if (date) {
         setCurrentDisplayMonth(date);
     }
+     // Update dateForModal when a new date is selected on the calendar
+    if (date) {
+      setDateForModal(date);
+    }
   };
 
   const handleTodayButtonClick = () => {
     const today = new Date();
     setSelectedDate(today);
     setCurrentDisplayMonth(today);
+    setDateForModal(today); // Also update dateForModal
   };
 
   const todayButtonFooter = (
@@ -517,7 +526,7 @@ export default function ActivityCalendarView() {
 
       <Button
         onClick={handleAddNewActivityGeneric}
-        className="fixed bottom-6 right-6 rounded-full shadow-lg h-14 w-14 z-30 p-0 bg-background/70 backdrop-blur-md border border-border/50"
+        className="fixed bottom-6 right-6 rounded-full shadow-lg h-14 w-14 z-30 p-0 bg-[hsl(var(--accent))]/70 text-accent-foreground backdrop-blur-md border border-border/50"
         aria-label={t('addActivity')}
       >
         <PlusCircle className="h-7 w-7" />
