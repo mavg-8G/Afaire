@@ -156,7 +156,7 @@ export default function AppHeader() {
           </div>
             
           {/* Right Group - This will be pushed to the far right by justify-between */}
-          <div className="flex items-center gap-x-1 sm:gap-x-2 mr-2">
+          <div className="flex items-center gap-x-1 sm:gap-x-2 mr-4"> {/* Changed mr-2 to mr-4 */}
             {/* Notification Bell - Visible on all screen sizes */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
