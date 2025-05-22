@@ -144,13 +144,13 @@ export default function DashboardPage() {
         <div className="mb-6 flex justify-start">
            <Skeleton className="h-10 w-36" />
         </div>
+        <Skeleton className="h-10 w-full md:w-1/2 mb-6" />
         <Card className="shadow-lg">
           <CardHeader>
             <Skeleton className="h-8 w-3/4" />
             <Skeleton className="h-6 w-1/2 mt-1" />
           </CardHeader>
           <CardContent className="pt-6">
-            <Skeleton className="h-10 w-full mb-6" />
             <Skeleton className="h-[350px] w-full" />
           </CardContent>
         </Card>
@@ -169,32 +169,30 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      <Card className="shadow-lg">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <LayoutDashboard className="h-6 w-6 text-primary" />
-            <CardTitle>{t('dashboardTitle')}</CardTitle>
-          </div>
-          <CardDescription>
-            {t('dashboardMainDescription')}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-2">
-          <Tabs value={dashboardMainView} onValueChange={(value) => setDashboardMainView(value as DashboardMainView)} className="mb-6">
-            <TabsList className="grid w-full grid-cols-2 md:w-1/2">
-              <TabsTrigger value="chart">
-                <BarChart3 className="mr-2 h-4 w-4" />
-                {t('dashboardChartView')}
-              </TabsTrigger>
-              <TabsTrigger value="list">
-                <ListChecks className="mr-2 h-4 w-4" />
-                {t('dashboardListView')}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+      <Tabs value={dashboardMainView} onValueChange={(value) => setDashboardMainView(value as DashboardMainView)} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 md:w-1/2 mb-6">
+          <TabsTrigger value="chart">
+            <BarChart3 className="mr-2 h-4 w-4" />
+            {t('dashboardChartView')}
+          </TabsTrigger>
+          <TabsTrigger value="list">
+            <ListChecks className="mr-2 h-4 w-4" />
+            {t('dashboardListView')}
+          </TabsTrigger>
+        </TabsList>
 
-          {dashboardMainView === 'chart' && (
-            <>
+        <Card className="shadow-lg">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <LayoutDashboard className="h-6 w-6 text-primary" />
+              <CardTitle>{t('dashboardTitle')}</CardTitle>
+            </div>
+            <CardDescription>
+              {t('dashboardMainDescription')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-2">
+            <TabsContent value="chart" className="mt-0">
               <p className="text-sm text-muted-foreground mb-4">
                 {chartViewMode === 'weekly' ? t('dashboardViewWeekly') : t('dashboardViewMonthly')}
               </p>
@@ -211,11 +209,9 @@ export default function DashboardPage() {
                   {t('dashboardNoData')}
                 </div>
               )}
-            </>
-          )}
+            </TabsContent>
 
-          {dashboardMainView === 'list' && (
-            <>
+            <TabsContent value="list" className="mt-0">
               <Tabs value={listViewTimeRange} onValueChange={(value) => setListViewTimeRange(value as ListViewTimeRange)} className="mb-4">
                 <TabsList className="grid w-full grid-cols-2 md:w-1/2">
                   <TabsTrigger value="last7days">{t('dashboardListLast7Days')}</TabsTrigger>
@@ -272,10 +268,11 @@ export default function DashboardPage() {
                   {t('dashboardNoActivitiesForList')}
                 </div>
               )}
-            </>
-          )}
-        </CardContent>
-      </Card>
+            </TabsContent>
+          </CardContent>
+        </Card>
+      </Tabs>
     </div>
   );
 }
+
