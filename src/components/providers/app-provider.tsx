@@ -14,7 +14,7 @@ import {
   isBefore, isAfter,
   getDay, getDate,
   isWithinInterval,
-  setDate as setDayOfMonthFn, // Renamed to avoid conflict
+  setDate as setDayOfMonthFn, 
   addYears, isEqual,
   formatDistanceToNowStrict,
 } from 'date-fns';
@@ -124,14 +124,11 @@ function generateFutureInstancesForNotifications(
   const recurrence = masterActivity.recurrence;
   let currentDate = new Date(masterActivity.createdAt);
 
-  // Align currentDate to be within or after viewStartDate for generation efficiency
    if (isBefore(currentDate, rangeStartDate)) {
       if (recurrence.type === 'daily') {
           currentDate = rangeStartDate;
       } else if (recurrence.type === 'weekly' && recurrence.daysOfWeek && recurrence.daysOfWeek.length > 0) {
-          let tempDate = startOfDay(rangeStartDate); // Ensure we start checking from the beginning of rangeStartDate
-          // Advance tempDate to the first valid day of week of the recurrence that is on or after masterActivity.createdAt
-          // and also on or after rangeStartDate
+          let tempDate = startOfDay(rangeStartDate); 
           while(isBefore(tempDate, new Date(masterActivity.createdAt)) || !recurrence.daysOfWeek.includes(getDay(tempDate)) || isBefore(tempDate, rangeStartDate)) {
               tempDate = addDays(tempDate, 1);
               if (isAfter(tempDate, rangeEndDate)) break;
@@ -144,8 +141,8 @@ function generateFutureInstancesForNotifications(
           }
           
           currentDate = setDayOfMonthFn(rangeStartDate, recurrence.dayOfMonth);
-          if (isBefore(currentDate, rangeStartDate)) currentDate = addMonths(currentDate,1); // ensure it's in or after current month of rangeStart
-          if (isBefore(currentDate, tempMasterStartMonthDay)) { // ensure it's not before the series actually starts
+          if (isBefore(currentDate, rangeStartDate)) currentDate = addMonths(currentDate,1); 
+          if (isBefore(currentDate, tempMasterStartMonthDay)) { 
              currentDate = tempMasterStartMonthDay;
           }
       }
@@ -154,14 +151,13 @@ function generateFutureInstancesForNotifications(
 
   const seriesEndDate = recurrence.endDate ? new Date(recurrence.endDate) : null;
   let iterations = 0;
-  const maxIterations = 366 * 1; // Approx 1 year of daily occurrences for notifications
+  const maxIterations = 366 * 1; 
 
   while (iterations < maxIterations && !isAfter(currentDate, rangeEndDate)) {
     iterations++;
 
     if (seriesEndDate && isAfter(currentDate, seriesEndDate)) break;
 
-     // Ensure we don't generate instances before the master activity's start date
     if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
         if (recurrence.type === 'daily') currentDate = addDays(currentDate, 1);
         else if (recurrence.type === 'weekly') currentDate = addDays(currentDate, 1);
@@ -202,11 +198,10 @@ function generateFutureInstancesForNotifications(
       }
     }
 
-    // Advance current date
     if (recurrence.type === 'daily') {
         currentDate = addDays(currentDate, 1);
     } else if (recurrence.type === 'weekly') {
-        currentDate = addDays(currentDate, 1); // Check next day, loop condition will handle week advancement
+        currentDate = addDays(currentDate, 1); 
     } else if (recurrence.type === 'monthly') {
         if (recurrence.dayOfMonth) {
             let nextIterationDate;
@@ -220,7 +215,7 @@ function generateFutureInstancesForNotifications(
             }
             currentDate = nextIterationDate;
         } else {
-            currentDate = addDays(currentDate, 1); // Should ideally not happen if dayOfMonth is not set, but as a fallback
+            currentDate = addDays(currentDate, 1); 
         }
     } else {
       break;
@@ -229,7 +224,6 @@ function generateFutureInstancesForNotifications(
   return instances;
 }
 
-// Helper function to convert HSL string to HSL object
 function parseHslString(hslString: string): { h: number; s: number; l: number } | null {
   if (!hslString) return null;
   const match = hslString.match(/^(?:hsl\(\s*)?(-?\d*\.?\d+)(?:deg|rad|turn|)?\s*[, ]?\s*(-?\d*\.?\d+)%?\s*[, ]?\s*(-?\d*\.?\d+)%?(?:\s*[,/]\s*(-?\d*\.?\d+)\%?)?(?:\s*\))?$/i);
@@ -243,7 +237,6 @@ function parseHslString(hslString: string): { h: number; s: number; l: number } 
   return { h, s, l };
 }
 
-// Helper function to convert HSL object to HEX string
 function hslToHex(h: number, s: number, l: number): string {
   s /= 100;
   l /= 100;
@@ -284,7 +277,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const { theme, resolvedTheme } = useTheme();
 
 
-  // Dynamic theme-color update
   useEffect(() => {
     if (typeof window === 'undefined' || isLoading) {
       return;
@@ -324,7 +316,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [appModeState]);
 
   const filteredCategories = useMemo(() => {
-    if (isLoading) return [];
+    if (isLoading) { // Ensure categories are empty if AppProvider is still loading
+      return [];
+    }
     return allCategories.filter(cat =>
       !cat.mode || cat.mode === 'all' || cat.mode === appModeState
     );
@@ -362,9 +356,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       if (storedAllCategories) {
         try {
-          const parsedCategories = JSON.parse(storedAllCategories);
+          const parsedCategories = JSON.parse(storedAllCategories) as Array<Omit<Category, 'icon'>>;
           if (Array.isArray(parsedCategories) && parsedCategories.length > 0) {
-            setAllCategories(parsedCategories.map((cat: Omit<Category, 'icon'> & { iconName: string }) => ({
+            setAllCategories(parsedCategories.map((cat) => ({
               ...cat,
               icon: getIconComponent(cat.iconName || 'Package'),
               mode: cat.mode || 'all'
@@ -391,7 +385,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (storedAuth === 'true' && storedExpiry) {
         const expiryTime = parseInt(storedExpiry, 10);
         if (Date.now() > expiryTime) {
-          initialAuth = false;
+          initialAuth = false; // Session expired
+           // No need to call full logout() here, just clear the flags
           localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
           localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
         } else {
@@ -414,7 +409,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (err) {
       console.error("Failed to load data from local storage", err);
       setError("Failed to load saved data.");
-       if (allCategories.length === 0) { // Ensure categories are set if error occurred before they were
+       if (allCategories.length === 0) { 
         setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
       }
     } finally {
@@ -524,7 +519,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const activityTitle = masterActivity.title;
         const masterId = masterActivity.id;
 
-        // 5-minute "starting soon" notification
         if (masterActivity.time) {
           const todayInstances = generateFutureInstancesForNotifications(masterActivity, today, endOfDay(today));
           todayInstances.forEach(instance => {
@@ -541,18 +535,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
               if (timeDiffMs >= 0 && timeDiffMs <= fiveMinutesInMs) {
                 const toastDesc = t('toastActivityStartingSoonDescription', { activityTitle, activityTime: masterActivity.time! });
-                toast({ title: t('toastActivityStartingSoonTitle'), description: toastDesc });
                 addUINotification({ title: t('toastActivityStartingSoonTitle'), description: toastDesc, activityId: masterId, instanceDate: instance.instanceDate.getTime() });
+                toast({ title: t('toastActivityStartingSoonTitle'), description: toastDesc });
                 setNotifiedToday(prev => new Set(prev).add(notificationKey5Min));
               }
             }
           });
         }
 
-        // Advanced notifications for recurring tasks
         if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
           const recurrenceType = masterActivity.recurrence.type;
-          const futureCheckEndDate = addDays(today, 8); // Check up to 8 days ahead
+          const futureCheckEndDate = addDays(today, 8); 
           const upcomingInstances = generateFutureInstancesForNotifications(masterActivity, addDays(today,1), futureCheckEndDate);
 
           upcomingInstances.forEach(instance => {
@@ -565,8 +558,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               if (!notifiedToday.has(notificationFullKey)) {
                 const notifTitle = t(titleKey as any, params);
                 const notifDesc = t(descKey as any, params);
-                toast({ title: notifTitle, description: notifDesc });
                 addUINotification({ title: notifTitle, description: notifDesc, activityId: masterId, instanceDate: instance.instanceDate.getTime() });
+                toast({ title: notifTitle, description: notifDesc });
                 setNotifiedToday(prev => new Set(prev).add(notificationFullKey));
               }
             };
@@ -598,7 +591,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, 60000);
 
     return () => clearInterval(intervalId);
-  }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification]);
+  }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification, dateLocale]);
 
 
   useEffect(() => {
@@ -751,7 +744,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [currentActivitySetter]);
 
   const getCategoryById = useCallback(
-    (categoryId: string) => allCategories.find(cat => cat.id === categoryId),
+    (categoryId: string) => {
+      // Use allCategories here because filteredCategories might not yet be updated if appMode changed recently
+      return allCategories.find(cat => cat.id === categoryId)
+    },
     [allCategories]
   );
 
@@ -868,6 +864,5 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
-
 
     
