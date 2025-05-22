@@ -180,7 +180,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col z-[70]"> {/* Ensure dialog has high z-index */}
+      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col z-50"> {/* Changed z-[70] to z-50 */}
         <DialogHeader>
           <DialogTitle>{activity ? t('editActivityTitle') : t('addActivityTitle')}</DialogTitle>
           <DialogDescription>
@@ -271,8 +271,8 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                   <FormItem className="flex flex-col min-w-0"> {/* min-w-0 helps with shrinking */}
                     <FormLabel className="min-h-8">{t('activityTimeLabel')}</FormLabel>
                     <FormControl>
-                      <div className="relative w-full"> {/* w-full on wrapper */}
-                        <Input type="time" {...field} className="w-full pr-7" /> {/* Reduced padding */}
+                      <div className="relative w-full">
+                        <Input type="time" {...field} className="w-full pr-7" />
                         <Clock className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
                       </div>
                     </FormControl>
@@ -531,3 +531,6 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
+
+
+    
