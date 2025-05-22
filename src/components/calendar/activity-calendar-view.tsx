@@ -524,7 +524,7 @@ export default function ActivityCalendarView() {
 
       <Button
         onClick={handleAddNewActivityGeneric}
-        className="fixed bottom-6 right-6 rounded-full shadow-lg h-14 w-14 z-30 p-0 bg-[hsl(var(--accent))]/25 text-accent-foreground backdrop-blur-md border border-border/50"
+        className="fixed bottom-6 right-6 rounded-full shadow-lg h-14 w-14 z-30 p-0 bg-[hsl(var(--accent))]/15 text-accent-foreground backdrop-blur-md border border-border/50"
         aria-label={t('addActivity')}
       >
         <PlusCircle className="h-7 w-7" />
