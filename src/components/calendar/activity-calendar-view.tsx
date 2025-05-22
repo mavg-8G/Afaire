@@ -308,10 +308,8 @@ export default function ActivityCalendarView() {
 
   const handleAddNewActivityGeneric = () => {
     setEditingActivity(undefined);
-    // When adding a new activity via FAB, the date in the modal should default to today,
-    // but allow the user to pick any date. The `initialDate` prop for ActivityModal
-    // will be set to `dateForModal`, which is initialized/updated to `selectedDate` or today.
-    // For a new activity, we want it to default to today's date for the modal.
+    // When adding a new activity via FAB, the date in the modal should default to the selectedDate
+    // if available, otherwise today.
     setDateForModal(selectedDate || new Date());
     setEditingInstanceDate(undefined); // No specific instance for a new activity
     setIsActivityModalOpen(true);
@@ -473,7 +471,7 @@ export default function ActivityCalendarView() {
           </CardHeader>
           <CardContent className="flex-grow">
             {selectedDate && activitiesForView.length > 0 ? (
-              <ScrollArea className="h-[calc(100vh-25rem)] sm:h-[calc(100vh-25rem)] pr-1">
+              <ScrollArea className="h-[calc(100vh-22rem)] sm:h-[calc(100vh-22rem)] pr-1">
                 <div className="space-y-3">
                   {activitiesForView.map(activity => (
                     <ActivityListItem
@@ -526,7 +524,7 @@ export default function ActivityCalendarView() {
 
       <Button
         onClick={handleAddNewActivityGeneric}
-        className="fixed bottom-6 right-6 rounded-full shadow-lg h-14 w-14 z-30 p-0 bg-[hsl(var(--accent))]/70 text-accent-foreground backdrop-blur-md border border-border/50"
+        className="fixed bottom-6 right-6 rounded-full shadow-lg h-14 w-14 z-30 p-0 bg-[hsl(var(--accent))]/40 text-accent-foreground backdrop-blur-md border border-border/50"
         aria-label={t('addActivity')}
       >
         <PlusCircle className="h-7 w-7" />
