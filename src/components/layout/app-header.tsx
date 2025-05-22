@@ -52,7 +52,7 @@ export default function AppHeader() {
     router.push('/login');
   };
 
-  const appModeToggleSwitch = (
+  const appModeToggleSwitchMobile = ( // Renamed for clarity
     <div className="flex items-center space-x-2 px-2 py-1.5">
       <Label htmlFor="app-mode-toggle-mobile" className="text-sm font-medium text-muted-foreground flex items-center">
         <User className={`inline-block h-4 w-4 mr-1 ${appMode === 'personal' ? 'text-primary' : ''}`} />
@@ -141,7 +141,8 @@ export default function AppHeader() {
   return (
     <>
       <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between">
+        <div className="container flex h-16 items-center justify-between"> {/* This div uses justify-between */}
+          {/* Left Group */}
           <div className="flex items-center gap-2 ml-2">
             <LogoIcon className="h-7 w-7 text-primary" />
             <Link href="/" className="text-xl font-bold tracking-tight text-foreground hover:no-underline sm:text-2xl">
@@ -149,12 +150,15 @@ export default function AppHeader() {
             </Link>
           </div>
 
-          <div className="hidden md:flex">
-            {desktopAppModeToggleSwitch}
-          </div>
-
-          <div className="flex items-center gap-x-1 sm:gap-x-2 mr-2"> {/* Added mr-2 here */}
-             {/* Notification Bell - Visible on all screen sizes */}
+          {/* Right Group - This will be pushed to the far right by justify-between */}
+          <div className="flex items-center gap-x-1 sm:gap-x-2 mr-2">
+            
+            {/* Desktop App Mode Toggle Switch - MOVED HERE */}
+            <div className="hidden md:flex">
+              {desktopAppModeToggleSwitch}
+            </div>
+            
+            {/* Notification Bell - Visible on all screen sizes */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon" aria-label={t('notificationBellLabel')} className="relative">
@@ -172,7 +176,7 @@ export default function AppHeader() {
               {notificationDropdownContent}
             </DropdownMenu>
             
-            {/* Desktop only buttons */}
+            {/* Desktop only action buttons */}
             <div className="hidden md:flex items-center gap-x-1">
                <Link href="/dashboard" passHref>
                 <Button variant="outline" size="icon" aria-label={t('dashboard')}>
@@ -246,7 +250,7 @@ export default function AppHeader() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="focus:bg-transparent cursor-default p-0">
-                    {appModeToggleSwitch}
+                    {appModeToggleSwitchMobile} {/* Use the renamed variable */}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                    <DropdownMenuItem asChild>
@@ -303,5 +307,3 @@ export default function AppHeader() {
     </>
   );
 }
-
-    
