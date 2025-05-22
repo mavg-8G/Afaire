@@ -37,9 +37,9 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="À faire" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" data-ai-hint="app logo" />
-        {/* The theme-color for the manifest is #FAD0C3 (Personal Light Primary) */}
+        {/* The theme-color for the manifest is now set to match personal light --background */}
         {/* This meta tag can influence the browser toolbar color */}
-        <meta name="theme-color" content="#FAD0C3" />
+        <meta name="theme-color" content="#FEF9F3" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}>
         <ThemeProvider
