@@ -16,7 +16,7 @@ import { useTranslations } from '@/contexts/language-context';
 import { APP_NAME, HARDCODED_USERNAME, HARDCODED_PASSWORD } from '@/lib/constants';
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Terminal, Eye, EyeOff } from 'lucide-react';
+import { Terminal, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 const loginFormSchemaBase = z.object({
   username: z.string().min(1, 'loginUsernameRequired'),
@@ -40,19 +40,18 @@ export default function LoginPage() {
   } = useAppStore();
   const router = useRouter();
   const { t } = useTranslations();
-  const [isSubmitting, setIsSubmitting] = useState(false); // Renamed from isLoading to avoid conflict
+  const [isSubmitting, setIsSubmitting] = useState(false); 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [remainingLockoutTime, setRemainingLockoutTime] = useState<number | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Memoize the schema to prevent re-creation on every render if 't' is stable
   const loginFormSchema = useMemo(() => loginFormSchemaBase.extend({
     username: z.string().min(1, t('loginUsernameRequired')),
     password: z.string().min(1, t('loginPasswordRequired')),
   }), [t]);
 
   const form = useForm<LoginFormValues>({
-    resolver: useMemo(() => zodResolver(loginFormSchema), [loginFormSchema]), // Memoize the resolver
+    resolver: useMemo(() => zodResolver(loginFormSchema), [loginFormSchema]), 
     defaultValues: {
       username: '',
       password: '',
@@ -201,9 +200,10 @@ export default function LoginPage() {
                         checked={field.value}
                         onCheckedChange={field.onChange}
                         disabled={isLockedOut}
+                        aria-labelledby="remember-me-label"
                       />
                     </FormControl>
-                    <FormLabel className="font-normal">
+                    <FormLabel id="remember-me-label" className="font-normal">
                       {t('rememberMeLabel')}
                     </FormLabel>
                   </FormItem>
@@ -224,7 +224,11 @@ export default function LoginPage() {
                 </Alert>
               )}
               <Button type="submit" className="w-full" disabled={isSubmitting || isLockedOut}>
-                {isSubmitting ? t('loginLoggingIn') : t('loginButtonText')}
+                {isSubmitting ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  t('loginButtonText')
+                )}
               </Button>
             </form>
           </Form>

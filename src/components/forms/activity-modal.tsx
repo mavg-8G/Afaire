@@ -26,7 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Trash2, CalendarIcon, Clock, X } from 'lucide-react';
+import { PlusCircle, Trash2, CalendarIcon, Clock, X, Loader2 } from 'lucide-react';
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Activity, Todo, RecurrenceRule } from '@/lib/types';
 import CategorySelector from '@/components/shared/category-selector';
@@ -41,9 +41,9 @@ import { enUS, es } from 'date-fns/locale';
 interface ActivityModalProps {
   isOpen: boolean;
   onClose: () => void;
-  activity?: Activity; // Master activity if editing
-  initialDate: Date; // Stable date for new activity or edit base date
-  instanceDate?: Date; // If editing/viewing a specific instance of a recurring task
+  activity?: Activity; 
+  initialDate: Date; 
+  instanceDate?: Date; 
 }
 
 const todoSchema = z.object({
@@ -55,7 +55,7 @@ const todoSchema = z.object({
 const recurrenceSchema = z.object({
   type: z.enum(['none', 'daily', 'weekly', 'monthly']).default('none'),
   endDate: z.date().nullable().optional(),
-  daysOfWeek: z.array(z.number().min(0).max(6)).optional().nullable(), // 0 for Sun, 6 for Sat
+  daysOfWeek: z.array(z.number().min(0).max(6)).optional().nullable(), 
   dayOfMonth: z.number().min(1).max(31).optional().nullable(),
 }).default({ type: 'none' });
 
@@ -66,10 +66,10 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
   const { t, locale } = useTranslations();
   const [isStartDatePopoverOpen, setIsStartDatePopoverOpen] = useState(false);
   const [isRecurrenceEndDatePopoverOpen, setIsRecurrenceEndDatePopoverOpen] = useState(false);
+  const [isSubmittingForm, setIsSubmittingForm] = useState(false);
 
   const dateLocale = locale === 'es' ? es : enUS;
   
-  // activityDate is the primary date for the activity (start date for recurrence)
   const activityFormSchema = z.object({
     title: z.string().min(1, t('activityTitleLabel')),
     categoryId: z.string().min(1, t('categoryLabel')),
@@ -84,7 +84,6 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
 
   const form = useForm<ActivityFormData>({
     resolver: zodResolver(activityFormSchema),
-    // Default values are set/reset in useEffect when modal opens
   });
 
   const { fields, append, remove } = useFieldArray({
@@ -97,7 +96,8 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
 
   useEffect(() => {
     if (isOpen) {
-      if (activity) { // Editing existing activity
+      setIsSubmittingForm(false); // Reset submitting state when modal opens
+      if (activity) { 
         const baseDate = new Date(activity.createdAt);
         form.reset({
           title: activity.title,
@@ -113,11 +113,11 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
             dayOfMonth: activity.recurrence?.dayOfMonth || baseDate.getDate(),
           }
         });
-      } else { // Adding new activity, use the stable initialDate prop
+      } else { 
         form.reset({
           title: "",
           categoryId: "",
-          activityDate: initialDate, // Use the stable prop
+          activityDate: initialDate, 
           time: "",
           todos: [],
           notes: "",
@@ -132,9 +132,10 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
       setIsStartDatePopoverOpen(false);
       setIsRecurrenceEndDatePopoverOpen(false);
     }
-  }, [activity, form, isOpen, initialDate, instanceDate]); // `initialDate` is now stable
+  }, [activity, form, isOpen, initialDate]); 
 
-  const onSubmit = (data: ActivityFormData) => {
+  const onSubmit = async (data: ActivityFormData) => {
+    setIsSubmittingForm(true);
     const recurrenceRule: RecurrenceRule | null = data.recurrence.type === 'none' ? null : {
       type: data.recurrence.type,
       endDate: data.recurrence.endDate ? data.recurrence.endDate.getTime() : null,
@@ -156,6 +157,10 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
       recurrence: recurrenceRule,
       completedOccurrences: activity?.completedOccurrences || {},
     };
+    
+    // Simulate API call delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+
 
     if (activity) {
       updateActivity(activity.id, activityPayload as Partial<Activity>);
@@ -163,10 +168,11 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
     } else {
       addActivity(
         activityPayload as Omit<Activity, 'id' | 'completedOccurrences'> & { todos?: Omit<Todo, 'id' | 'completed'>[] },
-        data.activityDate.getTime() // Pass createdAt explicitly
+        data.activityDate.getTime() 
       );
       toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
     }
+    setIsSubmittingForm(false);
     onClose();
   };
 
@@ -269,10 +275,10 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                 control={form.control}
                 name="time"
                 render={({ field }) => (
-                  <FormItem className="flex flex-col min-w-0"> {/* min-w-0 helps with shrinking */}
+                  <FormItem className="flex flex-col min-w-0"> 
                     <FormLabel className="min-h-8">{t('activityTimeLabel')}</FormLabel>
                     <FormControl>
-                      <div className="relative w-full">
+                       <div className="relative w-full">
                         <Input type="time" {...field} className="w-full pr-7" />
                         <Clock className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
                       </div>
@@ -283,7 +289,6 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
               />
             </div>
 
-            {/* Recurrence Section */}
             <div className="space-y-2 border p-3 rounded-md">
               <h3 className="text-sm font-medium">{t('recurrenceLabel')}</h3>
               <FormField
@@ -481,6 +486,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                               checked={todoField.value}
                               onCheckedChange={todoField.onChange}
                               id={`todo-completed-${index}`}
+                              aria-labelledby={`todo-text-label-${index}`}
                             />
                           </FormControl>
                         </FormItem>
@@ -491,8 +497,9 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                       name={`todos.${index}.text`}
                       render={({ field: todoField }) => (
                         <FormItem className="flex-grow">
+                          <Label htmlFor={`todo-text-${index}`} id={`todo-text-label-${index}`} className="sr-only">Todo text {index + 1}</Label>
                           <FormControl>
-                            <Input placeholder={t('newTodoPlaceholder')} {...todoField} />
+                            <Input id={`todo-text-${index}`} placeholder={t('newTodoPlaceholder')} {...todoField} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -516,8 +523,14 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
               </Button>
             </div>
           <DialogFooter className="pt-4 mt-auto">
-            <Button type="button" variant="outline" onClick={onClose}>{t('cancel')}</Button>
-            <Button type="submit">{activity ? t('saveChanges') : t('addActivity')}</Button>
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmittingForm}>{t('cancel')}</Button>
+            <Button type="submit" disabled={isSubmittingForm}>
+              {isSubmittingForm ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                activity ? t('saveChanges') : t('addActivity')
+              )}
+            </Button>
           </DialogFooter>
           </form>
         </Form>
@@ -531,3 +544,4 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
+
