@@ -12,9 +12,9 @@ import {
   subDays, subWeeks,
   startOfDay, endOfDay,
   isBefore, isAfter,
-  getDay, getDate, 
+  getDay, getDate,
   isWithinInterval,
-  setDate as setDayOfMonth,
+  setDate as setDayOfMonthFn, // Renamed to avoid conflict
   addYears, isEqual,
   formatDistanceToNowStrict,
 } from 'date-fns';
@@ -25,8 +25,8 @@ import { useTheme } from 'next-themes';
 
 
 export interface AppContextType {
-  activities: Activity[]; 
-  getRawActivities: () => Activity[]; 
+  activities: Activity[];
+  getRawActivities: () => Activity[];
   categories: Category[];
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
@@ -40,7 +40,7 @@ export interface AppContextType {
     customCreatedAt?: number
   ) => void;
   updateActivity: (activityId: string, updates: Partial<Activity>) => void;
-  deleteActivity: (activityId: string) => void; 
+  deleteActivity: (activityId: string) => void;
   toggleOccurrenceCompletion: (masterActivityId: string, occurrenceDateTimestamp: number, completed: boolean) => void;
   addTodoToActivity: (activityId: string, todoText: string) => void;
   updateTodoInActivity: (activityId: string, todoId: string, updates: Partial<Todo>) => void;
@@ -109,8 +109,8 @@ interface FutureInstance {
 
 function generateFutureInstancesForNotifications(
   masterActivity: Activity,
-  rangeStartDate: Date, 
-  rangeEndDate: Date    
+  rangeStartDate: Date,
+  rangeEndDate: Date
 ): FutureInstance[] {
   if (!masterActivity.recurrence || masterActivity.recurrence.type === 'none') {
     const activityDate = new Date(masterActivity.createdAt);
@@ -124,74 +124,54 @@ function generateFutureInstancesForNotifications(
   const recurrence = masterActivity.recurrence;
   let currentDate = new Date(masterActivity.createdAt);
 
-  if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
-    currentDate = new Date(masterActivity.createdAt);
-  }
-  
-  let alignmentIterations = 0;
-  const maxAlignmentIterations = 366 * 2; 
-
-  while (isBefore(currentDate, rangeStartDate) && alignmentIterations < maxAlignmentIterations) {
-      alignmentIterations++;
-      let nextPossibleDate = currentDate;
+  // Align currentDate to be within or after viewStartDate for generation efficiency
+   if (isBefore(currentDate, rangeStartDate)) {
       if (recurrence.type === 'daily') {
-          nextPossibleDate = addDays(currentDate, 1);
-      } else if (recurrence.type === 'weekly') {
-          nextPossibleDate = addDays(currentDate, 1); 
-      } else if (recurrence.type === 'monthly') {
-          if (recurrence.dayOfMonth) {
-            let tempDate = addDays(currentDate, 1); 
-            if (getDate(tempDate) > recurrence.dayOfMonth && getDate(tempDate) !== getDate(currentDate) ) { 
-                tempDate = addMonths(tempDate, 1);
-            }
-            nextPossibleDate = setDayOfMonth(tempDate, recurrence.dayOfMonth);
-          } else {
-            nextPossibleDate = addDays(currentDate, 1); 
+          currentDate = rangeStartDate;
+      } else if (recurrence.type === 'weekly' && recurrence.daysOfWeek && recurrence.daysOfWeek.length > 0) {
+          let tempDate = startOfDay(rangeStartDate); // Ensure we start checking from the beginning of rangeStartDate
+          // Advance tempDate to the first valid day of week of the recurrence that is on or after masterActivity.createdAt
+          // and also on or after rangeStartDate
+          while(isBefore(tempDate, new Date(masterActivity.createdAt)) || !recurrence.daysOfWeek.includes(getDay(tempDate)) || isBefore(tempDate, rangeStartDate)) {
+              tempDate = addDays(tempDate, 1);
+              if (isAfter(tempDate, rangeEndDate)) break;
           }
-      } else {
-          break; 
+          currentDate = tempDate;
+      } else if (recurrence.type === 'monthly' && recurrence.dayOfMonth) {
+          let tempMasterStartMonthDay = setDayOfMonthFn(new Date(masterActivity.createdAt), recurrence.dayOfMonth);
+          if (isBefore(tempMasterStartMonthDay, new Date(masterActivity.createdAt))) {
+              tempMasterStartMonthDay = addMonths(tempMasterStartMonthDay, 1);
+          }
+          
+          currentDate = setDayOfMonthFn(rangeStartDate, recurrence.dayOfMonth);
+          if (isBefore(currentDate, rangeStartDate)) currentDate = addMonths(currentDate,1); // ensure it's in or after current month of rangeStart
+          if (isBefore(currentDate, tempMasterStartMonthDay)) { // ensure it's not before the series actually starts
+             currentDate = tempMasterStartMonthDay;
+          }
       }
-      
-      if (isEqual(nextPossibleDate, currentDate) && recurrence.type !== 'daily' && alignmentIterations > 1) {
-        console.warn("generateFutureInstancesForNotifications: Date did not advance during alignment for activity:", masterActivity.id, "currentDate:", currentDate, "recurrence:", recurrence);
-        break;
-      }
-      currentDate = nextPossibleDate;
-  }
-  if (alignmentIterations >= maxAlignmentIterations) {
-    console.warn("generateFutureInstancesForNotifications: Exceeded safety limit during date alignment for activity:", masterActivity.id);
-    return []; 
   }
 
 
   const seriesEndDate = recurrence.endDate ? new Date(recurrence.endDate) : null;
   let iterations = 0;
-  const maxIterations = 366 * 1; 
+  const maxIterations = 366 * 1; // Approx 1 year of daily occurrences for notifications
 
   while (iterations < maxIterations && !isAfter(currentDate, rangeEndDate)) {
     iterations++;
 
     if (seriesEndDate && isAfter(currentDate, seriesEndDate)) break;
-    
-    if (isBefore(currentDate, new Date(masterActivity.createdAt))) { 
-        if (recurrence.type === 'daily') currentDate = addDays(currentDate, 1);
-        else if (recurrence.type === 'weekly') currentDate = addDays(currentDate, 1); 
-        else if (recurrence.type === 'monthly') { 
-             if (recurrence.dayOfMonth) {
-                let nextMonth = addMonths(currentDate, 1);
-                currentDate = setDayOfMonth(nextMonth, recurrence.dayOfMonth);
-                if(getDay(new Date(masterActivity.createdAt)) !== getDay(currentDate) && getDate(new Date(masterActivity.createdAt)) === recurrence.dayOfMonth) {
-                     if(isBefore(currentDate, setDayOfMonth(new Date(masterActivity.createdAt), recurrence.dayOfMonth))) {
-                         currentDate = setDayOfMonth(addMonths(new Date(masterActivity.createdAt), iterations), recurrence.dayOfMonth);
-                     }
-                }
 
-             } else {
-                currentDate = addDays(currentDate,1); 
-             }
+     // Ensure we don't generate instances before the master activity's start date
+    if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
+        if (recurrence.type === 'daily') currentDate = addDays(currentDate, 1);
+        else if (recurrence.type === 'weekly') currentDate = addDays(currentDate, 1);
+        else if (recurrence.type === 'monthly') {
+            const nextMonth = addMonths(currentDate, 1);
+            currentDate = recurrence.dayOfMonth ? setDayOfMonthFn(nextMonth, recurrence.dayOfMonth) : nextMonth;
         } else break;
         continue;
     }
+
 
     let isValidOccurrence = false;
     switch (recurrence.type) {
@@ -213,40 +193,34 @@ function generateFutureInstancesForNotifications(
     if (isValidOccurrence) {
       const occurrenceDateKey = formatISO(currentDate, { representation: 'date' });
       const isInstanceCompleted = !!masterActivity.completedOccurrences?.[occurrenceDateKey];
-      
+
       if (!isInstanceCompleted) {
            instances.push({
-            instanceDate: new Date(currentDate.getTime()), 
+            instanceDate: new Date(currentDate.getTime()),
             masterActivityId: masterActivity.id,
           });
       }
     }
 
+    // Advance current date
     if (recurrence.type === 'daily') {
         currentDate = addDays(currentDate, 1);
     } else if (recurrence.type === 'weekly') {
-        currentDate = addDays(currentDate, 1); 
+        currentDate = addDays(currentDate, 1); // Check next day, loop condition will handle week advancement
     } else if (recurrence.type === 'monthly') {
         if (recurrence.dayOfMonth) {
             let nextIterationDate;
-            const targetMonthCurrentDay = setDayOfMonth(currentDate, recurrence.dayOfMonth);
-            if(isAfter(targetMonthCurrentDay, currentDate) && getDate(targetMonthCurrentDay) === recurrence.dayOfMonth){
-                 nextIterationDate = targetMonthCurrentDay; 
+            const currentMonthTargetDay = setDayOfMonthFn(currentDate, recurrence.dayOfMonth);
+
+            if(isAfter(currentMonthTargetDay, currentDate) && getDate(currentMonthTargetDay) === recurrence.dayOfMonth){
+                 nextIterationDate = currentMonthTargetDay;
             } else {
-                 nextIterationDate = setDayOfMonth(addMonths(currentDate, 1), recurrence.dayOfMonth);
-            }
-            if(getDate(nextIterationDate) !== recurrence.dayOfMonth && getDate(new Date(masterActivity.createdAt)) === recurrence.dayOfMonth) {
-                 let monthCounter = 1;
-                 let potentialDate = setDayOfMonth(addMonths(currentDate, monthCounter), recurrence.dayOfMonth);
-                 while(getDate(potentialDate) !== recurrence.dayOfMonth && monthCounter < 13) { 
-                    monthCounter++;
-                    potentialDate = setDayOfMonth(addMonths(currentDate, monthCounter), recurrence.dayOfMonth);
-                 }
-                 nextIterationDate = potentialDate;
+                 let nextMonthDate = addMonths(currentDate, 1);
+                 nextIterationDate = setDayOfMonthFn(nextMonthDate, recurrence.dayOfMonth);
             }
             currentDate = nextIterationDate;
         } else {
-            currentDate = addDays(currentDate, 1); 
+            currentDate = addDays(currentDate, 1); // Should ideally not happen if dayOfMonth is not set, but as a fallback
         }
     } else {
       break;
@@ -258,7 +232,6 @@ function generateFutureInstancesForNotifications(
 // Helper function to convert HSL string to HSL object
 function parseHslString(hslString: string): { h: number; s: number; l: number } | null {
   if (!hslString) return null;
-  // Regex to capture H, S, L values, accommodating for optional "hsl()" wrapper and percentages
   const match = hslString.match(/^(?:hsl\(\s*)?(-?\d*\.?\d+)(?:deg|rad|turn|)?\s*[, ]?\s*(-?\d*\.?\d+)%?\s*[, ]?\s*(-?\d*\.?\d+)%?(?:\s*[,/]\s*(-?\d*\.?\d+)\%?)?(?:\s*\))?$/i);
   if (!match) return null;
 
@@ -278,12 +251,12 @@ function hslToHex(h: number, s: number, l: number): string {
   const a = s * Math.min(l, 1 - l);
   const f = (n: number) =>
     l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
-  
+
   const toHexByte = (c: number) => {
     const hex = Math.round(c * 255).toString(16);
     return hex.length === 1 ? '0' + hex : hex;
   };
-  
+
   return `#${toHexByte(f(0))}${toHexByte(f(8))}${toHexByte(f(4))}`;
 }
 
@@ -293,10 +266,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [workActivities, setWorkActivities] = useState<Activity[]>([]);
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [appModeState, setAppModeState] = useState<AppMode>('personal');
-  const [isLoading, setIsLoading] = useState<boolean>(true); 
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-  const { t, locale } = useTranslations(); 
+  const { t, locale } = useTranslations();
   const dateLocale = locale === 'es' ? es : enUS;
 
   const [lastNotificationCheckDay, setLastNotificationCheckDay] = useState<number | null>(null);
@@ -306,7 +279,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [loginAttempts, setLoginAttemptsState] = useState<number>(0);
   const [lockoutEndTime, setLockoutEndTimeState] = useState<number | null>(null);
   const [sessionExpiryTimestamp, setSessionExpiryTimestampState] = useState<number | null>(null);
-  
+
   const [uiNotifications, setUINotifications] = useState<UINotification[]>([]);
   const { theme, resolvedTheme } = useTheme();
 
@@ -316,17 +289,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (typeof window === 'undefined' || isLoading) {
       return;
     }
-    // Ensure classes are applied before getting computed style
-    // This timeout allows the DOM to update with theme/mode classes
     const timerId = setTimeout(() => {
         const computedStyle = getComputedStyle(document.documentElement);
         const backgroundHslString = computedStyle.getPropertyValue('--background').trim();
-        
+
         const hslValues = parseHslString(backgroundHslString);
 
         if (hslValues) {
         const hexColor = hslToHex(hslValues.h, hslValues.s, hslValues.l);
-        
+
         let metaThemeColor = document.querySelector('meta[name="theme-color"]');
         if (!metaThemeColor) {
             metaThemeColor = document.createElement('meta');
@@ -335,15 +306,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
         metaThemeColor.setAttribute('content', hexColor);
         } else {
-            // Fallback or error logging if HSL parsing fails
             console.warn("Could not parse --background HSL string:", backgroundHslString);
         }
-    }, 0); // setTimeout with 0ms defers execution until after current call stack clears
+    }, 0);
 
     return () => clearTimeout(timerId);
 
   }, [theme, resolvedTheme, appModeState, isLoading]);
-
 
 
   const getRawActivities = useCallback(() => {
@@ -379,7 +348,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, []);
 
-  useEffect(() => {
+ useEffect(() => {
     let initialAuth = false;
     try {
       const storedPersonalActivities = localStorage.getItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES);
@@ -387,21 +356,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       const storedWorkActivities = localStorage.getItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES);
       if (storedWorkActivities) setWorkActivities(JSON.parse(storedWorkActivities));
-      
+
       const storedAllCategories = localStorage.getItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES);
-       if (storedAllCategories) {
-        const parsedCategories = JSON.parse(storedAllCategories);
-        if (Array.isArray(parsedCategories) && parsedCategories.length > 0) {
-          setAllCategories(parsedCategories.map((cat: Omit<Category, 'icon'> & { iconName: string }) => ({
-            ...cat,
-            icon: getIconComponent(cat.iconName || 'Package'),
-            mode: cat.mode || 'all'
-          })));
-        } else {
-           setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
+      let useInitialCategoriesAsFallback = true;
+
+      if (storedAllCategories) {
+        try {
+          const parsedCategories = JSON.parse(storedAllCategories);
+          if (Array.isArray(parsedCategories) && parsedCategories.length > 0) {
+            setAllCategories(parsedCategories.map((cat: Omit<Category, 'icon'> & { iconName: string }) => ({
+              ...cat,
+              icon: getIconComponent(cat.iconName || 'Package'),
+              mode: cat.mode || 'all'
+            })));
+            useInitialCategoriesAsFallback = false;
+          }
+        } catch (e) {
+          console.error("Failed to parse categories from localStorage, using defaults.", e);
         }
-      } else {
-         setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
+      }
+
+      if (useInitialCategoriesAsFallback) {
+        setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
       }
 
       const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
@@ -415,7 +391,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (storedAuth === 'true' && storedExpiry) {
         const expiryTime = parseInt(storedExpiry, 10);
         if (Date.now() > expiryTime) {
-          initialAuth = false; 
+          initialAuth = false;
           localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
           localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
         } else {
@@ -438,11 +414,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (err) {
       console.error("Failed to load data from local storage", err);
       setError("Failed to load saved data.");
-      setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
+       if (allCategories.length === 0) { // Ensure categories are set if error occurred before they were
+        setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
+      }
     } finally {
-      setIsLoading(false); 
+      setIsLoading(false);
     }
-  }, []); 
+  }, []);
 
 
   useEffect(() => {
@@ -523,7 +501,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       timestamp: Date.now(),
       read: false,
     };
-    setUINotifications(prev => [newNotification, ...prev.slice(0, 49)]); 
+    setUINotifications(prev => [newNotification, ...prev.slice(0, 49)]);
   }, []);
 
 
@@ -546,6 +524,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const activityTitle = masterActivity.title;
         const masterId = masterActivity.id;
 
+        // 5-minute "starting soon" notification
         if (masterActivity.time) {
           const todayInstances = generateFutureInstancesForNotifications(masterActivity, today, endOfDay(today));
           todayInstances.forEach(instance => {
@@ -569,10 +548,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
           });
         }
-        
+
+        // Advanced notifications for recurring tasks
         if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
           const recurrenceType = masterActivity.recurrence.type;
-          const futureCheckEndDate = addDays(today, 8); 
+          const futureCheckEndDate = addDays(today, 8); // Check up to 8 days ahead
           const upcomingInstances = generateFutureInstancesForNotifications(masterActivity, addDays(today,1), futureCheckEndDate);
 
           upcomingInstances.forEach(instance => {
@@ -601,7 +581,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               if (isSameDay(today, oneWeekBefore)) {
                  notify('1week_monthly', 'toastActivityInOneWeekTitle', 'toastActivityInOneWeekDescription', { activityTitle });
               }
-              
+
               const twoDaysBefore = subDays(instance.instanceDate, 2);
               if (isSameDay(today, twoDaysBefore)) {
                  notify('2days_monthly', 'toastActivityInTwoDaysTitle', 'toastActivityInTwoDaysDescription', { activityTitle });
@@ -615,7 +595,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
         }
       });
-    }, 60000); 
+    }, 60000);
 
     return () => clearInterval(intervalId);
   }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification]);
@@ -688,15 +668,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     currentActivitySetter(prev =>
       prev.map(act => {
         if (act.id === activityId) {
-          const updatedRecurrence = updates.recurrence?.type === 'none' 
-            ? { type: 'none' } 
+          const updatedRecurrence = updates.recurrence?.type === 'none'
+            ? { type: 'none' }
             : updates.recurrence || act.recurrence;
-          
+
           let updatedCompletedOccurrences = act.completedOccurrences;
           if (updates.recurrence && updates.recurrence.type === 'none') {
             updatedCompletedOccurrences = {};
-          } else if (updates.recurrence && 
-                     (updates.recurrence.type !== act.recurrence?.type || 
+          } else if (updates.recurrence &&
+                     (updates.recurrence.type !== act.recurrence?.type ||
                       updates.recurrence.dayOfMonth !== act.recurrence?.dayOfMonth ||
                       JSON.stringify(updates.recurrence.daysOfWeek) !== JSON.stringify(act.recurrence?.daysOfWeek) ||
                       (updates.createdAt && new Date(updates.createdAt).getTime() !== new Date(act.createdAt).getTime())
@@ -834,7 +814,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [toast, allCategories, t]);
 
   const markUINotificationAsRead = useCallback((notificationId: string) => {
-    setUINotifications(prev => 
+    setUINotifications(prev =>
       prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
     );
   }, []);
@@ -851,7 +831,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   return (
     <AppContext.Provider
       value={{
-        activities: getRawActivities(), 
+        activities: getRawActivities(),
         getRawActivities,
         categories: filteredCategories,
         appMode: appModeState,
@@ -889,3 +869,5 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 };
 
+
+    
