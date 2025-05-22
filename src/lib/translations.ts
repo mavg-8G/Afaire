@@ -58,6 +58,8 @@ export type Translations = {
   activityDateLabel: string;
   pickADate: string;
   activityTimeLabel: string;
+  activityNotesLabel: string;
+  activityNotesPlaceholder: string;
   todosLabel: string;
   suggestTodos: string;
   addTodo: string;
@@ -84,7 +86,6 @@ export type Translations = {
   noActivitiesForDay: string;
   noActivitiesForPeriod: string;
   selectDateToSeeActivities: string;
-  addActivityForDate: (params: { date: string }) => string;
   confirmDeleteActivityTitle: string;
   confirmDeleteActivityDescription: (params: { activityTitle: string }) => string;
   toastActivityDeletedTitle: string;
@@ -213,6 +214,8 @@ export const translations: Record<Locale, Translations> = {
     activityDateLabel: "Activity Date",
     pickADate: "Pick a date",
     activityTimeLabel: "Activity Time (HH:MM)",
+    activityNotesLabel: "Notes",
+    activityNotesPlaceholder: "Add any additional details or links here...",
     todosLabel: "Todos",
     suggestTodos: "Suggest Todos",
     addTodo: "Add Todo",
@@ -236,7 +239,6 @@ export const translations: Record<Locale, Translations> = {
     noActivitiesForDay: "No activities scheduled for this day.",
     noActivitiesForPeriod: "No activities scheduled for this period.",
     selectDateToSeeActivities: "Select a date to see activities.",
-    addActivityForDate: (params) => `Add Activity for ${params.date}`,
     confirmDeleteActivityTitle: "Are you sure?",
     confirmDeleteActivityDescription: (params) => `This action cannot be undone. This will permanently delete the activity "${params.activityTitle}" and all its associated todos.`,
     toastActivityDeletedTitle: "Activity Deleted",
@@ -351,6 +353,8 @@ export const translations: Record<Locale, Translations> = {
     activityDateLabel: "Fecha de la Actividad",
     pickADate: "Elige una fecha",
     activityTimeLabel: "Hora de la Actividad (HH:MM)",
+    activityNotesLabel: "Notas",
+    activityNotesPlaceholder: "Añade detalles adicionales o enlaces aquí...",
     todosLabel: "Tareas",
     suggestTodos: "Sugerir Tareas",
     addTodo: "Añadir Tarea",
@@ -374,7 +378,6 @@ export const translations: Record<Locale, Translations> = {
     noActivitiesForDay: "No hay actividades programadas para este día.",
     noActivitiesForPeriod: "No hay actividades programadas para este período.",
     selectDateToSeeActivities: "Selecciona una fecha para ver actividades.",
-    addActivityForDate: (params) => `Añadir Actividad para ${params.date}`,
     confirmDeleteActivityTitle: "¿Estás seguro?",
     confirmDeleteActivityDescription: (params) => `Esta acción no se puede deshacer. Esto eliminará permanentemente la actividad "${params.activityTitle}" y todas sus tareas asociadas.`,
     toastActivityDeletedTitle: "Actividad Eliminada",
@@ -452,5 +455,3 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
-
-    

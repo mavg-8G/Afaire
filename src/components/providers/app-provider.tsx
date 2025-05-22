@@ -16,9 +16,10 @@ export interface AppContextType {
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
   addActivity: (
-    activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed'> & {
+    activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'notes'> & {
       todos?: Omit<Todo, 'id' | 'completed'>[];
       time?: string;
+      notes?: string;
     },
     customCreatedAt?: number
   ) => void;
@@ -65,7 +66,6 @@ const getIconComponent = (iconName: string): Icons.LucideIcon => {
   return (Icons as any)[pascalCaseIconName] || Icons.Package;
 };
 
-// Initialize BroadcastChannel at the module level
 let logoutChannel: BroadcastChannel | null = null;
 if (typeof window !== 'undefined') {
   logoutChannel = new BroadcastChannel('todoFlowLogoutChannel');
@@ -99,7 +99,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [appMode]);
 
   const filteredCategories = useMemo(() => {
-    if (isLoading) return []; 
+    if (isLoading) return [];
     return allCategories.filter(cat =>
       !cat.mode || cat.mode === 'all' || cat.mode === appMode
     );
@@ -108,10 +108,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const logout = useCallback(() => {
     setIsAuthenticatedState(false);
-    setLoginAttemptsState(0); 
-    setLockoutEndTimeState(null); 
-    setSessionExpiryTimestampState(null); 
-    
+    setLoginAttemptsState(0);
+    setLockoutEndTimeState(null);
+    setSessionExpiryTimestampState(null);
+
     if (typeof window !== 'undefined') {
         localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
         localStorage.removeItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
@@ -122,7 +122,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (logoutChannel) {
       logoutChannel.postMessage('logout_event');
     }
-  }, []); 
+  }, []);
 
   useEffect(() => {
     setIsLoading(true);
@@ -163,7 +163,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (storedAuth === 'true' && storedExpiry) {
         const expiryTime = parseInt(storedExpiry, 10);
         if (Date.now() > expiryTime) {
-          logout(); // Session expired, call logout to clean up and broadcast
+          logout();
         } else {
           setIsAuthenticatedState(true);
           setSessionExpiryTimestampState(expiryTime);
@@ -186,9 +186,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } finally {
       setIsLoading(false);
     }
-  }, [logout]); 
+  }, [logout]);
 
-  // --- Persistence Effects ---
   useEffect(() => {
     if (!isLoading) {
       localStorage.setItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES, JSON.stringify(personalActivities));
@@ -293,14 +292,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return () => clearInterval(intervalId);
   }, [activities, isLoading, toast, notifiedToday, lastNotificationCheckDay, isAuthenticated, t]);
 
-  // Effect for listening to logout events from other tabs
   useEffect(() => {
     if (!logoutChannel) return;
 
     const handleLogoutMessage = (event: MessageEvent) => {
       if (event.data === 'logout_event' && isAuthenticated) {
-        // Another tab logged out or session expired, update this tab's state
-        logout(); 
+        logout();
       }
     };
 
@@ -320,12 +317,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const setIsAuthenticated = useCallback((value: boolean, rememberMe: boolean = false) => {
     setIsAuthenticatedState(value);
-    if (value) { 
+    if (value) {
       const now = Date.now();
       const expiryDuration = rememberMe ? SESSION_DURATION_30_DAYS_MS : SESSION_DURATION_24_HOURS_MS;
       const newExpiryTimestamp = now + expiryDuration;
       setSessionExpiryTimestampState(newExpiryTimestamp);
-    } else { 
+    } else {
       setSessionExpiryTimestampState(null);
     }
   }, []);
@@ -339,9 +336,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   const addActivity = useCallback((
-      activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed'> & {
+      activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'notes'> & {
         todos?: Omit<Todo, 'id' | 'completed'>[];
         time?: string;
+        notes?: string;
       },
       customCreatedAt?: number
     ) => {
@@ -352,6 +350,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       todos: (activityData.todos || []).map(todo => ({ ...todo, id: uuidv4(), completed: false })),
       createdAt: customCreatedAt !== undefined ? customCreatedAt : Date.now(),
       time: activityData.time || undefined,
+      notes: activityData.notes || undefined,
       completed: false,
     };
     currentActivitySetter(prev => [...prev, newActivity]);
@@ -506,5 +505,3 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
-
-    

@@ -22,6 +22,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle, Trash2, Sparkles, Loader2, CalendarIcon, Clock } from 'lucide-react';
 import { useAppStore } from '@/hooks/use-app-store';
@@ -55,6 +56,7 @@ const activityFormSchema = z.object({
   activityDate: z.date({ required_error: "Activity date is required." }),
   time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format. Use HH:MM (24-hour).").optional().or(z.literal('')),
   todos: z.array(todoSchema).optional(),
+  notes: z.string().optional(),
 });
 
 type ActivityFormData = z.infer<typeof activityFormSchema>;
@@ -76,6 +78,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
       activityDate: initialDate || new Date(),
       time: "",
       todos: [],
+      notes: "",
     },
   });
 
@@ -93,6 +96,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
           activityDate: new Date(activity.createdAt),
           time: activity.time || "",
           todos: activity.todos.map(t => ({ id: t.id, text: t.text, completed: t.completed })),
+          notes: activity.notes || "",
         });
       } else {
         form.reset({
@@ -101,10 +105,10 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
           activityDate: initialDate || new Date(),
           time: "",
           todos: [],
+          notes: "",
         });
       }
-      // Ensure popover is closed when modal reopens or activity changes
-      setIsDatePopoverOpen(false); 
+      setIsDatePopoverOpen(false);
     }
   }, [activity, form, isOpen, initialDate]);
 
@@ -119,6 +123,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
       })) || [],
       createdAt: data.activityDate.getTime(),
       time: data.time === "" ? undefined : data.time,
+      notes: data.notes,
     };
 
     if (activity) {
@@ -134,6 +139,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
           categoryId: data.categoryId,
           todos: data.todos?.map(t=>({text: t.text, completed: false})),
           time: data.time === "" ? undefined : data.time,
+          notes: data.notes,
         },
         data.activityDate.getTime()
       );
@@ -247,7 +253,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                         </FormControl>
                       </PopoverTrigger>
                       <PopoverContent
-                        className="w-auto p-0 z-[70]" 
+                        className="w-auto p-0 z-[70]"
                         align="start"
                       >
                         <Calendar
@@ -255,13 +261,12 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                           selected={field.value}
                           onSelect={(selectedDate) => {
                             field.onChange(selectedDate);
-                            setIsDatePopoverOpen(false); // Close popover on date select
+                            setIsDatePopoverOpen(false);
                           }}
                           disabled={(date) =>
                             date < new Date("1900-01-01")
                           }
                           locale={dateLocale}
-                          
                         />
                       </PopoverContent>
                     </Popover>
@@ -273,7 +278,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                 control={form.control}
                 name="time"
                 render={({ field }) => (
-                  <FormItem className="flex flex-col min-w-0"> {/* Added min-w-0 */}
+                  <FormItem className="flex flex-col min-w-0">
                     <FormLabel className="min-h-8">{t('activityTimeLabel')}</FormLabel>
                     <FormControl>
                       <div className="relative">
@@ -286,6 +291,24 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
                 )}
               />
             </div>
+
+            <FormField
+              control={form.control}
+              name="notes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('activityNotesLabel')}</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder={t('activityNotesPlaceholder')}
+                      className="resize-none"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <div>
               <div className="flex justify-between items-center mb-2">
@@ -352,4 +375,3 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate }
     </Dialog>
   );
 }
-

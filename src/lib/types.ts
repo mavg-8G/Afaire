@@ -15,6 +15,7 @@ export interface Activity {
   createdAt: number; // Timestamp for the date
   time?: string; // Optional time in HH:MM format
   completed?: boolean; // Added for activity completion status
+  notes?: string; // Optional field for additional notes
 }
 
 export type AppMode = 'personal' | 'work';
