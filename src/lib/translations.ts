@@ -57,7 +57,7 @@ export type Translations = {
   editActivityTitle: string;
   addActivityTitle: string;
   editActivityDescription: string;
-  addActivityDescription: (params: { initialDateMsg: string }) => string;
+  addActivityDescription: (params: { formattedInitialDate: string }) => string;
   activityTitleLabel: string;
   categoryLabel: string;
   selectCategoryPlaceholder: string;
@@ -251,7 +251,7 @@ export const translations: Record<Locale, Translations> = {
     editActivityTitle: "Edit Activity",
     addActivityTitle: "Add New Activity",
     editActivityDescription: "Update the details of your activity.",
-    addActivityDescription: (params) => `Fill in the details for your new activity.${params.initialDateMsg}`,
+    addActivityDescription: (params) => `Fill in the details for your new activity. Default date: ${params.formattedInitialDate}.`,
     activityTitleLabel: "Activity Title",
     categoryLabel: "Category",
     selectCategoryPlaceholder: "Select a category",
@@ -426,7 +426,7 @@ export const translations: Record<Locale, Translations> = {
     editActivityTitle: "Editar Actividad",
     addActivityTitle: "Añadir Nueva Actividad",
     editActivityDescription: "Actualiza los detalles de tu actividad.",
-    addActivityDescription: (params) => `Completa los detalles de tu nueva actividad.${params.initialDateMsg}`,
+    addActivityDescription: (params) => `Completa los detalles de tu nueva actividad. Fecha por defecto: ${params.formattedInitialDate}.`,
     activityTitleLabel: "Título de la Actividad",
     categoryLabel: "Categoría",
     selectCategoryPlaceholder: "Selecciona una categoría",

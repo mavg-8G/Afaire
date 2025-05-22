@@ -174,13 +174,14 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
 
   const dialogDescriptionText = activity
     ? t('editActivityDescription')
-    : t('addActivityDescription', { initialDateMsg: ` ${t('locale') === 'es' ? 'Fecha por defecto:' : 'Default date:'} ${format(initialDate, "PPP", { locale: dateLocale })}.` });
+    : t('addActivityDescription', { formattedInitialDate: format(initialDate, "PPP", { locale: dateLocale }) });
+
 
   const maxRecurrenceEndDate = activityStartDate ? addDays(addMonths(activityStartDate, 5), 1) : undefined;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col z-50"> {/* Changed z-[70] to z-50 */}
+      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col z-50">
         <DialogHeader>
           <DialogTitle>{activity ? t('editActivityTitle') : t('addActivityTitle')}</DialogTitle>
           <DialogDescription>
@@ -276,7 +277,6 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                         <Clock className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
                       </div>
                     </FormControl>
-                    <FormDescription>{t('timeFormatDescription24Hour')}</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -531,6 +531,3 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
-
-
-    
