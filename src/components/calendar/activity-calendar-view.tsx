@@ -30,6 +30,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useTranslations } from '@/contexts/language-context';
 import { enUS, es } from 'date-fns/locale';
 import { Skeleton } from '@/components/ui/skeleton';
+import { v4 as uuidv4 } from 'uuid';
 
 type ViewMode = 'daily' | 'weekly' | 'monthly';
 
@@ -142,7 +143,8 @@ function generateRecurringInstances(
         originalInstanceDate: currentDate.getTime(),
         masterActivityId: masterActivity.id,
         completed: !!masterActivity.completedOccurrences?.[occurrenceDateKey],
-        todos: masterActivity.todos.map(todo => ({...todo, id: uuidv4(), completed: false})), // Ensure todos have unique IDs for instances
+        // Generate new unique IDs for todos in each recurring instance
+        todos: masterActivity.todos.map(todo => ({...todo, id: uuidv4(), completed: false})),
       });
     }
 
@@ -230,29 +232,36 @@ export default function ActivityCalendarView() {
 
 
     return allDisplayActivities.sort((a, b) => {
-      const aIsCompleted = a.isRecurringInstance && a.originalInstanceDate
-        ? !!a.completedOccurrences?.[formatISO(new Date(a.originalInstanceDate), { representation: 'date' })]
-        : !!a.completed;
-      const bIsCompleted = b.isRecurringInstance && b.originalInstanceDate
-        ? !!b.completedOccurrences?.[formatISO(new Date(b.originalInstanceDate), { representation: 'date' })]
-        : !!b.completed;
+        const aIsCompleted = a.isRecurringInstance && a.originalInstanceDate
+            ? !!a.completedOccurrences?.[formatISO(new Date(a.originalInstanceDate), { representation: 'date' })]
+            : !!a.completed;
+        const bIsCompleted = b.isRecurringInstance && b.originalInstanceDate
+            ? !!b.completedOccurrences?.[formatISO(new Date(b.originalInstanceDate), { representation: 'date' })]
+            : !!b.completed;
 
-      if (aIsCompleted !== bIsCompleted) {
-        return aIsCompleted ? 1 : -1;
-      }
+        if (aIsCompleted !== bIsCompleted) {
+            return aIsCompleted ? 1 : -1; // Completed items go to the bottom
+        }
 
-      const aTime = a.time ? parseInt(a.time.replace(':', ''), 10) : Infinity;
-      const bTime = b.time ? parseInt(b.time.replace(':', ''), 10) : Infinity;
+        // Sort by time (earliest first for non-completed, doesn't matter as much for completed)
+        const aTime = a.time ? parseInt(a.time.replace(':', ''), 10) : Infinity;
+        const bTime = b.time ? parseInt(b.time.replace(':', ''), 10) : Infinity;
 
-      if (a.time && !b.time) return -1;
-      if (!a.time && b.time) return 1;
-      if (a.time && b.time && aTime !== bTime) return aTime - bTime;
+        if (a.time && !b.time) return -1; // a has time, b doesn't -> a comes first
+        if (!a.time && b.time) return 1;  // b has time, a doesn't -> b comes first
 
-      if (a.originalInstanceDate && b.originalInstanceDate && a.originalInstanceDate !== b.originalInstanceDate) {
-        return new Date(a.originalInstanceDate).getTime() - new Date(b.originalInstanceDate).getTime();
-      }
+        if (a.time && b.time && aTime !== bTime) {
+            return aTime - bTime;
+        }
 
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        // Fallback sort by original instance date or creation date if times are the same or both undefined
+        const aDate = a.originalInstanceDate ? new Date(a.originalInstanceDate).getTime() : new Date(a.createdAt).getTime();
+        const bDate = b.originalInstanceDate ? new Date(b.originalInstanceDate).getTime() : new Date(b.createdAt).getTime();
+        if (aDate !== bDate) {
+            return aDate - bDate;
+        }
+
+        return 0; // Keep original order if everything else is equal
     });
   }, [getRawActivities, selectedDate, hasMounted, viewMode, dateLocale]);
 
@@ -299,7 +308,7 @@ export default function ActivityCalendarView() {
 
   const handleAddNewActivityGeneric = () => {
     setEditingActivity(undefined);
-    setDateForModal(selectedDate || new Date()); // Set stable date for modal, use selectedDate or today
+    setDateForModal(selectedDate || new Date()); // Use selectedDate if available, else today
     setEditingInstanceDate(undefined);
     setIsActivityModalOpen(true);
   };
@@ -331,7 +340,6 @@ export default function ActivityCalendarView() {
     setIsActivityModalOpen(false);
     setEditingActivity(undefined);
     setEditingInstanceDate(undefined);
-    // No need to reset dateForModal here, it will be set when modal opens next
   };
 
   const modifiers = {
@@ -395,7 +403,7 @@ export default function ActivityCalendarView() {
     return (
       <div className="container mx-auto py-6 flex flex-col lg:flex-row gap-6 items-start">
         <Card className="lg:w-1/2 xl:w-2/3 shadow-lg w-full">
-          <CardContent className="p-0 sm:p-1 flex justify-center"> {/* Adjusted padding */}
+          <CardContent className="p-0 sm:p-1 flex justify-center">
             <Skeleton className="h-[300px] w-[350px] sm:w-[400px] sm:h-[350px] rounded-md" />
           </CardContent>
         </Card>
@@ -404,6 +412,9 @@ export default function ActivityCalendarView() {
             <CardTitle>
               <Skeleton className="h-6 w-3/4" />
             </CardTitle>
+             <div className="pt-2">
+                <Skeleton className="h-10 w-full" />
+            </div>
           </CardHeader>
           <CardContent className="flex-grow">
             <div className="space-y-3 py-4">
@@ -420,7 +431,7 @@ export default function ActivityCalendarView() {
     <div className="relative flex-grow">
       <div className="container mx-auto py-6 flex flex-col lg:flex-row gap-6 items-start">
         <Card className="lg:w-1/2 xl:w-2/3 shadow-lg w-full">
-          <CardContent className="p-0 sm:p-1 flex justify-center"> {/* Adjusted padding */}
+          <CardContent className="p-0 sm:p-1 flex justify-center">
             <Calendar
               mode="single"
               selected={selectedDate}
@@ -453,7 +464,7 @@ export default function ActivityCalendarView() {
           </CardHeader>
           <CardContent className="flex-grow">
             {selectedDate && activitiesForView.length > 0 ? (
-              <ScrollArea className="h-[calc(100vh-27rem)] sm:h-[calc(100vh-27rem)] pr-1">
+              <ScrollArea className="h-[calc(100vh-25rem)] sm:h-[calc(100vh-25rem)] pr-1">
                 <div className="space-y-3">
                   {activitiesForView.map(activity => (
                     <ActivityListItem
@@ -481,7 +492,7 @@ export default function ActivityCalendarView() {
             isOpen={isActivityModalOpen}
             onClose={handleCloseModal}
             activity={editingActivity}
-            initialDate={dateForModal} // Pass the stable dateForModal
+            initialDate={dateForModal} 
             instanceDate={editingInstanceDate}
           />
         )}
@@ -506,7 +517,7 @@ export default function ActivityCalendarView() {
 
       <Button
         onClick={handleAddNewActivityGeneric}
-        className="fixed bottom-6 right-6 rounded-full shadow-lg h-14 w-14 z-30 p-0"
+        className="fixed bottom-6 right-6 rounded-full shadow-lg h-14 w-14 z-30 p-0 bg-background/70 backdrop-blur-md border border-border/50"
         aria-label={t('addActivity')}
       >
         <PlusCircle className="h-7 w-7" />
@@ -514,3 +525,4 @@ export default function ActivityCalendarView() {
     </div>
   );
 }
+
