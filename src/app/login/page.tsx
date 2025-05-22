@@ -8,7 +8,7 @@ import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
+// import { Label } from '@/components/ui/label'; // No longer needed directly for rememberMe
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useAppStore } from '@/hooks/use-app-store';
@@ -19,13 +19,13 @@ import { LogoIcon } from '@/components/icons/logo-icon';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Terminal, Eye, EyeOff } from 'lucide-react';
 
-const loginFormSchema = z.object({
+const loginFormSchemaBase = z.object({
   username: z.string().min(1, 'loginUsernameRequired'),
   password: z.string().min(1, 'loginPasswordRequired'),
   rememberMe: z.boolean().default(false).optional(),
 });
 
-type LoginFormValues = z.infer<typeof loginFormSchema>;
+type LoginFormValues = z.infer<typeof loginFormSchemaBase>;
 
 const MAX_ATTEMPTS_BEFORE_LOCKOUT = 2;
 const BASE_LOCKOUT_DURATION_SECONDS = 30;
@@ -46,6 +46,13 @@ export default function LoginPage() {
   const [remainingLockoutTime, setRemainingLockoutTime] = useState<number | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Dynamically create the schema with translated messages
+  const loginFormSchema = loginFormSchemaBase.extend({
+    username: z.string().min(1, t('loginUsernameRequired')),
+    password: z.string().min(1, t('loginPasswordRequired')),
+  });
+
+
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
     defaultValues: {
@@ -57,7 +64,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      router.replace('/'); // Redirect to main app page if already authenticated
+      router.replace('/'); 
     }
   }, [isAuthenticated, router]);
 
@@ -71,15 +78,14 @@ export default function LoginPage() {
           setErrorMessage(t('loginLockoutMessage', { seconds: remaining }));
         } else {
           setRemainingLockoutTime(null);
-          setLockoutEndTime(null); // Clear lockout from store
+          setLockoutEndTime(null); 
           setErrorMessage(null);
           if (interval) clearInterval(interval);
         }
       };
-      updateTimer(); // Initial call
+      updateTimer(); 
       interval = setInterval(updateTimer, 1000);
     } else if (lockoutEndTime && lockoutEndTime <= Date.now()) {
-      // Lockout has expired, clear it
       setLockoutEndTime(null);
       setRemainingLockoutTime(null);
       setErrorMessage(null);
@@ -99,7 +105,6 @@ export default function LoginPage() {
     setIsLoading(true);
     setErrorMessage(null);
 
-    // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 500));
 
     if (data.username === HARDCODED_USERNAME && data.password === HARDCODED_PASSWORD) {
@@ -127,7 +132,6 @@ export default function LoginPage() {
   const isLockedOut = !!(lockoutEndTime && lockoutEndTime > Date.now());
 
   if (isAuthenticated) {
-     // Still show a loading or blank screen while redirecting
     return <div className="flex items-center justify-center min-h-screen bg-background"><p>{t('loginRedirecting')}</p></div>;
   }
 
@@ -153,7 +157,7 @@ export default function LoginPage() {
                     <FormControl>
                       <Input placeholder={t('loginUsernamePlaceholder')} {...field} disabled={isLockedOut} />
                     </FormControl>
-                    <FormMessage>{form.formState.errors.username && t(form.formState.errors.username.message as any)}</FormMessage>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -185,7 +189,7 @@ export default function LoginPage() {
                         </Button>
                       </div>
                     </FormControl>
-                     <FormMessage>{form.formState.errors.password && t(form.formState.errors.password.message as any)}</FormMessage>
+                     <FormMessage />
                   </FormItem>
                 )}
               />
@@ -193,24 +197,22 @@ export default function LoginPage() {
                 control={form.control}
                 name="rememberMe"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                  <FormItem className="flex flex-row items-center space-x-2 space-y-0">
                     <FormControl>
                       <Checkbox
                         checked={field.value}
                         onCheckedChange={field.onChange}
                         disabled={isLockedOut}
-                        id="remember-me"
+                        // id is now handled by FormControl and FormLabel
                       />
                     </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <Label htmlFor="remember-me" className="font-normal">
-                        {t('rememberMeLabel')}
-                      </Label>
-                    </div>
+                    <FormLabel className="font-normal"> {/* Use FormLabel here */}
+                      {t('rememberMeLabel')}
+                    </FormLabel>
                   </FormItem>
                 )}
               />
-              {errorMessage && !isLockedOut && ( // Show general error message if not specifically a lockout message
+              {errorMessage && !isLockedOut && ( 
                 <Alert variant="destructive">
                   <Terminal className="h-4 w-4" />
                   <AlertTitle>{t('loginErrorTitle')}</AlertTitle>
