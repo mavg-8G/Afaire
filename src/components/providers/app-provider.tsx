@@ -172,7 +172,7 @@ function generateFutureInstancesForNotifications(
 
     if (seriesEndDate && isAfter(currentDate, seriesEndDate)) break;
     
-    if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
+    if (isBefore(currentDate, new Date(masterActivity.createdAt))) { 
         if (recurrence.type === 'daily') currentDate = addDays(currentDate, 1);
         else if (recurrence.type === 'weekly') currentDate = addDays(currentDate, 1); 
         else if (recurrence.type === 'monthly') { 
@@ -264,7 +264,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [workActivities, setWorkActivities] = useState<Activity[]>([]);
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [appMode, setAppModeState] = useState<AppMode>('personal');
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true); // Initialize to true
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const { t, locale } = useTranslations(); 
@@ -314,8 +314,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, []);
 
+  // Effect for initial loading from localStorage - runs once on mount
   useEffect(() => {
-    setIsLoading(true);
+    let initialAuth = false;
     try {
       const storedPersonalActivities = localStorage.getItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES);
       if (storedPersonalActivities) setPersonalActivities(JSON.parse(storedPersonalActivities));
@@ -350,14 +351,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (storedAuth === 'true' && storedExpiry) {
         const expiryTime = parseInt(storedExpiry, 10);
         if (Date.now() > expiryTime) {
-          logout();
+          // Session expired, trigger logout logic but don't call logout() directly here to avoid state update during render
+          initialAuth = false; 
+          localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
+          localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
         } else {
-          setIsAuthenticatedState(true);
+          initialAuth = true;
           setSessionExpiryTimestampState(expiryTime);
         }
-      } else {
-        if(isAuthenticated) logout(); 
       }
+      setIsAuthenticatedState(initialAuth);
+
 
       const storedAttempts = localStorage.getItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
       setLoginAttemptsState(storedAttempts ? parseInt(storedAttempts, 10) : 0);
@@ -373,9 +377,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setError("Failed to load saved data.");
       setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
     } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Set isLoading to false after all initial loading logic
     }
-  }, [logout, isAuthenticated]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array means this runs only once on mount
+
 
   useEffect(() => {
     if (!isLoading) {

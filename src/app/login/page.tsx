@@ -1,14 +1,13 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-// import { Label } from '@/components/ui/label'; // No longer needed directly for rememberMe
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useAppStore } from '@/hooks/use-app-store';
@@ -41,20 +40,19 @@ export default function LoginPage() {
   } = useAppStore();
   const router = useRouter();
   const { t } = useTranslations();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false); // Renamed from isLoading to avoid conflict
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [remainingLockoutTime, setRemainingLockoutTime] = useState<number | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Dynamically create the schema with translated messages
-  const loginFormSchema = loginFormSchemaBase.extend({
+  // Memoize the schema to prevent re-creation on every render if 't' is stable
+  const loginFormSchema = useMemo(() => loginFormSchemaBase.extend({
     username: z.string().min(1, t('loginUsernameRequired')),
     password: z.string().min(1, t('loginPasswordRequired')),
-  });
-
+  }), [t]);
 
   const form = useForm<LoginFormValues>({
-    resolver: zodResolver(loginFormSchema),
+    resolver: useMemo(() => zodResolver(loginFormSchema), [loginFormSchema]), // Memoize the resolver
     defaultValues: {
       username: '',
       password: '',
@@ -102,7 +100,7 @@ export default function LoginPage() {
       return;
     }
 
-    setIsLoading(true);
+    setIsSubmitting(true);
     setErrorMessage(null);
 
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -126,7 +124,7 @@ export default function LoginPage() {
         setErrorMessage(t('loginLockoutMessage', { seconds: Math.ceil(currentLockoutDurationMs / 1000) }));
       }
     }
-    setIsLoading(false);
+    setIsSubmitting(false);
   };
 
   const isLockedOut = !!(lockoutEndTime && lockoutEndTime > Date.now());
@@ -203,10 +201,9 @@ export default function LoginPage() {
                         checked={field.value}
                         onCheckedChange={field.onChange}
                         disabled={isLockedOut}
-                        // id is now handled by FormControl and FormLabel
                       />
                     </FormControl>
-                    <FormLabel className="font-normal"> {/* Use FormLabel here */}
+                    <FormLabel className="font-normal">
                       {t('rememberMeLabel')}
                     </FormLabel>
                   </FormItem>
@@ -226,8 +223,8 @@ export default function LoginPage() {
                   <AlertDescription>{t('loginLockoutMessage', { seconds: remainingLockoutTime })}</AlertDescription>
                 </Alert>
               )}
-              <Button type="submit" className="w-full" disabled={isLoading || isLockedOut}>
-                {isLoading ? t('loginLoggingIn') : t('loginButtonText')}
+              <Button type="submit" className="w-full" disabled={isSubmitting || isLockedOut}>
+                {isSubmitting ? t('loginLoggingIn') : t('loginButtonText')}
               </Button>
             </form>
           </Form>
