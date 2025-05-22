@@ -18,8 +18,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'TodoFlow - Manage Your Activities',
+  title: 'À faire - Manage Your Activities',
   description: 'A smart todo and activity manager with AI-powered suggestions.',
+  // Adding manifest related metadata for better PWA discovery if needed by some tools
+  // manifest: "/manifest.json", // Next.js 13+ app router typically doesn't need this here if linked in head
 };
 
 export default function RootLayout({
@@ -29,6 +31,16 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="À faire" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" data-ai-hint="app logo" />
+        {/* The theme-color for the manifest is #FAD0C3 (Personal Light Primary) */}
+        {/* This meta tag can influence the browser toolbar color */}
+        <meta name="theme-color" content="#FAD0C3" />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}>
         <ThemeProvider
           attribute="class"
