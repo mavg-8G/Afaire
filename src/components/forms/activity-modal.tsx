@@ -25,6 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label"; // Added Label import
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PlusCircle, Trash2, CalendarIcon, Clock, X, Loader2 } from 'lucide-react';
 import { useAppStore } from '@/hooks/use-app-store';
@@ -41,9 +42,9 @@ import { enUS, es } from 'date-fns/locale';
 interface ActivityModalProps {
   isOpen: boolean;
   onClose: () => void;
-  activity?: Activity; 
-  initialDate: Date; 
-  instanceDate?: Date; 
+  activity?: Activity;
+  initialDate: Date;
+  instanceDate?: Date;
 }
 
 const todoSchema = z.object({
@@ -55,7 +56,7 @@ const todoSchema = z.object({
 const recurrenceSchema = z.object({
   type: z.enum(['none', 'daily', 'weekly', 'monthly']).default('none'),
   endDate: z.date().nullable().optional(),
-  daysOfWeek: z.array(z.number().min(0).max(6)).optional().nullable(), 
+  daysOfWeek: z.array(z.number().min(0).max(6)).optional().nullable(),
   dayOfMonth: z.number().min(1).max(31).optional().nullable(),
 }).default({ type: 'none' });
 
@@ -69,7 +70,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
   const [isSubmittingForm, setIsSubmittingForm] = useState(false);
 
   const dateLocale = locale === 'es' ? es : enUS;
-  
+
   const activityFormSchema = z.object({
     title: z.string().min(1, t('activityTitleLabel')),
     categoryId: z.string().min(1, t('categoryLabel')),
@@ -97,7 +98,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
   useEffect(() => {
     if (isOpen) {
       setIsSubmittingForm(false); // Reset submitting state when modal opens
-      if (activity) { 
+      if (activity) {
         const baseDate = new Date(activity.createdAt);
         form.reset({
           title: activity.title,
@@ -113,11 +114,11 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
             dayOfMonth: activity.recurrence?.dayOfMonth || baseDate.getDate(),
           }
         });
-      } else { 
+      } else {
         form.reset({
           title: "",
           categoryId: "",
-          activityDate: initialDate, 
+          activityDate: initialDate,
           time: "",
           todos: [],
           notes: "",
@@ -132,7 +133,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
       setIsStartDatePopoverOpen(false);
       setIsRecurrenceEndDatePopoverOpen(false);
     }
-  }, [activity, form, isOpen, initialDate]); 
+  }, [activity, form, isOpen, initialDate]);
 
   const onSubmit = async (data: ActivityFormData) => {
     setIsSubmittingForm(true);
@@ -157,18 +158,18 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
       recurrence: recurrenceRule,
       completedOccurrences: activity?.completedOccurrences || {},
     };
-    
+
     // Simulate API call delay
     await new Promise(resolve => setTimeout(resolve, 500));
 
 
     if (activity) {
-      updateActivity(activity.id, activityPayload as Partial<Activity>);
+      updateActivity(activity.id, activityPayload as Partial<Activity>, activity);
       toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
     } else {
       addActivity(
         activityPayload as Omit<Activity, 'id' | 'completedOccurrences'> & { todos?: Omit<Todo, 'id' | 'completed'>[] },
-        data.activityDate.getTime() 
+        data.activityDate.getTime()
       );
       toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
     }
@@ -275,7 +276,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                 control={form.control}
                 name="time"
                 render={({ field }) => (
-                  <FormItem className="flex flex-col min-w-0"> 
+                  <FormItem className="flex flex-col min-w-0">
                     <FormLabel className="min-h-8">{t('activityTimeLabel')}</FormLabel>
                     <FormControl>
                        <div className="relative w-full">
