@@ -6,7 +6,7 @@ import { useAppStore } from '@/hooks/use-app-store';
 import type { Activity, RecurrenceRule } from '@/lib/types';
 import {
   isSameDay, format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval,
-  eachDayOfInterval, addDays, addWeeks, addMonths, getDay, getDate as getDayOfMonthFn, parseISO, formatISO,
+  addDays, addWeeks, addMonths, getDay, getDate as getDayOfMonthFn, parseISO, formatISO,
   isAfter, isBefore, isEqual, setDate as setDayOfMonth // Added setDate
 } from 'date-fns';
 import ActivityModal from '@/components/forms/activity-modal';
@@ -25,7 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from '@/hooks/use-toast';
 import { useTranslations } from '@/contexts/language-context';
 import { enUS, es } from 'date-fns/locale';
@@ -53,14 +53,13 @@ function generateRecurringInstances(
   viewEndDate: Date
 ): Activity[] {
   if (!masterActivity.recurrence || masterActivity.recurrence.type === 'none') {
-    // If it's a non-recurring activity, check if its single date falls in range
     const activityDate = new Date(masterActivity.createdAt);
     if (isWithinInterval(activityDate, { start: viewStartDate, end: viewEndDate }) || isSameDay(activityDate, viewStartDate) || isSameDay(activityDate, viewEndDate)) {
        return [{
         ...masterActivity,
         isRecurringInstance: false,
         originalInstanceDate: masterActivity.createdAt,
-        masterActivityId: masterActivity.id // For consistency, even non-recurring can have this
+        masterActivityId: masterActivity.id
       }];
     }
     return [];
@@ -68,26 +67,23 @@ function generateRecurringInstances(
 
   const instances: Activity[] = [];
   const recurrence = masterActivity.recurrence;
-  let currentDate = new Date(masterActivity.createdAt); // Start date of the series
+  let currentDate = new Date(masterActivity.createdAt); 
 
-  // Align currentDate to be within or after viewStartDate for generation efficiency
   if (isBefore(currentDate, viewStartDate)) {
       if (recurrence.type === 'daily') {
           currentDate = viewStartDate;
       } else if (recurrence.type === 'weekly' && recurrence.daysOfWeek && recurrence.daysOfWeek.length > 0) {
-          let tempDate = startOfWeek(viewStartDate, { weekStartsOn: 0 /* Sunday */});
+          let tempDate = startOfWeek(viewStartDate, { weekStartsOn: 0 });
           while(isBefore(tempDate, new Date(masterActivity.createdAt)) || !recurrence.daysOfWeek.includes(getDay(tempDate))) {
               tempDate = addDays(tempDate, 1);
-              if (isAfter(tempDate, viewEndDate) && isAfter(tempDate, currentDate)) break; // Optimization
+              if (isAfter(tempDate, viewEndDate) && isAfter(tempDate, currentDate)) break; 
           }
           currentDate = tempDate;
-
       } else if (recurrence.type === 'monthly' && recurrence.dayOfMonth) {
           let tempMasterStartMonthDay = setDayOfMonth(new Date(masterActivity.createdAt), recurrence.dayOfMonth);
           if (isBefore(tempMasterStartMonthDay, new Date(masterActivity.createdAt))) {
               tempMasterStartMonthDay = addMonths(tempMasterStartMonthDay, 1);
           }
-
           currentDate = setDayOfMonth(viewStartDate, recurrence.dayOfMonth);
           if (isBefore(currentDate, viewStartDate)) currentDate = addMonths(currentDate,1);
           if (isBefore(currentDate, tempMasterStartMonthDay)) {
@@ -96,26 +92,20 @@ function generateRecurringInstances(
       }
   }
 
-
   const seriesEndDate = recurrence.endDate ? new Date(recurrence.endDate) : null;
+  let iterations = 0; 
+  const maxIterations = 366 * 2; 
 
-  let iterations = 0; // Safety break for loops
-  const maxIterations = 366 * 2; // Approx 2 years of daily occurrences
-
-  while (iterations < maxIterations && isBefore(currentDate, addDays(viewEndDate,1))) { // Check up to and including viewEndDate
+  while (iterations < maxIterations && isBefore(currentDate, addDays(viewEndDate,1))) { 
     iterations++;
-
-    if (seriesEndDate && isAfter(currentDate, seriesEndDate)) {
-      break; // Stop if recurrence end date is passed
-    }
-     if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
+    if (seriesEndDate && isAfter(currentDate, seriesEndDate)) break;
+    if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
         if (recurrence.type === 'daily') currentDate = addDays(currentDate, 1);
-        else if (recurrence.type === 'weekly') currentDate = addWeeks(currentDate, 1); // More robust to advance by week
-        else if (recurrence.type === 'monthly') currentDate = addMonths(currentDate, 1); // More robust
+        else if (recurrence.type === 'weekly') currentDate = addWeeks(currentDate, 1);
+        else if (recurrence.type === 'monthly') currentDate = addMonths(currentDate, 1);
         else break;
         continue;
     }
-
 
     let isValidOccurrence = false;
     switch (recurrence.type) {
@@ -123,7 +113,7 @@ function generateRecurringInstances(
         isValidOccurrence = true;
         break;
       case 'weekly':
-        if (recurrence.daysOfWeek?.includes(getDay(currentDate))) { // getDay: 0 (Sun) - 6 (Sat)
+        if (recurrence.daysOfWeek?.includes(getDay(currentDate))) { 
           isValidOccurrence = true;
         }
         break;
@@ -143,7 +133,6 @@ function generateRecurringInstances(
         originalInstanceDate: currentDate.getTime(),
         masterActivityId: masterActivity.id,
         completed: !!masterActivity.completedOccurrences?.[occurrenceDateKey],
-        // Generate new unique IDs for todos in each recurring instance
         todos: masterActivity.todos.map(todo => ({...todo, id: uuidv4(), completed: false})),
       });
     }
@@ -151,10 +140,8 @@ function generateRecurringInstances(
     if (recurrence.type === 'daily') {
       currentDate = addDays(currentDate, 1);
     } else if (recurrence.type === 'weekly') {
-      // Advance to the next day, and the loop + conditions will find the next valid day in the week or next week
       currentDate = addDays(currentDate, 1);
     } else if (recurrence.type === 'monthly') {
-      // Advance to the next day, and the loop + conditions will find the next valid day in the month or next month
       currentDate = addDays(currentDate,1);
     } else {
       break;
@@ -171,12 +158,12 @@ export default function ActivityCalendarView() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [currentDisplayMonth, setCurrentDisplayMonth] = useState<Date | undefined>(undefined);
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
-  const [editingActivity, setEditingActivity] = useState<Activity | undefined>(undefined); // This will be the master activity
-  const [editingInstanceDate, setEditingInstanceDate] = useState<Date | undefined>(undefined); // Date of the specific instance being interacted with
-  const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null); // Master activity to delete
+  const [editingActivity, setEditingActivity] = useState<Activity | undefined>(undefined);
+  const [editingInstanceDate, setEditingInstanceDate] = useState<Date | undefined>(undefined);
+  const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
   const [hasMounted, setHasMounted] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('daily');
-  const [dateForModal, setDateForModal] = useState<Date>(new Date()); // For stable prop to ActivityModal
+  const [dateForModal, setDateForModal] = useState<Date>(new Date());
 
 
   const dateLocale = locale === 'es' ? es : enUS;
@@ -186,7 +173,7 @@ export default function ActivityCalendarView() {
     const today = new Date();
     setSelectedDate(today);
     setCurrentDisplayMonth(today);
-    setDateForModal(today); // Initialize dateForModal as well
+    setDateForModal(today);
   }, []);
 
 
@@ -201,7 +188,7 @@ export default function ActivityCalendarView() {
     } else if (viewMode === 'weekly') {
       viewStartDate = startOfWeek(selectedDate, { locale: dateLocale });
       viewEndDate = endOfWeek(selectedDate, { locale: dateLocale });
-    } else { // monthly
+    } else { 
       viewStartDate = startOfMonth(selectedDate);
       viewEndDate = endOfMonth(selectedDate);
     }
@@ -211,7 +198,6 @@ export default function ActivityCalendarView() {
       if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
         allDisplayActivities.push(...generateRecurringInstances(masterActivity, viewStartDate, viewEndDate));
       } else {
-        // Non-recurring activity
         const activityDate = new Date(masterActivity.createdAt);
          if (isWithinInterval(activityDate, { start: viewStartDate, end: viewEndDate }) || isSameDay(activityDate, viewStartDate) || isSameDay(activityDate, viewEndDate) ) {
            allDisplayActivities.push({
@@ -230,7 +216,6 @@ export default function ActivityCalendarView() {
       );
     }
 
-
     return allDisplayActivities.sort((a, b) => {
         const aIsCompleted = a.isRecurringInstance && a.originalInstanceDate
             ? !!a.completedOccurrences?.[formatISO(new Date(a.originalInstanceDate), { representation: 'date' })]
@@ -240,52 +225,56 @@ export default function ActivityCalendarView() {
             : !!b.completed;
 
         if (aIsCompleted !== bIsCompleted) {
-            return aIsCompleted ? 1 : -1; // Completed items go to the bottom
+            return aIsCompleted ? 1 : -1; 
         }
 
-        // Sort by time (earliest first for non-completed, doesn't matter as much for completed)
         const aTime = a.time ? parseInt(a.time.replace(':', ''), 10) : Infinity;
         const bTime = b.time ? parseInt(b.time.replace(':', ''), 10) : Infinity;
 
-        if (a.time && !b.time) return -1; // a has time, b doesn't -> a comes first
-        if (!a.time && b.time) return 1;  // b has time, a doesn't -> b comes first
+        if (a.time && !b.time) return -1; 
+        if (!a.time && b.time) return 1;  
 
         if (a.time && b.time && aTime !== bTime) {
             return aTime - bTime;
         }
-
-        // Fallback sort by original instance date or creation date if times are the same or both undefined
+        
         const aDate = a.originalInstanceDate ? new Date(a.originalInstanceDate).getTime() : new Date(a.createdAt).getTime();
         const bDate = b.originalInstanceDate ? new Date(b.originalInstanceDate).getTime() : new Date(b.createdAt).getTime();
         if (aDate !== bDate) {
             return aDate - bDate;
         }
 
-        return 0; // Keep original order if everything else is equal
+        return 0; 
     });
   }, [getRawActivities, selectedDate, hasMounted, viewMode, dateLocale]);
 
-  const eventDays = useMemo(() => {
-    if (!hasMounted) return [];
+  const dayEventCounts = useMemo(() => {
+    if (!hasMounted || !currentDisplayMonth) return new Map<string, number>();
     const rawActivities = getRawActivities();
-    const datesWithEvents = new Set<string>();
+    const counts = new Map<string, number>();
 
-    const displayRangeStart = currentDisplayMonth ? startOfMonth(addMonths(currentDisplayMonth, -1)) : startOfMonth(addMonths(new Date(), -1));
-    const displayRangeEnd = currentDisplayMonth ? endOfMonth(addMonths(currentDisplayMonth, 1)) : endOfMonth(addMonths(new Date(), 1));
+    // Calculate range for events: current month +/- 1 month for performance and edge cases
+    const displayRangeStart = startOfMonth(addMonths(currentDisplayMonth, -1));
+    const displayRangeEnd = endOfMonth(addMonths(currentDisplayMonth, 1));
 
     rawActivities.forEach(activity => {
       if (activity.recurrence && activity.recurrence.type !== 'none') {
         const instances = generateRecurringInstances(activity, displayRangeStart, displayRangeEnd);
         instances.forEach(inst => {
           if (inst.originalInstanceDate) {
-            datesWithEvents.add(formatISO(new Date(inst.originalInstanceDate), { representation: 'date' }));
+            const dateKey = formatISO(new Date(inst.originalInstanceDate), { representation: 'date' });
+            counts.set(dateKey, (counts.get(dateKey) || 0) + 1);
           }
         });
       } else {
-        datesWithEvents.add(formatISO(new Date(activity.createdAt), { representation: 'date' }));
+        const activityDate = new Date(activity.createdAt);
+        if (isWithinInterval(activityDate, {start: displayRangeStart, end: displayRangeEnd})) {
+          const dateKey = formatISO(activityDate, { representation: 'date' });
+          counts.set(dateKey, (counts.get(dateKey) || 0) + 1);
+        }
       }
     });
-    return Array.from(datesWithEvents).map(dateStr => parseISO(dateStr));
+    return counts;
   }, [getRawActivities, hasMounted, currentDisplayMonth]);
 
 
@@ -300,7 +289,7 @@ export default function ActivityCalendarView() {
       const instanceOrDefaultDate = activityInstanceOrMaster.originalInstanceDate
         ? new Date(activityInstanceOrMaster.originalInstanceDate)
         : new Date(masterActivity.createdAt);
-      setDateForModal(instanceOrDefaultDate); // Set stable date for modal
+      setDateForModal(instanceOrDefaultDate); 
       setEditingInstanceDate(instanceOrDefaultDate);
       setIsActivityModalOpen(true);
     }
@@ -308,10 +297,8 @@ export default function ActivityCalendarView() {
 
   const handleAddNewActivityGeneric = () => {
     setEditingActivity(undefined);
-    // When adding a new activity via FAB, the date in the modal should default to the current date
-    // for the new activity's start date.
-    setDateForModal(new Date()); // Default to today for new activity
-    setEditingInstanceDate(undefined); // No specific instance for a new activity
+    setDateForModal(new Date());
+    setEditingInstanceDate(undefined); 
     setIsActivityModalOpen(true);
   };
 
@@ -344,14 +331,6 @@ export default function ActivityCalendarView() {
     setEditingInstanceDate(undefined);
   };
 
-  const modifiers = {
-    hasEvent: eventDays,
-  };
-
-  const modifiersClassNames = {
-    hasEvent: 'day-with-event',
-  };
-
   const handleDateSelect = (date: Date | undefined) => {
     setSelectedDate(date);
     if (date && currentDisplayMonth) {
@@ -363,7 +342,6 @@ export default function ActivityCalendarView() {
     } else if (date) {
         setCurrentDisplayMonth(date);
     }
-     // Update dateForModal when a new date is selected on the calendar
     if (date) {
       setDateForModal(date);
     }
@@ -373,7 +351,7 @@ export default function ActivityCalendarView() {
     const today = new Date();
     setSelectedDate(today);
     setCurrentDisplayMonth(today);
-    setDateForModal(today); // Also update dateForModal
+    setDateForModal(today);
   };
 
   const todayButtonFooter = (
@@ -446,10 +424,9 @@ export default function ActivityCalendarView() {
               month={currentDisplayMonth}
               onMonthChange={setCurrentDisplayMonth}
               className="p-1 sm:p-3 rounded-md"
-              modifiers={modifiers}
-              modifiersClassNames={modifiersClassNames}
               locale={dateLocale}
               footer={todayButtonFooter}
+              dayEventCounts={dayEventCounts} // Pass the event counts
             />
           </CardContent>
         </Card>
@@ -471,7 +448,7 @@ export default function ActivityCalendarView() {
           </CardHeader>
           <CardContent className="flex-grow">
             {selectedDate && activitiesForView.length > 0 ? (
-              <ScrollArea className="h-[calc(100vh-20rem)] sm:h-[calc(100vh-20rem)] pr-1">
+              <ScrollArea className="h-[calc(100vh-18rem)] sm:h-[calc(100vh-18rem)] pr-1">
                 <div className="space-y-3">
                   {activitiesForView.map(activity => (
                     <ActivityListItem

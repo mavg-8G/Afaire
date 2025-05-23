@@ -165,36 +165,35 @@ body {
   }
 }
 
-/* Custom style for react-day-picker event indicator */
-.day-with-event { /* This class is on the cell */
-  position: relative;
-}
-
-/* Style for the dot itself, targeting the button inside the day cell */
-.day-with-event button::after {
-  content: '';
-  position: absolute;
-  bottom: 4px; /* Adjust vertical position */
-  left: 50%;
-  transform: translateX(-50%);
-  width: 6px; /* Size of the dot */
-  height: 6px; /* Size of the dot */
+/* Custom style for react-day-picker event indicators */
+.day-event-dot {
+  display: inline-block;
+  width: 5px; /* Adjust size of the dot */
+  height: 5px; /* Adjust size of the dot */
   border-radius: 50%;
   background-color: hsl(var(--accent)); /* Default dot color */
-  z-index: 1; /* Ensure dot is above other button content if any */
 }
 
-/* Dot color for selected day with event */
-.day-with-event button.day_selected::after {
+.day-event-dot-selected {
   background-color: hsl(var(--accent-foreground)); /* Contrasting dot on selected day */
 }
 
-/* Dot color for today with event */
-.day-with-event button.day_today::after {
+.day-event-dot-today {
    background-color: hsl(var(--primary)); /* Primary color dot on today (accent) background */
 }
 
-/* Dot color for today that is also selected and has an event */
-.day-with-event button.day_today.day_selected::after {
-  background-color: hsl(var(--accent-foreground)); /* Keep it contrasting if today is also selected */
+.day-event-plus-dot {
+  font-size: 0.6rem; /* Smaller font size for the plus */
+  line-height: 0.6rem; /* Align with dots */
+  color: hsl(var(--accent));
+  font-weight: bold;
 }
+
+.day-event-plus-dot-selected {
+  color: hsl(var(--accent-foreground));
+}
+
+.day-event-plus-dot-today {
+  color: hsl(var(--primary));
+}
+
