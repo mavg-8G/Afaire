@@ -179,9 +179,8 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
 
   if (!isOpen) return null;
 
-  const dialogDescriptionText = activity
-    ? t('editActivityDescription')
-    : t('addActivityDescription', { formattedInitialDate: format(initialDate, "PPP", { locale: dateLocale }) });
+  const dialogDescriptionTextKey = activity ? 'editActivityDescription' : 'addActivityDescription';
+  const dialogDescriptionText = t(dialogDescriptionTextKey as any, { formattedInitialDate: format(initialDate, "PPP", { locale: dateLocale }) });
 
 
   const maxRecurrenceEndDate = activityStartDate ? addDays(addMonths(activityStartDate, 5), 1) : undefined;
@@ -238,7 +237,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                           <Button
                             variant={"outline"}
                             className={cn(
-                              "w-full pl-3 text-left font-normal",
+                              "w-full pl-3 text-left font-normal truncate whitespace-nowrap",
                               !field.value && "text-muted-foreground"
                             )}
                           >
@@ -247,11 +246,11 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                             ) : (
                               <span>{t('pickADate')}</span>
                             )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50 flex-shrink-0" />
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
+                      <PopoverContent className="w-auto p-0 max-h-[calc(100vh-12rem)] overflow-y-auto" align="start">
                         <Calendar
                           mode="single"
                           selected={field.value}
@@ -265,6 +264,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                           }}
                           disabled={(date) => date < new Date("1900-01-01")}
                           locale={dateLocale}
+                          fixedWeeks
                         />
                       </PopoverContent>
                     </Popover>
@@ -396,11 +396,11 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                              <Button
                                 variant={"outline"}
                                 className={cn(
-                                  "w-full pl-3 text-left font-normal justify-start",
+                                  "w-full pl-3 text-left font-normal justify-start truncate whitespace-nowrap",
                                   !field.value && "text-muted-foreground"
                                 )}
                               >
-                                <CalendarIcon className="mr-2 h-4 w-4 opacity-50" />
+                                <CalendarIcon className="mr-2 h-4 w-4 opacity-50 flex-shrink-0" />
                                 {field.value ? (
                                   format(field.value, "PPP", { locale: dateLocale })
                                 ) : (
@@ -409,7 +409,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                               </Button>
                           </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
+                        <PopoverContent className="w-auto p-0 max-h-[calc(100vh-12rem)] overflow-y-auto" align="start">
                            <Calendar
                             mode="single"
                             selected={field.value || undefined}
@@ -424,6 +424,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                                 return false;
                             }}
                             locale={dateLocale}
+                            fixedWeeks
                           />
                            {field.value && (
                             <Button
@@ -546,3 +547,5 @@ const WEEK_DAYS = [
   { id: 6, labelKey: 'daySat' },
 ] as const;
 
+
+    
