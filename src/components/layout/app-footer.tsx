@@ -2,15 +2,22 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { MOTIVATIONAL_PHRASES } from '@/lib/constants';
+import { useTranslations } from '@/contexts/language-context';
+import { translations } from '@/lib/translations'; // Import translations directly
 
 export default function AppFooter() {
+  const { locale } = useTranslations();
   const [currentPhrase, setCurrentPhrase] = useState('');
 
   useEffect(() => {
     // This effect runs only on the client after mount
-    setCurrentPhrase(MOTIVATIONAL_PHRASES[Math.floor(Math.random() * MOTIVATIONAL_PHRASES.length)]);
-  }, []);
+    const phrasesForLocale = translations[locale].motivationalPhrases || translations['en'].motivationalPhrases;
+    if (phrasesForLocale && phrasesForLocale.length > 0) {
+      setCurrentPhrase(phrasesForLocale[Math.floor(Math.random() * phrasesForLocale.length)]);
+    } else {
+      setCurrentPhrase("Keep up the great work!"); // Fallback
+    }
+  }, [locale]); // Re-run if locale changes
 
   if (!currentPhrase) {
     return null; // Don't render anything if no phrase is selected yet (avoids flash of empty footer)
@@ -22,3 +29,5 @@ export default function AppFooter() {
     </footer>
   );
 }
+
+    

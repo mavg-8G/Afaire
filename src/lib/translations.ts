@@ -13,7 +13,7 @@ export type Translations = {
   darkTheme: string;
   systemTheme: string;
   moreOptions: string;
-  moreOptionsDesktop: string; // New for desktop settings icon
+  moreOptionsDesktop: string; 
   personalMode: string;
   workMode: string;
   switchToPersonalMode: string;
@@ -232,6 +232,9 @@ export type Translations = {
   historyScopeWork: string;
   historyScopeCategory: string;
 
+  // Motivational Phrases
+  motivationalPhrases: string[];
+
 };
 
 export const translations: Record<Locale, Translations> = {
@@ -439,6 +442,18 @@ export const translations: Record<Locale, Translations> = {
     historyScopePersonal: "Personal",
     historyScopeWork: "Work",
     historyScopeCategory: "Category",
+    motivationalPhrases: [
+      "The secret of getting ahead is getting started.",
+      "Don't watch the clock; do what it does. Keep going.",
+      "The only way to do great work is to love what you do.",
+      "Believe you can and you're halfway there.",
+      "Act as if what you do makes a difference. It does.",
+      "Success is not final, failure is not fatal: It is the courage to continue that counts.",
+      "Strive not to be a success, but rather to be of value.",
+      "The future depends on what you do today.",
+      "Well done is better than well said.",
+      "You are never too old to set another goal or to dream a new dream."
+    ],
   },
   es: {
     addActivity: "Añadir Actividad",
@@ -644,6 +659,18 @@ export const translations: Record<Locale, Translations> = {
     historyScopePersonal: "Personal",
     historyScopeWork: "Trabajo",
     historyScopeCategory: "Categoría",
+    motivationalPhrases: [
+      "El secreto para salir adelante es empezar.",
+      "No mires el reloj; haz lo que él hace. Sigue adelante.",
+      "La única forma de hacer un gran trabajo es amar lo que haces.",
+      "Cree que puedes y estarás a medio camino.",
+      "Actúa como si lo que haces marca la diferencia. Lo hace.",
+      "El éxito no es definitivo, el fracaso no es fatal: Lo que cuenta es el coraje para continuar.",
+      "Esfuérzate no por ser un éxito, sino por ser de valor.",
+      "El futuro depende de lo que hagas hoy.",
+      "Bien hecho es mejor que bien dicho.",
+      "Nunca eres demasiado viejo para establecer otra meta o para soñar un nuevo sueño."
+    ],
   },
 };
 
@@ -659,3 +686,5 @@ type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
 
+
+    
