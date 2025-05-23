@@ -1,11 +1,11 @@
 
 "use client";
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Layers, Languages, Sun, Moon, Laptop, MoreVertical, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings } from 'lucide-react';
+import { Layers, Languages, Sun, Moon, Laptop, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings, MoreVertical } from 'lucide-react';
 import { LogoIcon } from '@/components/icons/logo-icon';
-import { APP_NAME, MOTIVATIONAL_PHRASES } from '@/lib/constants';
+import { APP_NAME } from '@/lib/constants';
 import ChangePasswordModal from '@/components/forms/change-password-modal';
 import { useTranslations } from '@/contexts/language-context';
 import { useTheme } from 'next-themes';
@@ -42,11 +42,6 @@ export default function AppHeader() {
   } = useAppStore();
   const router = useRouter();
   const dateLocale = locale === 'es' ? es : enUS;
-  const [currentPhrase, setCurrentPhrase] = useState('');
-
-  useEffect(() => {
-    setCurrentPhrase(MOTIVATIONAL_PHRASES[Math.floor(Math.random() * MOTIVATIONAL_PHRASES.length)]);
-  }, []);
 
   const handleModeToggle = (isWorkMode: boolean) => {
     setAppMode(isWorkMode ? 'work' : 'personal');
@@ -77,7 +72,7 @@ export default function AppHeader() {
   );
 
   const desktopAppModeToggleSwitch = (
-    <div className="flex items-center space-x-2">
+    <div className="hidden md:flex items-center gap-x-2">
       <Label htmlFor="app-mode-toggle-desktop" className="text-sm font-medium text-muted-foreground flex items-center">
         <User className={`inline-block h-4 w-4 mr-1 ${appMode === 'personal' ? 'text-primary' : ''}`} />
       </Label>
@@ -188,7 +183,6 @@ export default function AppHeader() {
   return (
     <>
       <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        {/* Main header row */}
         <div className="container flex h-16 items-center justify-between">
           {/* Left Group */}
           <div className="flex items-center gap-2 ml-4">
@@ -199,9 +193,8 @@ export default function AppHeader() {
           </div>
 
           {/* Center Group: Desktop App Mode Toggle Switch - Only on desktop */}
-          <div className="hidden md:flex items-center gap-x-2">
-            {desktopAppModeToggleSwitch}
-          </div>
+          {desktopAppModeToggleSwitch}
+
 
           {/* Right Group - This will be pushed to the far right by justify-between */}
           <div className="flex items-center gap-x-1 sm:gap-x-2 mr-4">
@@ -237,8 +230,8 @@ export default function AppHeader() {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" aria-label={t('moreOptionsDesktop')}> {/* Changed label for desktop */}
-                    <Settings className="h-5 w-5" /> {/* Using Settings icon for desktop */}
+                  <Button variant="outline" size="icon" aria-label={t('moreOptionsDesktop')}>
+                    <MoreHorizontal className="h-5 w-5" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -279,22 +272,6 @@ export default function AppHeader() {
             </div>
           </div>
         </div>
-
-        {/* Desktop Motivational Phrase Row */}
-        {currentPhrase && (
-          <div className="hidden md:flex container justify-center items-center py-1 bg-background/80 border-t border-border/20">
-            <p className="text-xs text-muted-foreground italic">
-              {currentPhrase}
-            </p>
-          </div>
-        )}
-        
-         {/* Mobile Motivational Phrase - Shown below header on small screens */}
-         {currentPhrase && (
-            <p className="md:hidden text-xs text-muted-foreground italic text-center py-1 bg-background/80">
-              {currentPhrase}
-            </p>
-          )}
       </header>
       <ChangePasswordModal isOpen={isChangePasswordModalOpen} onClose={() => setIsChangePasswordModalOpen(false)} />
     </>

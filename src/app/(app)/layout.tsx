@@ -5,6 +5,7 @@ import React, { useEffect } from 'react';
 import { useAppStore } from '@/hooks/use-app-store';
 import { useRouter } from 'next/navigation';
 import AppHeader from '@/components/layout/app-header';
+import AppFooter from '@/components/layout/app-footer'; // Import the new footer
 
 export default function AuthenticatedAppLayout({
   children,
@@ -15,19 +16,14 @@ export default function AuthenticatedAppLayout({
   const router = useRouter();
 
   useEffect(() => {
-    // Wait for isLoading to be false before checking isAuthenticated
-    // to ensure state is loaded from localStorage.
     if (!isLoading && !isAuthenticated) {
       router.replace('/login');
     }
   }, [isAuthenticated, isLoading, router]);
 
   if (isLoading || !isAuthenticated) {
-    // Show a loading state or null while checking auth / redirecting
-    // This prevents flashing the content of authenticated pages briefly.
     return (
         <div className="flex items-center justify-center min-h-screen">
-            {/* You can replace this with a proper loading spinner component */}
             <p>Loading...</p> 
         </div>
     );
@@ -36,9 +32,12 @@ export default function AuthenticatedAppLayout({
   return (
     <div className="flex flex-col flex-grow min-h-screen">
       <AppHeader />
-      <main className="flex-grow">
+      {/* Add padding-bottom to main to account for the fixed footer height */}
+      {/* Assuming footer height is roughly 2.5rem (text-xs + p-2), pb-12 (3rem) should be enough */}
+      <main className="flex-grow pb-12"> 
         {children}
       </main>
+      <AppFooter /> {/* Render the AppFooter here */}
     </div>
   );
 }
