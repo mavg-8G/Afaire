@@ -1,7 +1,7 @@
+
 {
-  "name": "À faire - Manage Your Activities",
+  "name": "TodoFlow",
   "short_name": "À faire",
-  "description": "A smart todo and activity manager with AI-powered suggestions.",
   "icons": [
     {
       "src": "/icons/icon-192x192.png",
@@ -16,8 +16,9 @@
       "purpose": "any maskable"
     }
   ],
-  "start_url": "/",
-  "display": "standalone",
+  "theme_color": "#FEF9F3",
   "background_color": "#FEF9F3",
-  "theme_color": "#FEF9F3"
+  "display": "standalone",
+  "scope": "/",
+  "start_url": "/"
 }

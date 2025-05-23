@@ -20,7 +20,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'À faire - Manage Your Activities',
   description: 'A smart todo and activity manager with AI-powered suggestions.',
-  manifest: "/manifest.json",
+  manifest: "/manifest.json", // Ensures Next.js is aware of the manifest for metadata generation
 };
 
 export default function RootLayout({
@@ -31,13 +31,14 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* The static theme-color meta tag is removed from here */}
-        {/* It will be dynamically managed by AppProvider */}
+        {/* Dynamic theme-color is managed by AppProvider */}
         <link rel="manifest" href="/manifest.json" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="À faire" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" data-ai-hint="app logo" />
+        {/* Ensure you have /public/icons/apple-touch-icon.png (e.g., 180x180px) */}
+        {/* Ensure you have /public/icons/icon-192x192.png and icon-512x512.png for the manifest */}
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}>
         <ThemeProvider
