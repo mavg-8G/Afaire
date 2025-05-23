@@ -164,12 +164,10 @@ function generateFutureInstancesForNotifications(
 
     if (seriesEndDate && isAfter(currentDate, seriesEndDate)) break;
 
-    // Ensure we don't generate instances before the master activity's start date
     if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
         if (recurrence.type === 'daily') currentDate = addDays(currentDate, 1);
-        else if (recurrence.type === 'weekly') currentDate = addDays(currentDate, 1); // Iterate day by day to catch next valid day in week
+        else if (recurrence.type === 'weekly') currentDate = addDays(currentDate, 1); 
         else if (recurrence.type === 'monthly') {
-            // Carefully advance to the next potential valid day in the next month or current month
             const nextMonth = addMonths(currentDate, 1);
             currentDate = recurrence.dayOfMonth ? setDayOfMonthFn(nextMonth, recurrence.dayOfMonth) : nextMonth;
         } else break;
@@ -198,39 +196,35 @@ function generateFutureInstancesForNotifications(
       const occurrenceDateKey = formatISO(currentDate, { representation: 'date' });
       const isInstanceCompleted = !!masterActivity.completedOccurrences?.[occurrenceDateKey];
 
-      if (!isInstanceCompleted) { // Only consider instances not yet completed
+      if (!isInstanceCompleted) { 
            instances.push({
-            instanceDate: new Date(currentDate.getTime()), // Create new Date object to avoid mutation issues
+            instanceDate: new Date(currentDate.getTime()), 
             masterActivityId: masterActivity.id,
           });
       }
     }
 
-    // Advance current date
     if (recurrence.type === 'daily') {
         currentDate = addDays(currentDate, 1);
     } else if (recurrence.type === 'weekly') {
-        currentDate = addDays(currentDate, 1); // Check next day, loop will handle if it's a valid day of week
+        currentDate = addDays(currentDate, 1); 
     } else if (recurrence.type === 'monthly') {
         if (recurrence.dayOfMonth) {
             let nextIterationDate;
             const currentMonthTargetDay = setDayOfMonthFn(currentDate, recurrence.dayOfMonth);
 
             if(isAfter(currentMonthTargetDay, currentDate) && getDate(currentMonthTargetDay) === recurrence.dayOfMonth){
-                 // If target day in current month is still ahead of current date
                  nextIterationDate = currentMonthTargetDay;
             } else {
-                 // Target day in current month is past or not the correct day, move to next month's target day
                  let nextMonthDate = addMonths(currentDate, 1);
                  nextIterationDate = setDayOfMonthFn(nextMonthDate, recurrence.dayOfMonth);
             }
             currentDate = nextIterationDate;
         } else {
-            // Should not happen if dayOfMonth is required for monthly, but as a fallback
             currentDate = addDays(currentDate, 1);
         }
     } else {
-      break; // Should not happen with valid recurrence types
+      break; 
     }
   }
   return instances;
@@ -274,7 +268,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-  const { t, locale } = useTranslations(); // Get locale here
+  const { t, locale } = useTranslations(); 
   const dateLocale = locale === 'es' ? es : enUS;
 
   const [lastNotificationCheckDay, setLastNotificationCheckDay] = useState<number | null>(null);
@@ -347,7 +341,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       details,
       scope,
     };
-    setHistoryLog(prevLog => [newEntry, ...prevLog.slice(0, 99)]); // Keep last 100 entries
+    setHistoryLog(prevLog => [newEntry, ...prevLog.slice(0, 99)]); 
   }, []);
 
   const logout = useCallback(() => {
@@ -356,7 +350,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setLoginAttemptsState(0);
     setLockoutEndTimeState(null);
     setSessionExpiryTimestampState(null);
-    setHistoryLog([]); // Clear history on logout
+    setHistoryLog([]); 
 
     if (typeof window !== 'undefined') {
         localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
@@ -381,7 +375,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (storedWorkActivities) setWorkActivities(JSON.parse(storedWorkActivities));
 
       const storedAllCategoriesString = localStorage.getItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES);
-      let loadedCategories: Category[] = INITIAL_CATEGORIES.map(cat => ({ ...cat, icon: getIconComponent(cat.iconName) })); // Default
+      let loadedCategories: Category[] = INITIAL_CATEGORIES.map(cat => ({ ...cat, icon: getIconComponent(cat.iconName) }));
       if (storedAllCategoriesString) {
         try {
           const parsedCategories = JSON.parse(storedAllCategoriesString) as Array<Omit<Category, 'icon'>>;
@@ -442,7 +436,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } finally {
       setIsLoading(false);
     }
-  }, []); // Runs once on mount
+  }, []); 
 
 
   useEffect(() => {
@@ -533,7 +527,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
 
-  // Initialize system notification permission state
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window && !isLoading && isAuthenticated) {
       setSystemNotificationPermission(Notification.permission);
@@ -543,30 +536,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const showSystemNotification = useCallback((title: string, description: string) => {
     if (typeof window === 'undefined' || !('Notification' in window)) {
-      console.warn("This browser does not support desktop notification.");
+      console.warn("This browser does not support desktop notification. Unable to show: ", title);
       return;
     }
 
     const fireNotification = () => {
       new Notification(title, {
         body: description,
-        icon: '/icons/icon-192x192.png', // Ensure this icon exists
+        icon: '/icons/icon-192x192.png', 
         lang: locale,
       });
     };
+    
+    const currentPermission = Notification.permission;
+    setSystemNotificationPermission(currentPermission); // Keep state in sync
 
-    if (systemNotificationPermission === 'granted') {
+    if (currentPermission === 'granted') {
       fireNotification();
-    } else if (systemNotificationPermission === 'default') {
+    } else if (currentPermission === 'default') {
+      console.log("Requesting notification permission...");
       Notification.requestPermission().then(permission => {
-        setSystemNotificationPermission(permission); // Update state with user's choice
+        setSystemNotificationPermission(permission); 
         if (permission === 'granted') {
+          console.log("Notification permission granted.");
           fireNotification();
+        } else {
+          console.log(`Notification permission was ${permission}.`);
         }
+      }).catch(err => {
+        console.error("Error requesting notification permission:", err);
       });
+    } else {
+      console.log(`Notification permission is ${currentPermission}. Cannot show system notification.`);
     }
-    // If 'denied' or null (initial state before effect runs), do nothing or wait for permission.
-  }, [systemNotificationPermission, locale]);
+  }, [locale]);
 
 
   useEffect(() => {
@@ -589,7 +592,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const activityTitle = masterActivity.title;
         const masterId = masterActivity.id;
 
-        // 5-minute "starting soon" notification
+        
         if (masterActivity.time) {
           const todayInstances = generateFutureInstancesForNotifications(masterActivity, today, endOfDay(today));
           todayInstances.forEach(instance => {
@@ -617,7 +620,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
         }
 
-        // Advanced recurrence notifications
+        
         if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
           const recurrenceType = masterActivity.recurrence.type;
           const futureCheckEndDate = addDays(today, 8);
@@ -668,7 +671,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, 60000);
 
     return () => clearInterval(intervalId);
-  }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification, dateLocale, systemNotificationPermission, showSystemNotification]);
+  }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification, dateLocale, showSystemNotification]);
 
 
   useEffect(() => {
@@ -1012,6 +1015,5 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
-
 
     
