@@ -11,7 +11,7 @@ import {
 } from 'date-fns';
 import ActivityModal from '@/components/forms/activity-modal';
 import ActivityListItem from './activity-list-item';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlusCircle, Loader2, CheckCircle } from 'lucide-react';
@@ -311,7 +311,9 @@ export default function ActivityCalendarView() {
 
   const handleAddNewActivityGeneric = () => {
     setEditingActivity(undefined);
-    setDateForModal(selectedDate || new Date()); // Use selectedDate if available, otherwise today
+    // When FAB is clicked, modal opens with the currently selected date on calendar
+    // or today if no date is selected (though selectedDate should always be set after mount)
+    setDateForModal(selectedDate || new Date()); 
     setEditingInstanceDate(undefined); 
     setIsActivityModalOpen(true);
   };
@@ -356,16 +358,14 @@ export default function ActivityCalendarView() {
     } else if (date) {
         setCurrentDisplayMonth(date);
     }
-    if (date) {
-      setDateForModal(date);
-    }
+    // dateForModal for new activities (via FAB) will now be set when FAB is clicked
   };
 
   const handleTodayButtonClick = () => {
     const today = new Date();
     setSelectedDate(today);
     setCurrentDisplayMonth(today);
-    setDateForModal(today);
+    // dateForModal for new activities (via FAB) will now be set when FAB is clicked
   };
 
   const todayButtonFooter = (
@@ -450,17 +450,9 @@ export default function ActivityCalendarView() {
           allActivitiesInViewCompleted && activitiesForView.length > 0 && "bg-primary/10"
           )}>
           <CardHeader>
-            <div className="flex justify-between items-start">
-              <CardTitle>
-                {getCardTitle()}
-              </CardTitle>
-              {allActivitiesInViewCompleted && activitiesForView.length > 0 && (
-                <div className="flex items-center text-sm text-primary gap-1 animate-pulse">
-                  <CheckCircle className="h-5 w-5" />
-                  <span>{t('allActivitiesCompleted')}</span>
-                </div>
-              )}
-            </div>
+            <CardTitle>
+              {getCardTitle()}
+            </CardTitle>
             <div className="pt-2">
               <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)}>
                 <TabsList className="grid w-full grid-cols-3">
@@ -494,6 +486,12 @@ export default function ActivityCalendarView() {
               </p>
             )}
           </CardContent>
+          {allActivitiesInViewCompleted && activitiesForView.length > 0 && (
+            <CardFooter className="text-sm text-primary flex items-center justify-center gap-1 py-3 border-t">
+              <CheckCircle className="h-5 w-5" />
+              <span>{t('allActivitiesCompleted')}</span>
+            </CardFooter>
+          )}
         </Card>
 
         {isActivityModalOpen && (
