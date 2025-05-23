@@ -269,7 +269,7 @@ function hslToHex(h: number, s: number, l: number): string {
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [personalActivities, setPersonalActivities] = useState<Activity[]>([]);
   const [workActivities, setWorkActivities] = useState<Activity[]>([]);
-  const [allCategories, setAllCategories] = useState<Category[]>(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [appModeState, setAppModeState] = useState<AppMode>('personal');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -330,7 +330,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [appModeState]);
 
   const filteredCategories = useMemo(() => {
-    if (isLoading) { 
+    if (isLoading) {
       return [];
     }
     return allCategories.filter(cat =>
@@ -371,7 +371,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [addHistoryLogEntry]);
 
- useEffect(() => {
+  useEffect(() => {
     let initialAuth = false;
     try {
       const storedPersonalActivities = localStorage.getItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES);
@@ -381,30 +381,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (storedWorkActivities) setWorkActivities(JSON.parse(storedWorkActivities));
 
       const storedAllCategoriesString = localStorage.getItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES);
-      let useInitialCategoriesAsFallback = true;
-
+      let loadedCategories: Category[] = INITIAL_CATEGORIES.map(cat => ({ ...cat, icon: getIconComponent(cat.iconName) })); // Default
       if (storedAllCategoriesString) {
         try {
           const parsedCategories = JSON.parse(storedAllCategoriesString) as Array<Omit<Category, 'icon'>>;
           if (Array.isArray(parsedCategories) && parsedCategories.length > 0) {
-            setAllCategories(parsedCategories.map((cat) => ({
+            loadedCategories = parsedCategories.map((cat) => ({
               ...cat,
               icon: getIconComponent(cat.iconName || 'Package'),
               mode: cat.mode || 'all'
-            })));
-            useInitialCategoriesAsFallback = false;
-          } else if (Array.isArray(parsedCategories) && parsedCategories.length === 0) {
-            useInitialCategoriesAsFallback = true;
+            }));
           }
         } catch (e) {
           console.error("Failed to parse categories from localStorage, using defaults.", e);
-          useInitialCategoriesAsFallback = true;
         }
       }
-
-      if (useInitialCategoriesAsFallback) {
-        setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
-      }
+      setAllCategories(loadedCategories);
 
 
       const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
@@ -419,7 +411,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const expiryTime = parseInt(storedExpiry, 10);
         if (Date.now() > expiryTime) {
           initialAuth = false;
-          logout(); 
+          logout();
         } else {
           initialAuth = true;
           setSessionExpiryTimestampState(expiryTime);
@@ -444,29 +436,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (err) {
       console.error("Failed to load data from local storage", err);
       setError("Failed to load saved data.");
-       if (allCategories.length === 0) { 
+       if (allCategories.length === 0) {
         setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
       }
     } finally {
       setIsLoading(false);
     }
-  }, []);
-
-
-  useEffect(() => {
-    if (isLoading || !isAuthenticated) return;
-
-    if (!('Notification' in window)) {
-      console.warn("This browser does not support desktop notification");
-      setSystemNotificationPermission('denied'); 
-      return;
-    }
-    // Directly set permission based on current Notification.permission
-    // This handles cases where permission might have been changed in browser settings
-    // or if it was 'default' and the user never interacted with a prompt from this session.
-    setSystemNotificationPermission(Notification.permission);
-
-  }, [isLoading, isAuthenticated]);
+  }, []); // Runs once on mount
 
 
   useEffect(() => {
@@ -540,7 +516,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [uiNotifications, isLoading]);
 
   useEffect(() => {
-    if (!isLoading && isAuthenticated) { 
+    if (!isLoading && isAuthenticated) {
       sessionStorage.setItem(SESSION_STORAGE_KEY_HISTORY_LOG, JSON.stringify(historyLog));
     }
   }, [historyLog, isLoading, isAuthenticated]);
@@ -556,19 +532,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setUINotifications(prev => [newNotification, ...prev.slice(0, 49)]);
   }, []);
 
-  // Moved showSystemNotification outside useEffect to be callable
+
+  // Initialize system notification permission state
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window && !isLoading && isAuthenticated) {
+      setSystemNotificationPermission(Notification.permission);
+    }
+  }, [isLoading, isAuthenticated]);
+
+
   const showSystemNotification = useCallback((title: string, description: string) => {
-    if (!('Notification' in window)) {
-      console.warn("This browser does not support desktop notification");
-      // systemNotificationPermission would have been set to 'denied' on load if not supported
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      console.warn("This browser does not support desktop notification.");
       return;
     }
 
     const fireNotification = () => {
       new Notification(title, {
         body: description,
-        icon: '/icons/icon-192x192.png', // Ensure this icon exists in public/icons
-        lang: locale, // Use the current app locale
+        icon: '/icons/icon-192x192.png', // Ensure this icon exists
+        lang: locale,
       });
     };
 
@@ -582,7 +565,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
       });
     }
-    // If 'denied', do nothing.
+    // If 'denied' or null (initial state before effect runs), do nothing or wait for permission.
   }, [systemNotificationPermission, locale]);
 
 
@@ -624,7 +607,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               if (timeDiffMs >= 0 && timeDiffMs <= fiveMinutesInMs) {
                 const toastTitle = t('toastActivityStartingSoonTitle');
                 const toastDesc = t('toastActivityStartingSoonDescription', { activityTitle, activityTime: masterActivity.time! });
-                
+
                 showSystemNotification(toastTitle, toastDesc);
                 addUINotification({ title: toastTitle, description: toastDesc, activityId: masterId, instanceDate: instance.instanceDate.getTime() });
                 toast({ title: toastTitle, description: toastDesc });
@@ -637,7 +620,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // Advanced recurrence notifications
         if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
           const recurrenceType = masterActivity.recurrence.type;
-          const futureCheckEndDate = addDays(today, 8); 
+          const futureCheckEndDate = addDays(today, 8);
           const upcomingInstances = generateFutureInstancesForNotifications(masterActivity, addDays(today,1), futureCheckEndDate);
 
           upcomingInstances.forEach(instance => {
@@ -682,7 +665,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
         }
       });
-    }, 60000); 
+    }, 60000);
 
     return () => clearInterval(intervalId);
   }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification, dateLocale, systemNotificationPermission, showSystemNotification]);
@@ -711,7 +694,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [appModeState, addHistoryLogEntry]);
 
   const setIsAuthenticated = useCallback((value: boolean, rememberMe: boolean = false) => {
-    if (value && !isAuthenticated) { 
+    if (value && !isAuthenticated) {
         addHistoryLogEntry('historyLogLogin', undefined, 'account');
         if (typeof window !== 'undefined') {
           sessionStorage.removeItem(SESSION_STORAGE_KEY_HISTORY_LOG);
@@ -775,8 +758,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     currentActivitySetter(prev =>
       prev.map(act => {
         if (act.id === activityId) {
-          if (!originalActivity) originalActivity = act; 
-          activityTitleForLog = updates.title || originalActivity.title; 
+          if (!originalActivity) originalActivity = act;
+          activityTitleForLog = updates.title || originalActivity.title;
 
           const updatedRecurrence = updates.recurrence?.type === 'none'
             ? { type: 'none' }
@@ -800,7 +783,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
      addHistoryLogEntry(
       appModeState === 'personal' ? 'historyLogUpdateActivityPersonal' : 'historyLogUpdateActivityWork',
-      { title: activityTitleForLog }, 
+      { title: activityTitleForLog },
       appModeState
     );
   }, [currentActivitySetter, appModeState, addHistoryLogEntry]);
@@ -1029,3 +1012,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+
+
+    
