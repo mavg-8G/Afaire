@@ -14,7 +14,7 @@ import ActivityListItem from './activity-list-item';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PlusCircle, Loader2 } from 'lucide-react';
+import { PlusCircle, Loader2, CheckCircle } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +31,7 @@ import { useTranslations } from '@/contexts/language-context';
 import { enUS, es } from 'date-fns/locale';
 import { Skeleton } from '@/components/ui/skeleton';
 import { v4 as uuidv4 } from 'uuid';
+import { cn } from '@/lib/utils';
 
 type ViewMode = 'daily' | 'weekly' | 'monthly';
 
@@ -177,8 +178,8 @@ export default function ActivityCalendarView() {
   }, []);
 
 
-  const activitiesForView = useMemo(() => {
-    if (!selectedDate || !hasMounted) return [];
+  const { activitiesForView, allActivitiesInViewCompleted } = useMemo(() => {
+    if (!selectedDate || !hasMounted) return { activitiesForView: [], allActivitiesInViewCompleted: false };
     const rawActivities = getRawActivities();
     let viewStartDate: Date, viewEndDate: Date;
 
@@ -216,7 +217,7 @@ export default function ActivityCalendarView() {
       );
     }
 
-    return allDisplayActivities.sort((a, b) => {
+    const sortedActivities = allDisplayActivities.sort((a, b) => {
         const aIsCompleted = a.isRecurringInstance && a.originalInstanceDate
             ? !!a.completedOccurrences?.[formatISO(new Date(a.originalInstanceDate), { representation: 'date' })]
             : !!a.completed;
@@ -246,6 +247,20 @@ export default function ActivityCalendarView() {
 
         return 0; 
     });
+    
+    const allCompleted = sortedActivities.length > 0 && sortedActivities.every(act => {
+      const isInstanceCompleted = act.isRecurringInstance && act.originalInstanceDate
+        ? !!act.completedOccurrences?.[formatISO(new Date(act.originalInstanceDate), { representation: 'date' })]
+        : !!act.completed;
+      
+      if (!isInstanceCompleted) return false;
+      if (act.todos && act.todos.length > 0) {
+        return act.todos.every(todo => todo.completed);
+      }
+      return true;
+    });
+
+    return { activitiesForView: sortedActivities, allActivitiesInViewCompleted: allCompleted };
   }, [getRawActivities, selectedDate, hasMounted, viewMode, dateLocale]);
 
   const dayEventCounts = useMemo(() => {
@@ -253,7 +268,6 @@ export default function ActivityCalendarView() {
     const rawActivities = getRawActivities();
     const counts = new Map<string, number>();
 
-    // Calculate range for events: current month +/- 1 month for performance and edge cases
     const displayRangeStart = startOfMonth(addMonths(currentDisplayMonth, -1));
     const displayRangeEnd = endOfMonth(addMonths(currentDisplayMonth, 1));
 
@@ -297,7 +311,7 @@ export default function ActivityCalendarView() {
 
   const handleAddNewActivityGeneric = () => {
     setEditingActivity(undefined);
-    setDateForModal(new Date());
+    setDateForModal(selectedDate || new Date()); // Use selectedDate if available, otherwise today
     setEditingInstanceDate(undefined); 
     setIsActivityModalOpen(true);
   };
@@ -426,16 +440,27 @@ export default function ActivityCalendarView() {
               className="p-1 sm:p-3 rounded-md"
               locale={dateLocale}
               footer={todayButtonFooter}
-              dayEventCounts={dayEventCounts} // Pass the event counts
+              dayEventCounts={dayEventCounts}
             />
           </CardContent>
         </Card>
 
-        <Card className="lg:w-1/2 xl:w-1/3 shadow-lg w-full flex flex-col">
+        <Card className={cn(
+          "lg:w-1/2 xl:w-1/3 shadow-lg w-full flex flex-col transition-colors duration-300",
+          allActivitiesInViewCompleted && activitiesForView.length > 0 && "bg-primary/10"
+          )}>
           <CardHeader>
-            <CardTitle>
-              {getCardTitle()}
-            </CardTitle>
+            <div className="flex justify-between items-start">
+              <CardTitle>
+                {getCardTitle()}
+              </CardTitle>
+              {allActivitiesInViewCompleted && activitiesForView.length > 0 && (
+                <div className="flex items-center text-sm text-primary gap-1 animate-pulse">
+                  <CheckCircle className="h-5 w-5" />
+                  <span>{t('allActivitiesCompleted')}</span>
+                </div>
+              )}
+            </div>
             <div className="pt-2">
               <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)}>
                 <TabsList className="grid w-full grid-cols-3">
@@ -448,7 +473,7 @@ export default function ActivityCalendarView() {
           </CardHeader>
           <CardContent className="flex-grow">
             {selectedDate && activitiesForView.length > 0 ? (
-              <ScrollArea className="h-[calc(100vh-18rem)] sm:h-[calc(100vh-18rem)] pr-1">
+              <ScrollArea className="h-[calc(100vh-20rem)] sm:h-[calc(100vh-20rem)] pr-1">
                 <div className="space-y-3">
                   {activitiesForView.map(activity => (
                     <ActivityListItem

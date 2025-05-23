@@ -1,11 +1,11 @@
 
 "use client";
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Layers, Languages, Sun, Moon, Laptop, MoreVertical, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon } from 'lucide-react';
 import { LogoIcon } from '@/components/icons/logo-icon';
-import { APP_NAME } from '@/lib/constants';
+import { APP_NAME, MOTIVATIONAL_PHRASES } from '@/lib/constants';
 import ChangePasswordModal from '@/components/forms/change-password-modal';
 import { useTranslations } from '@/contexts/language-context';
 import { useTheme } from 'next-themes';
@@ -42,6 +42,12 @@ export default function AppHeader() {
   } = useAppStore();
   const router = useRouter();
   const dateLocale = locale === 'es' ? es : enUS;
+  const [currentPhrase, setCurrentPhrase] = useState('');
+
+  useEffect(() => {
+    // Select a random motivational phrase on component mount (client-side only)
+    setCurrentPhrase(MOTIVATIONAL_PHRASES[Math.floor(Math.random() * MOTIVATIONAL_PHRASES.length)]);
+  }, []);
 
   const handleModeToggle = (isWorkMode: boolean) => {
     setAppMode(isWorkMode ? 'work' : 'personal');
@@ -192,6 +198,14 @@ export default function AppHeader() {
             </Link>
           </div>
 
+           {/* Motivational Phrase - Centered if space allows, or below app name on small screens */}
+          {currentPhrase && (
+            <p className="hidden md:block text-xs text-muted-foreground italic absolute left-1/2 -translate-x-1/2">
+              {currentPhrase}
+            </p>
+          )}
+
+
           {/* Center Group: Desktop App Mode Toggle Switch - Only on desktop */}
           <div className="hidden md:flex">
             {desktopAppModeToggleSwitch}
@@ -271,11 +285,17 @@ export default function AppHeader() {
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-
           </div>
         </div>
+         {/* Motivational Phrase - Shown below header on small screens */}
+         {currentPhrase && (
+            <p className="md:hidden text-xs text-muted-foreground italic text-center py-1 bg-background/80">
+              {currentPhrase}
+            </p>
+          )}
       </header>
       <ChangePasswordModal isOpen={isChangePasswordModalOpen} onClose={() => setIsChangePasswordModalOpen(false)} />
     </>
   );
 }
+

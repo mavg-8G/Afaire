@@ -115,6 +115,8 @@ export type Translations = {
   viewDaily: string;
   viewWeekly: string;
   viewMonthly: string;
+  allActivitiesCompleted: string;
+
 
   // ActivityListItem
   editActivitySr: string;
@@ -336,6 +338,7 @@ export const translations: Record<Locale, Translations> = {
     viewDaily: "Daily",
     viewWeekly: "Weekly",
     viewMonthly: "Monthly",
+    allActivitiesCompleted: "Well done! All activities for this period are complete.",
     editActivitySr: "Edit Activity",
     deleteActivitySr: "Delete Activity",
     todosCompleted: (params) => `${params.completed} / ${params.total} todos completed`,
@@ -539,6 +542,7 @@ export const translations: Record<Locale, Translations> = {
     viewDaily: "Diario",
     viewWeekly: "Semanal",
     viewMonthly: "Mensual",
+    allActivitiesCompleted: "¡Bien hecho! Todas las actividades de este periodo están completas.",
     editActivitySr: "Editar Actividad",
     deleteActivitySr: "Eliminar Actividad",
     todosCompleted: (params) => `${params.completed} / ${params.total} tareas completadas`,
@@ -651,3 +655,4 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
+

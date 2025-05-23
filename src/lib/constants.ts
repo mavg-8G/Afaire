@@ -18,3 +18,16 @@ export const APP_NAME = 'À faire';
 export const HARDCODED_USERNAME = "pruebas";
 export const HARDCODED_PASSWORD = "pruebas123";
 
+export const MOTIVATIONAL_PHRASES: string[] = [
+  "The secret of getting ahead is getting started.",
+  "Don't watch the clock; do what it does. Keep going.",
+  "The only way to do great work is to love what you do.",
+  "Believe you can and you're halfway there.",
+  "Act as if what you do makes a difference. It does.",
+  "Success is not final, failure is not fatal: It is the courage to continue that counts.",
+  "Strive not to be a success, but rather to be of value.",
+  "The future depends on what you do today.",
+  "Well done is better than well said.",
+  "You are never too old to set another goal or to dream a new dream."
+];
+
