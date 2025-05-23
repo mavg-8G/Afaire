@@ -25,7 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label"; // Added Label import
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PlusCircle, Trash2, CalendarIcon, Clock, X, Loader2 } from 'lucide-react';
 import { useAppStore } from '@/hooks/use-app-store';
@@ -97,7 +97,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
 
   useEffect(() => {
     if (isOpen) {
-      setIsSubmittingForm(false); // Reset submitting state when modal opens
+      setIsSubmittingForm(false); 
       if (activity) {
         const baseDate = new Date(activity.createdAt);
         form.reset({
@@ -159,7 +159,6 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
       completedOccurrences: activity?.completedOccurrences || {},
     };
 
-    // Simulate API call delay
     await new Promise(resolve => setTimeout(resolve, 500));
 
 
@@ -224,7 +223,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                 </FormItem>
               )}
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-2 sm:gap-4">
               <FormField
                 control={form.control}
                 name="activityDate"
@@ -280,7 +279,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                     <FormLabel className="min-h-8">{t('activityTimeLabel')}</FormLabel>
                     <FormControl>
                        <div className="relative w-full">
-                        <Input type="time" {...field} className="w-full pr-7" />
+                        <Input type="time" {...field} className="w-full pr-6" />
                         <Clock className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
                       </div>
                     </FormControl>
@@ -546,6 +545,3 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
-
-
-    
