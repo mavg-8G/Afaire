@@ -71,6 +71,9 @@ export interface AppContextType {
 
   historyLog: HistoryLogEntry[];
   addHistoryLogEntry: (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope?: HistoryLogEntry['scope']) => void;
+
+  systemNotificationPermission: NotificationPermission | null;
+  requestSystemNotificationPermission: () => Promise<void>;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -166,7 +169,7 @@ function generateFutureInstancesForNotifications(
 
     if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
         if (recurrence.type === 'daily') currentDate = addDays(currentDate, 1);
-        else if (recurrence.type === 'weekly') currentDate = addDays(currentDate, 1); 
+        else if (recurrence.type === 'weekly') currentDate = addDays(currentDate, 1);
         else if (recurrence.type === 'monthly') {
             const nextMonth = addMonths(currentDate, 1);
             currentDate = recurrence.dayOfMonth ? setDayOfMonthFn(nextMonth, recurrence.dayOfMonth) : nextMonth;
@@ -196,9 +199,9 @@ function generateFutureInstancesForNotifications(
       const occurrenceDateKey = formatISO(currentDate, { representation: 'date' });
       const isInstanceCompleted = !!masterActivity.completedOccurrences?.[occurrenceDateKey];
 
-      if (!isInstanceCompleted) { 
+      if (!isInstanceCompleted) {
            instances.push({
-            instanceDate: new Date(currentDate.getTime()), 
+            instanceDate: new Date(currentDate.getTime()),
             masterActivityId: masterActivity.id,
           });
       }
@@ -207,7 +210,7 @@ function generateFutureInstancesForNotifications(
     if (recurrence.type === 'daily') {
         currentDate = addDays(currentDate, 1);
     } else if (recurrence.type === 'weekly') {
-        currentDate = addDays(currentDate, 1); 
+        currentDate = addDays(currentDate, 1);
     } else if (recurrence.type === 'monthly') {
         if (recurrence.dayOfMonth) {
             let nextIterationDate;
@@ -224,7 +227,7 @@ function generateFutureInstancesForNotifications(
             currentDate = addDays(currentDate, 1);
         }
     } else {
-      break; 
+      break;
     }
   }
   return instances;
@@ -268,7 +271,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-  const { t, locale } = useTranslations(); 
+  const { t, locale } = useTranslations();
   const dateLocale = locale === 'es' ? es : enUS;
 
   const [lastNotificationCheckDay, setLastNotificationCheckDay] = useState<number | null>(null);
@@ -341,7 +344,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       details,
       scope,
     };
-    setHistoryLog(prevLog => [newEntry, ...prevLog.slice(0, 99)]); 
+    setHistoryLog(prevLog => [newEntry, ...prevLog.slice(0, 99)]);
   }, []);
 
   const logout = useCallback(() => {
@@ -350,7 +353,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setLoginAttemptsState(0);
     setLockoutEndTimeState(null);
     setSessionExpiryTimestampState(null);
-    setHistoryLog([]); 
+    setHistoryLog([]);
 
     if (typeof window !== 'undefined') {
         localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
@@ -374,8 +377,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const storedWorkActivities = localStorage.getItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES);
       if (storedWorkActivities) setWorkActivities(JSON.parse(storedWorkActivities));
 
-      const storedAllCategoriesString = localStorage.getItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES);
       let loadedCategories: Category[] = INITIAL_CATEGORIES.map(cat => ({ ...cat, icon: getIconComponent(cat.iconName) }));
+      const storedAllCategoriesString = localStorage.getItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES);
       if (storedAllCategoriesString) {
         try {
           const parsedCategories = JSON.parse(storedAllCategoriesString) as Array<Omit<Category, 'icon'>>;
@@ -405,7 +408,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const expiryTime = parseInt(storedExpiry, 10);
         if (Date.now() > expiryTime) {
           initialAuth = false;
-          logout();
+          logout(); // Call logout which handles cleanup and broadcast
         } else {
           initialAuth = true;
           setSessionExpiryTimestampState(expiryTime);
@@ -427,6 +430,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
       if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
 
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        setSystemNotificationPermission(Notification.permission);
+      }
+
     } catch (err) {
       console.error("Failed to load data from local storage", err);
       setError("Failed to load saved data.");
@@ -436,7 +443,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } finally {
       setIsLoading(false);
     }
-  }, []); 
+  }, []);
 
 
   useEffect(() => {
@@ -527,11 +534,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
 
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window && !isLoading && isAuthenticated) {
-      setSystemNotificationPermission(Notification.permission);
+const requestSystemNotificationPermission = useCallback(async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      console.warn("This browser does not support desktop notification.");
+      setSystemNotificationPermission('denied'); // Or 'default' if you want to allow future checks
+      return;
     }
-  }, [isLoading, isAuthenticated]);
+    const currentPermission = Notification.permission;
+    if (currentPermission === 'default') {
+      console.log("Requesting notification permission via UI action...");
+      try {
+        const permission = await Notification.requestPermission();
+        setSystemNotificationPermission(permission);
+        console.log(`Notification permission state after UI request: ${permission}`);
+      } catch (err) {
+        console.error("Error requesting notification permission via UI:", err);
+        setSystemNotificationPermission('default'); // Fallback to default if error
+      }
+    } else {
+      // If already granted or denied, just ensure state is in sync
+      setSystemNotificationPermission(currentPermission);
+    }
+  }, []);
 
 
   const showSystemNotification = useCallback((title: string, description: string) => {
@@ -540,36 +564,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return;
     }
 
-    const fireNotification = () => {
+    const currentBrowserPermission = Notification.permission;
+    // Update state if it's out of sync, though requestSystemNotificationPermission should handle this
+    if (systemNotificationPermission !== currentBrowserPermission) {
+        setSystemNotificationPermission(currentBrowserPermission);
+    }
+
+    if (currentBrowserPermission === 'granted') {
+      console.log("Permission granted. Showing system notification:", title);
       new Notification(title, {
         body: description,
-        icon: '/icons/icon-192x192.png', 
+        icon: '/icons/icon-192x192.png',
         lang: locale,
       });
-    };
-    
-    const currentPermission = Notification.permission;
-    setSystemNotificationPermission(currentPermission); // Keep state in sync
-
-    if (currentPermission === 'granted') {
-      fireNotification();
-    } else if (currentPermission === 'default') {
-      console.log("Requesting notification permission...");
-      Notification.requestPermission().then(permission => {
-        setSystemNotificationPermission(permission); 
-        if (permission === 'granted') {
-          console.log("Notification permission granted.");
-          fireNotification();
-        } else {
-          console.log(`Notification permission was ${permission}.`);
-        }
-      }).catch(err => {
-        console.error("Error requesting notification permission:", err);
-      });
     } else {
-      console.log(`Notification permission is ${currentPermission}. Cannot show system notification.`);
+      console.log(`System notification for "${title}" was not shown because permission is ${currentBrowserPermission}. User should enable via settings.`);
     }
-  }, [locale]);
+  }, [locale, systemNotificationPermission]);
 
 
   useEffect(() => {
@@ -592,7 +603,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const activityTitle = masterActivity.title;
         const masterId = masterActivity.id;
 
-        
+
         if (masterActivity.time) {
           const todayInstances = generateFutureInstancesForNotifications(masterActivity, today, endOfDay(today));
           todayInstances.forEach(instance => {
@@ -620,7 +631,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
         }
 
-        
+
         if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
           const recurrenceType = masterActivity.recurrence.type;
           const futureCheckEndDate = addDays(today, 8);
@@ -668,10 +679,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
         }
       });
-    }, 60000);
+    }, 60000); // Check every minute
 
     return () => clearInterval(intervalId);
-  }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification, dateLocale, showSystemNotification]);
+  }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification, dateLocale, showSystemNotification, systemNotificationPermission]);
 
 
   useEffect(() => {
@@ -1009,6 +1020,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         clearAllUINotifications,
         historyLog,
         addHistoryLogEntry,
+        systemNotificationPermission,
+        requestSystemNotificationPermission,
       }}
     >
       {children}

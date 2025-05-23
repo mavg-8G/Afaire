@@ -13,9 +13,9 @@ export type Translations = {
   darkTheme: string;
   systemTheme: string;
   moreOptions: string;
-  moreOptionsDesktop: string; 
+  moreOptionsDesktop: string;
   personalMode: string;
-  workMode: string;
+  workMode: "Work";
   switchToPersonalMode: string;
   switchToWorkMode: string;
   logout: string;
@@ -28,6 +28,9 @@ export type Translations = {
   clearAllNotifications: string;
   notificationBellLabel: string;
   viewHistory: string;
+  enableSystemNotifications: string;
+  systemNotificationsEnabled: string;
+  systemNotificationsBlocked: string;
 
 
   // CategoriesPage
@@ -58,7 +61,7 @@ export type Translations = {
   // ActivityModal
   editActivityTitle: string;
   addActivityTitle: string;
-  editActivityDescription: string;
+  editActivityDescription: (params: { formattedInitialDate: string }) => string;
   addActivityDescription: (params: { formattedInitialDate: string }) => string;
   activityTitleLabel: string;
   categoryLabel: string;
@@ -264,6 +267,9 @@ export const translations: Record<Locale, Translations> = {
     clearAllNotifications: "Clear all",
     notificationBellLabel: "View notifications",
     viewHistory: "View History",
+    enableSystemNotifications: "Enable System Notifications",
+    systemNotificationsEnabled: "System Notifications Enabled",
+    systemNotificationsBlocked: "System Notifications Blocked",
     backToCalendar: "Back to Calendar",
     addCategory: "Add Category",
     editCategory: "Edit Category",
@@ -288,7 +294,7 @@ export const translations: Record<Locale, Translations> = {
     noCategoriesYet: "No categories added yet. Use the form to add your first category.",
     editActivityTitle: "Edit Activity",
     addActivityTitle: "Add New Activity",
-    editActivityDescription: "Update the details of your activity.",
+    editActivityDescription: (params) => `Update the details of your activity. Default date: ${params.formattedInitialDate}.`,
     addActivityDescription: (params) => `Fill in the details for your new activity. Default date: ${params.formattedInitialDate}.`,
     activityTitleLabel: "Activity Title",
     categoryLabel: "Category",
@@ -481,6 +487,9 @@ export const translations: Record<Locale, Translations> = {
     clearAllNotifications: "Limpiar todas",
     notificationBellLabel: "Ver notificaciones",
     viewHistory: "Ver Historial",
+    enableSystemNotifications: "Activar Notificaciones del Sistema",
+    systemNotificationsEnabled: "Notificaciones del Sistema Activadas",
+    systemNotificationsBlocked: "Notificaciones del Sistema Bloqueadas",
     backToCalendar: "Volver al Calendario",
     addCategory: "Añadir Categoría",
     editCategory: "Editar Categoría",
@@ -505,7 +514,7 @@ export const translations: Record<Locale, Translations> = {
     noCategoriesYet: "Aún no has añadido categorías. Usa el formulario para añadir tu primera categoría.",
     editActivityTitle: "Editar Actividad",
     addActivityTitle: "Añadir Nueva Actividad",
-    editActivityDescription: "Actualiza los detalles de tu actividad.",
+    editActivityDescription: (params) => `Actualiza los detalles de tu actividad. Fecha por defecto: ${params.formattedInitialDate}.`,
     addActivityDescription: (params) => `Completa los detalles de tu nueva actividad. Fecha por defecto: ${params.formattedInitialDate}.`,
     activityTitleLabel: "Título de la Actividad",
     categoryLabel: "Categoría",
@@ -685,6 +694,5 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
-
 
     

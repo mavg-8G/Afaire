@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Layers, Languages, Sun, Moon, Laptop, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings, MoreVertical } from 'lucide-react';
+import { Layers, Languages, Sun, Moon, Laptop, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings, MoreVertical, BellRing, BellOff, BellPlus } from 'lucide-react';
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { APP_NAME } from '@/lib/constants';
 import ChangePasswordModal from '@/components/forms/change-password-modal';
@@ -38,7 +38,9 @@ export default function AppHeader() {
     uiNotifications,
     markUINotificationAsRead,
     markAllUINotificationsAsRead,
-    clearAllUINotifications
+    clearAllUINotifications,
+    systemNotificationPermission,
+    requestSystemNotificationPermission,
   } = useAppStore();
   const router = useRouter();
   const dateLocale = locale === 'es' ? es : enUS;
@@ -137,6 +139,32 @@ export default function AppHeader() {
     </DropdownMenuContent>
   );
 
+  const systemNotificationMenuItem = () => {
+    if (systemNotificationPermission === 'granted') {
+      return (
+        <DropdownMenuItem disabled>
+          <BellRing className="mr-2 h-4 w-4 text-green-500" />
+          {t('systemNotificationsEnabled')}
+        </DropdownMenuItem>
+      );
+    } else if (systemNotificationPermission === 'denied') {
+      return (
+        <DropdownMenuItem disabled>
+          <BellOff className="mr-2 h-4 w-4 text-red-500" />
+          {t('systemNotificationsBlocked')}
+        </DropdownMenuItem>
+      );
+    } else { // 'default' or null
+      return (
+        <DropdownMenuItem onClick={requestSystemNotificationPermission}>
+          <BellPlus className="mr-2 h-4 w-4" />
+          {t('enableSystemNotifications')}
+        </DropdownMenuItem>
+      );
+    }
+  };
+
+
   const sharedOptionsItems = (
     <>
       <DropdownMenuItem asChild>
@@ -145,6 +173,8 @@ export default function AppHeader() {
             {t('viewHistory')}
         </Link>
       </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      {systemNotificationMenuItem()}
       <DropdownMenuSeparator />
       <DropdownMenuLabel>{t('theme')}</DropdownMenuLabel>
       <DropdownMenuItem onClick={() => setTheme('light')} disabled={theme === 'light'}>
@@ -192,7 +222,7 @@ export default function AppHeader() {
             </Link>
           </div>
 
-          {/* Center Group: Desktop App Mode Toggle Switch - Only on desktop */}
+          {/* Center Group: Desktop App Mode Toggle Switch */}
           {desktopAppModeToggleSwitch}
 
 
@@ -277,3 +307,5 @@ export default function AppHeader() {
     </>
   );
 }
+
+    
