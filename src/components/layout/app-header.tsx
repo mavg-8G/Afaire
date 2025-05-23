@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Layers, Languages, Sun, Moon, Laptop, MoreVertical, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon } from 'lucide-react';
+import { Layers, Languages, Sun, Moon, Laptop, MoreVertical, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings } from 'lucide-react';
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { APP_NAME, MOTIVATIONAL_PHRASES } from '@/lib/constants';
 import ChangePasswordModal from '@/components/forms/change-password-modal';
@@ -45,7 +45,6 @@ export default function AppHeader() {
   const [currentPhrase, setCurrentPhrase] = useState('');
 
   useEffect(() => {
-    // Select a random motivational phrase on component mount (client-side only)
     setCurrentPhrase(MOTIVATIONAL_PHRASES[Math.floor(Math.random() * MOTIVATIONAL_PHRASES.length)]);
   }, []);
 
@@ -189,6 +188,7 @@ export default function AppHeader() {
   return (
     <>
       <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        {/* Main header row */}
         <div className="container flex h-16 items-center justify-between">
           {/* Left Group */}
           <div className="flex items-center gap-2 ml-4">
@@ -198,16 +198,8 @@ export default function AppHeader() {
             </Link>
           </div>
 
-           {/* Motivational Phrase - Centered if space allows, or below app name on small screens */}
-          {currentPhrase && (
-            <p className="hidden md:block text-xs text-muted-foreground italic absolute left-1/2 -translate-x-1/2">
-              {currentPhrase}
-            </p>
-          )}
-
-
           {/* Center Group: Desktop App Mode Toggle Switch - Only on desktop */}
-          <div className="hidden md:flex">
+          <div className="hidden md:flex items-center gap-x-2">
             {desktopAppModeToggleSwitch}
           </div>
 
@@ -245,8 +237,8 @@ export default function AppHeader() {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" aria-label={t('moreOptions')}>
-                    <MoreHorizontal className="h-5 w-5" />
+                  <Button variant="outline" size="icon" aria-label={t('moreOptionsDesktop')}> {/* Changed label for desktop */}
+                    <Settings className="h-5 w-5" /> {/* Using Settings icon for desktop */}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -287,7 +279,17 @@ export default function AppHeader() {
             </div>
           </div>
         </div>
-         {/* Motivational Phrase - Shown below header on small screens */}
+
+        {/* Desktop Motivational Phrase Row */}
+        {currentPhrase && (
+          <div className="hidden md:flex container justify-center items-center py-1 bg-background/80 border-t border-border/20">
+            <p className="text-xs text-muted-foreground italic">
+              {currentPhrase}
+            </p>
+          </div>
+        )}
+        
+         {/* Mobile Motivational Phrase - Shown below header on small screens */}
          {currentPhrase && (
             <p className="md:hidden text-xs text-muted-foreground italic text-center py-1 bg-background/80">
               {currentPhrase}
@@ -298,4 +300,3 @@ export default function AppHeader() {
     </>
   );
 }
-

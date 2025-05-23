@@ -13,6 +13,7 @@ export type Translations = {
   darkTheme: string;
   systemTheme: string;
   moreOptions: string;
+  moreOptionsDesktop: string; // New for desktop settings icon
   personalMode: string;
   workMode: string;
   switchToPersonalMode: string;
@@ -245,6 +246,7 @@ export const translations: Record<Locale, Translations> = {
     darkTheme: "Dark",
     systemTheme: "System",
     moreOptions: "More options",
+    moreOptionsDesktop: "Settings",
     personalMode: "Personal",
     workMode: "Work",
     switchToPersonalMode: "Switch to Personal Mode",
@@ -449,6 +451,7 @@ export const translations: Record<Locale, Translations> = {
     darkTheme: "Oscuro",
     systemTheme: "Sistema",
     moreOptions: "Más opciones",
+    moreOptionsDesktop: "Configuración",
     personalMode: "Personal",
     workMode: "Trabajo",
     switchToPersonalMode: "Cambiar a Modo Personal",
