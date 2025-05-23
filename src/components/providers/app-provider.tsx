@@ -3,7 +3,8 @@
 import type { ReactNode } from 'react';
 import React, { createContext, useState, useCallback, useEffect, useMemo } from 'react';
 import type { Activity, Todo, Category, AppMode, RecurrenceRule, UINotification, HistoryLogEntry, HistoryLogActionKey } from '@/lib/types';
-import { INITIAL_CATEGORIES } from '@/lib/constants';
+import { INITIAL_CATEGORIES }
+from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -156,17 +157,19 @@ function generateFutureInstancesForNotifications(
 
   const seriesEndDate = recurrence.endDate ? new Date(recurrence.endDate) : null;
   let iterations = 0;
-  const maxIterations = 366 * 1;
+  const maxIterations = 366 * 1; // Approx 1 year of daily occurrences for notifications
 
   while (iterations < maxIterations && !isAfter(currentDate, rangeEndDate)) {
     iterations++;
 
     if (seriesEndDate && isAfter(currentDate, seriesEndDate)) break;
 
+    // Ensure we don't generate instances before the master activity's start date
     if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
         if (recurrence.type === 'daily') currentDate = addDays(currentDate, 1);
-        else if (recurrence.type === 'weekly') currentDate = addDays(currentDate, 1);
+        else if (recurrence.type === 'weekly') currentDate = addDays(currentDate, 1); // Iterate day by day to catch next valid day in week
         else if (recurrence.type === 'monthly') {
+            // Carefully advance to the next potential valid day in the next month or current month
             const nextMonth = addMonths(currentDate, 1);
             currentDate = recurrence.dayOfMonth ? setDayOfMonthFn(nextMonth, recurrence.dayOfMonth) : nextMonth;
         } else break;
@@ -195,35 +198,39 @@ function generateFutureInstancesForNotifications(
       const occurrenceDateKey = formatISO(currentDate, { representation: 'date' });
       const isInstanceCompleted = !!masterActivity.completedOccurrences?.[occurrenceDateKey];
 
-      if (!isInstanceCompleted) {
+      if (!isInstanceCompleted) { // Only consider instances not yet completed
            instances.push({
-            instanceDate: new Date(currentDate.getTime()),
+            instanceDate: new Date(currentDate.getTime()), // Create new Date object to avoid mutation issues
             masterActivityId: masterActivity.id,
           });
       }
     }
 
+    // Advance current date
     if (recurrence.type === 'daily') {
         currentDate = addDays(currentDate, 1);
     } else if (recurrence.type === 'weekly') {
-        currentDate = addDays(currentDate, 1);
+        currentDate = addDays(currentDate, 1); // Check next day, loop will handle if it's a valid day of week
     } else if (recurrence.type === 'monthly') {
         if (recurrence.dayOfMonth) {
             let nextIterationDate;
             const currentMonthTargetDay = setDayOfMonthFn(currentDate, recurrence.dayOfMonth);
 
             if(isAfter(currentMonthTargetDay, currentDate) && getDate(currentMonthTargetDay) === recurrence.dayOfMonth){
+                 // If target day in current month is still ahead of current date
                  nextIterationDate = currentMonthTargetDay;
             } else {
+                 // Target day in current month is past or not the correct day, move to next month's target day
                  let nextMonthDate = addMonths(currentDate, 1);
                  nextIterationDate = setDayOfMonthFn(nextMonthDate, recurrence.dayOfMonth);
             }
             currentDate = nextIterationDate;
         } else {
+            // Should not happen if dayOfMonth is required for monthly, but as a fallback
             currentDate = addDays(currentDate, 1);
         }
     } else {
-      break;
+      break; // Should not happen with valid recurrence types
     }
   }
   return instances;
@@ -262,7 +269,7 @@ function hslToHex(h: number, s: number, l: number): string {
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [personalActivities, setPersonalActivities] = useState<Activity[]>([]);
   const [workActivities, setWorkActivities] = useState<Activity[]>([]);
-  const [allCategories, setAllCategories] = useState<Category[]>([]);
+  const [allCategories, setAllCategories] = useState<Category[]>(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
   const [appModeState, setAppModeState] = useState<AppMode>('personal');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -281,6 +288,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [uiNotifications, setUINotifications] = useState<UINotification[]>([]);
   const [historyLog, setHistoryLog] = useState<HistoryLogEntry[]>([]);
   const { theme, resolvedTheme } = useTheme();
+  const [systemNotificationPermission, setSystemNotificationPermission] = useState<NotificationPermission | null>(null);
 
 
   useEffect(() => {
@@ -322,13 +330,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [appModeState]);
 
   const filteredCategories = useMemo(() => {
-    if (isLoading) {
+    if (isLoading) { // If app is still loading initial data, return empty.
       return [];
     }
     return allCategories.filter(cat =>
       !cat.mode || cat.mode === 'all' || cat.mode === appModeState
     );
   }, [allCategories, appModeState, isLoading]);
+
 
   const addHistoryLogEntry = useCallback((actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope: HistoryLogEntry['scope'] = 'account') => {
     const newEntry: HistoryLogEntry = {
@@ -371,12 +380,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const storedWorkActivities = localStorage.getItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES);
       if (storedWorkActivities) setWorkActivities(JSON.parse(storedWorkActivities));
 
-      const storedAllCategories = localStorage.getItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES);
+      const storedAllCategoriesString = localStorage.getItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES);
       let useInitialCategoriesAsFallback = true;
 
-      if (storedAllCategories) {
+      if (storedAllCategoriesString) {
         try {
-          const parsedCategories = JSON.parse(storedAllCategories) as Array<Omit<Category, 'icon'>>;
+          const parsedCategories = JSON.parse(storedAllCategoriesString) as Array<Omit<Category, 'icon'>>;
+          // Check if it's a non-empty array
           if (Array.isArray(parsedCategories) && parsedCategories.length > 0) {
             setAllCategories(parsedCategories.map((cat) => ({
               ...cat,
@@ -384,15 +394,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               mode: cat.mode || 'all'
             })));
             useInitialCategoriesAsFallback = false;
+          } else if (Array.isArray(parsedCategories) && parsedCategories.length === 0) {
+            // If localStorage has "[]", still use initial as it implies user cleared them or first time.
+            useInitialCategoriesAsFallback = true;
           }
         } catch (e) {
           console.error("Failed to parse categories from localStorage, using defaults.", e);
+          useInitialCategoriesAsFallback = true; // Fallback if parsing fails
         }
       }
 
       if (useInitialCategoriesAsFallback) {
         setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
       }
+
 
       const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
       if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) {
@@ -406,9 +421,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const expiryTime = parseInt(storedExpiry, 10);
         if (Date.now() > expiryTime) {
           initialAuth = false;
-          localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
-          localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
-          sessionStorage.removeItem(SESSION_STORAGE_KEY_HISTORY_LOG); // Clear history if session expired
+          logout(); // Call logout to clear all related session data
         } else {
           initialAuth = true;
           setSessionExpiryTimestampState(expiryTime);
@@ -416,7 +429,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
       setIsAuthenticatedState(initialAuth);
       if (initialAuth) {
-        // Load history log from session storage only if authenticated
         const storedHistoryLog = sessionStorage.getItem(SESSION_STORAGE_KEY_HISTORY_LOG);
         if (storedHistoryLog) setHistoryLog(JSON.parse(storedHistoryLog));
       }
@@ -434,13 +446,34 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (err) {
       console.error("Failed to load data from local storage", err);
       setError("Failed to load saved data.");
-       if (allCategories.length === 0) {
+       if (allCategories.length === 0) { // Double ensure categories are set if everything else fails
         setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
       }
     } finally {
       setIsLoading(false);
     }
+  // Empty dependency array ensures this runs only once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Effect for checking and requesting system notification permission
+  useEffect(() => {
+    if (isLoading || !isAuthenticated) return;
+
+    if (!('Notification' in window)) {
+      console.warn("This browser does not support desktop notification");
+      setSystemNotificationPermission('denied'); // Treat as denied if not supported
+      return;
+    }
+
+    if (Notification.permission === 'granted') {
+      setSystemNotificationPermission('granted');
+    } else if (Notification.permission === 'denied') {
+      setSystemNotificationPermission('denied');
+    } else {
+      setSystemNotificationPermission('default'); // User hasn't decided yet
+    }
+  }, [isLoading, isAuthenticated]);
 
 
   useEffect(() => {
@@ -546,10 +579,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       const activitiesToScan = appModeState === 'work' ? workActivities : personalActivities;
 
+      const showSystemNotification = (title: string, description: string) => {
+        if (!('Notification' in window)) return;
+
+        const fireNotification = () => {
+          new Notification(title, { body: description, icon: '/icons/icon-192x192.png' });
+        };
+
+        if (systemNotificationPermission === 'granted') {
+          fireNotification();
+        } else if (systemNotificationPermission === 'default') {
+          Notification.requestPermission().then(permission => {
+            setSystemNotificationPermission(permission);
+            if (permission === 'granted') {
+              fireNotification();
+            }
+          });
+        }
+      };
+
       activitiesToScan.forEach(masterActivity => {
         const activityTitle = masterActivity.title;
         const masterId = masterActivity.id;
 
+        // 5-minute "starting soon" notification
         if (masterActivity.time) {
           const todayInstances = generateFutureInstancesForNotifications(masterActivity, today, endOfDay(today));
           todayInstances.forEach(instance => {
@@ -565,18 +618,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               const timeDiffMs = activityDateTime.getTime() - now.getTime();
 
               if (timeDiffMs >= 0 && timeDiffMs <= fiveMinutesInMs) {
+                const toastTitle = t('toastActivityStartingSoonTitle');
                 const toastDesc = t('toastActivityStartingSoonDescription', { activityTitle, activityTime: masterActivity.time! });
-                addUINotification({ title: t('toastActivityStartingSoonTitle'), description: toastDesc, activityId: masterId, instanceDate: instance.instanceDate.getTime() });
-                toast({ title: t('toastActivityStartingSoonTitle'), description: toastDesc });
+                
+                showSystemNotification(toastTitle, toastDesc);
+                addUINotification({ title: toastTitle, description: toastDesc, activityId: masterId, instanceDate: instance.instanceDate.getTime() });
+                toast({ title: toastTitle, description: toastDesc });
                 setNotifiedToday(prev => new Set(prev).add(notificationKey5Min));
               }
             }
           });
         }
 
+        // Advanced recurrence notifications
         if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
           const recurrenceType = masterActivity.recurrence.type;
-          const futureCheckEndDate = addDays(today, 8);
+          // Check for notifications up to 8 days in advance to cover weekly reminders
+          const futureCheckEndDate = addDays(today, 8); 
           const upcomingInstances = generateFutureInstancesForNotifications(masterActivity, addDays(today,1), futureCheckEndDate);
 
           upcomingInstances.forEach(instance => {
@@ -589,6 +647,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               if (!notifiedToday.has(notificationFullKey)) {
                 const notifTitle = t(titleKey as any, params);
                 const notifDesc = t(descKey as any, params);
+
+                showSystemNotification(notifTitle, notifDesc);
                 addUINotification({ title: notifTitle, description: notifDesc, activityId: masterId, instanceDate: instance.instanceDate.getTime() });
                 toast({ title: notifTitle, description: notifDesc });
                 setNotifiedToday(prev => new Set(prev).add(notificationFullKey));
@@ -619,10 +679,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
         }
       });
-    }, 60000);
+    }, 60000); // Check every minute
 
     return () => clearInterval(intervalId);
-  }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification, dateLocale]);
+  }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification, dateLocale, systemNotificationPermission]);
 
 
   useEffect(() => {
@@ -650,7 +710,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const setIsAuthenticated = useCallback((value: boolean, rememberMe: boolean = false) => {
     if (value && !isAuthenticated) { // Log only on actual login event
         addHistoryLogEntry('historyLogLogin', undefined, 'account');
-        // Clear history log from previous session if any
         if (typeof window !== 'undefined') {
           sessionStorage.removeItem(SESSION_STORAGE_KEY_HISTORY_LOG);
         }
@@ -713,8 +772,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     currentActivitySetter(prev =>
       prev.map(act => {
         if (act.id === activityId) {
-          if (!originalActivity) originalActivity = act; // Capture original if not passed
-          activityTitleForLog = updates.title || originalActivity.title; // Ensure title is captured
+          if (!originalActivity) originalActivity = act; 
+          activityTitleForLog = updates.title || originalActivity.title; 
 
           const updatedRecurrence = updates.recurrence?.type === 'none'
             ? { type: 'none' }
@@ -738,7 +797,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
      addHistoryLogEntry(
       appModeState === 'personal' ? 'historyLogUpdateActivityPersonal' : 'historyLogUpdateActivityWork',
-      { title: activityTitleForLog }, // Log with potentially updated title
+      { title: activityTitleForLog }, 
       appModeState
     );
   }, [currentActivitySetter, appModeState, addHistoryLogEntry]);
@@ -884,7 +943,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     else actionKey = 'historyLogUpdateCategoryAll';
     addHistoryLogEntry(actionKey, { name: catName }, 'category');
 
-  }, [toast, t, addHistoryLogEntry, allCategories]);
+  }, [toast, t, addHistoryLogEntry]);
 
 
   const deleteCategory = useCallback((categoryId: string) => {
@@ -967,3 +1026,5 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+
+
