@@ -15,9 +15,11 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useAppStore } from '@/hooks/use-app-store';
-import type { Assignee } from '@/lib/types';
+import type { Assignee, AppMode } from '@/lib/types';
 import { Trash2, PlusCircle, Edit3, XCircle, ArrowLeft, Users } from 'lucide-react';
 import {
   AlertDialog,
@@ -28,19 +30,20 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger, // Added AlertDialogTrigger here
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslations } from '@/contexts/language-context';
 
 const assigneeFormSchema = z.object({
   name: z.string().min(1, "Assignee name is required."),
+  mode: z.enum(['personal', 'work', 'all']).default('all'),
 });
 
 type AssigneeFormData = z.infer<typeof assigneeFormSchema>;
 
 export default function ManageAssigneesPage() {
-  const { assignees, addAssignee, updateAssignee, deleteAssignee } = useAppStore();
+  const { allAssignees, addAssignee, updateAssignee, deleteAssignee, appMode } = useAppStore();
   const { t } = useTranslations();
   const [assigneeToDelete, setAssigneeToDelete] = useState<string | null>(null);
   const [editingAssignee, setEditingAssignee] = useState<Assignee | null>(null);
@@ -49,6 +52,7 @@ export default function ManageAssigneesPage() {
     resolver: zodResolver(assigneeFormSchema),
     defaultValues: {
       name: "",
+      mode: appMode,
     },
   });
 
@@ -56,20 +60,21 @@ export default function ManageAssigneesPage() {
     if (editingAssignee) {
       form.reset({
         name: editingAssignee.name,
+        mode: editingAssignee.mode || appMode,
       });
     } else {
-      form.reset({ name: "" });
+      form.reset({ name: "", mode: appMode });
     }
-  }, [editingAssignee, form]);
+  }, [editingAssignee, form, appMode]);
 
   const onSubmit = (data: AssigneeFormData) => {
     if (editingAssignee) {
-      updateAssignee(editingAssignee.id, data.name);
+      updateAssignee(editingAssignee.id, { name: data.name, mode: data.mode });
       setEditingAssignee(null);
     } else {
-      addAssignee(data.name);
+      addAssignee(data.name, data.mode);
     }
-    form.reset({ name: "" });
+    form.reset({ name: "", mode: appMode });
   };
 
   const handleDeleteAssignee = (assigneeId: string) => {
@@ -77,7 +82,7 @@ export default function ManageAssigneesPage() {
     setAssigneeToDelete(null);
     if (editingAssignee?.id === assigneeId) {
       setEditingAssignee(null);
-      form.reset({ name: "" });
+      form.reset({ name: "", mode: appMode });
     }
   };
 
@@ -87,7 +92,14 @@ export default function ManageAssigneesPage() {
 
   const handleCancelEdit = () => {
     setEditingAssignee(null);
-    form.reset({ name: "" });
+    form.reset({ name: "", mode: appMode });
+  };
+
+  const getModeTranslation = (modeValue: 'personal' | 'work' | 'all' | undefined) => {
+    if (modeValue === 'personal') return t('modePersonal');
+    if (modeValue === 'work') return t('modeWork');
+    if (modeValue === 'all') return t('modeAll');
+    return '';
   };
 
   return (
@@ -125,6 +137,45 @@ export default function ManageAssigneesPage() {
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={form.control}
+                    name="mode"
+                    render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <FormLabel>{t('assigneeMode')}</FormLabel>
+                        <FormControl>
+                          <RadioGroup
+                            onValueChange={field.onChange}
+                            value={field.value}
+                            className="flex flex-col space-y-1 sm:flex-row sm:space-y-0 sm:space-x-4"
+                          >
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <RadioGroupItem value="personal" />
+                              </FormControl>
+                              <FormLabel className="font-normal">{t('modePersonal')}</FormLabel>
+                            </FormItem>
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <RadioGroupItem value="work" />
+                              </FormControl>
+                              <FormLabel className="font-normal">{t('modeWork')}</FormLabel>
+                            </FormItem>
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <RadioGroupItem value="all" />
+                              </FormControl>
+                              <FormLabel className="font-normal">{t('modeAll')}</FormLabel>
+                            </FormItem>
+                          </RadioGroup>
+                        </FormControl>
+                        <FormDescription>
+                          {t('assigneeModeDescription', { mode: getModeTranslation(form.getValues('mode')) })}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <div className="flex space-x-2">
                     <Button type="submit" className="flex-grow">
                       {editingAssignee ? <Edit3 className="mr-2 h-5 w-5" /> : <PlusCircle className="mr-2 h-5 w-5" />}
@@ -148,14 +199,17 @@ export default function ManageAssigneesPage() {
               <CardDescription>{t('viewEditManageAssignees')}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow">
-              {assignees.length > 0 ? (
-                <ScrollArea className="h-full pr-1"> 
+              {allAssignees.length > 0 ? (
+                <ScrollArea className="h-full pr-1">
                   <ul className="space-y-3">
-                    {assignees.map((assignee) => (
+                    {allAssignees.map((assignee) => (
                       <li key={assignee.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md shadow-sm">
                         <div className="flex items-center gap-3">
                           <Users className="h-5 w-5 text-primary" />
                           <span className="font-medium">{assignee.name}</span>
+                          <span className="text-xs text-muted-foreground ml-1">
+                            ({getModeTranslation(assignee.mode)})
+                          </span>
                         </div>
                         <div className="flex items-center">
                           <Button variant="ghost" size="icon" onClick={() => handleEditAssignee(assignee)} className="text-primary hover:text-primary/80">
@@ -193,9 +247,9 @@ export default function ManageAssigneesPage() {
                 <p className="text-sm text-muted-foreground text-center py-4">{t('noAssigneesYet')}</p>
               )}
             </CardContent>
-             {assignees.length > 0 && (
+             {allAssignees.length > 0 && (
               <CardFooter className="text-sm text-muted-foreground">
-                {t('assigneesCount', { count: assignees.length })}
+                {t('assigneesCount', { count: allAssignees.length })}
               </CardFooter>
             )}
           </Card>

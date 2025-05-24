@@ -28,7 +28,7 @@ export interface Activity {
   isRecurringInstance?: boolean;
   originalInstanceDate?: number;
   masterActivityId?: string;
-  responsiblePersonId?: string; // New field for assignee
+  responsiblePersonId?: string;
 }
 
 export type AppMode = 'personal' | 'work';
@@ -44,6 +44,7 @@ export interface Category {
 export interface Assignee {
   id: string;
   name: string;
+  mode?: AppMode | 'all'; // Added mode to Assignee
 }
 
 export interface UINotification {
@@ -77,14 +78,18 @@ export type HistoryLogActionKey =
   | 'historyLogSwitchToPersonalMode'
   | 'historyLogSwitchToWorkMode'
   | 'historyLogPasswordChange'
-  | 'historyLogAddAssignee' // New
-  | 'historyLogUpdateAssignee' // New
-  | 'historyLogDeleteAssignee'; // New
+  | 'historyLogAddAssigneePersonal' // Updated
+  | 'historyLogAddAssigneeWork'   // Updated
+  | 'historyLogAddAssigneeAll'    // New
+  | 'historyLogUpdateAssigneePersonal' // Updated
+  | 'historyLogUpdateAssigneeWork' // Updated
+  | 'historyLogUpdateAssigneeAll' // New
+  | 'historyLogDeleteAssignee';
 
 export interface HistoryLogEntry {
   id: string;
   timestamp: number;
   actionKey: HistoryLogActionKey;
   details?: Record<string, string | number | boolean | undefined>;
-  scope: 'account' | 'personal' | 'work' | 'category' | 'assignee'; // Added 'assignee'
+  scope: 'account' | 'personal' | 'work' | 'category' | 'assignee';
 }
