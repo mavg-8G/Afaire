@@ -28,7 +28,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from '@/hooks/use-toast';
 import { useTranslations } from '@/contexts/language-context';
-import { enUS, es } from 'date-fns/locale';
+import { enUS, es, fr } from 'date-fns/locale';
 import { Skeleton } from '@/components/ui/skeleton';
 import { v4 as uuidv4 } from 'uuid';
 import { cn } from '@/lib/utils';
@@ -167,7 +167,11 @@ export default function ActivityCalendarView() {
   const [dateForModal, setDateForModal] = useState<Date>(new Date());
 
 
-  const dateLocale = locale === 'es' ? es : enUS;
+  const dateLocale = useMemo(() => {
+    if (locale === 'es') return es;
+    if (locale === 'fr') return fr;
+    return enUS;
+  }, [locale]);
 
   useEffect(() => {
     setHasMounted(true);
@@ -311,8 +315,6 @@ export default function ActivityCalendarView() {
 
   const handleAddNewActivityGeneric = () => {
     setEditingActivity(undefined);
-    // When FAB is clicked, modal opens with the currently selected date on calendar
-    // or today if no date is selected (though selectedDate should always be set after mount)
     setDateForModal(selectedDate || new Date()); 
     setEditingInstanceDate(undefined); 
     setIsActivityModalOpen(true);
@@ -358,14 +360,14 @@ export default function ActivityCalendarView() {
     } else if (date) {
         setCurrentDisplayMonth(date);
     }
-    // dateForModal for new activities (via FAB) will now be set when FAB is clicked
+    if (date) setDateForModal(date);
   };
 
   const handleTodayButtonClick = () => {
     const today = new Date();
     setSelectedDate(today);
     setCurrentDisplayMonth(today);
-    // dateForModal for new activities (via FAB) will now be set when FAB is clicked
+    setDateForModal(today);
   };
 
   const todayButtonFooter = (
@@ -525,10 +527,17 @@ export default function ActivityCalendarView() {
       <Button
         variant="ghost"
         onClick={handleAddNewActivityGeneric}
-        className="fixed bottom-10 right-6 rounded-full shadow-lg h-14 w-14 z-50 p-0 bg-[hsl(var(--accent))]/15 text-accent-foreground backdrop-blur-md border border-border/50 hover:bg-[hsl(var(--accent))]/30"
+        className={cn(
+            "fixed bottom-10 right-6 z-50 shadow-lg",
+            "bg-[hsl(var(--accent))]/15 text-accent-foreground backdrop-blur-md border border-border/50 hover:bg-[hsl(var(--accent))]/30",
+            "flex items-center justify-center", // Common flex properties
+            "h-14 w-14 rounded-full p-0", // Mobile: round, icon-only
+            "md:h-12 md:w-auto md:rounded-2xl md:px-4 md:gap-2" // Desktop: squircle, text + icon
+        )}
         aria-label={t('addActivity')}
       >
-        <PlusCircle className="h-7 w-7" />
+        <PlusCircle className="h-7 w-7 md:h-5 md:w-5" />
+        <span className="hidden md:inline text-sm font-medium">{t('addActivity')}</span>
       </Button>
     </div>
   );
