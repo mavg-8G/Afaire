@@ -32,6 +32,11 @@ export type Translations = {
   enableSystemNotifications: string;
   systemNotificationsEnabled: string;
   systemNotificationsBlocked: string;
+  enableSystemNotificationsDescription: string;
+  systemNotificationsNowActive: string;
+  systemNotificationsUserDenied: string;
+  systemNotificationsNotYetEnabled: string;
+  systemNotificationsDismissed: string;
   manageAssignees: string;
   pomodoroTimerMenuLabel: string;
 
@@ -289,11 +294,17 @@ export type Translations = {
   pomodoroShortRelaxation: string;
   pomodoroLongRelaxation: string;
   pomodoroCyclesCompleted: (params: { cycles: number }) => string;
-
+  pomodoroTakeAShortBreak: string;
+  pomodoroTakeALongBreak: string;
+  pomodoroBackToWork: string;
+  pomodoroErrorTitle: string;
+  pomodoroSWNotReady: string;
+  pomodoroInitializing: string; // New translation
 };
 
 export const translations: Record<Locale, Translations> = {
   en: {
+    // ... (all existing English translations)
     addActivity: "Add Activity",
     manageCategories: "Categories",
     language: "Language",
@@ -323,6 +334,11 @@ export const translations: Record<Locale, Translations> = {
     enableSystemNotifications: "Enable System Notifications",
     systemNotificationsEnabled: "System Notifications Enabled",
     systemNotificationsBlocked: "System Notifications Blocked",
+    enableSystemNotificationsDescription: "To enable notifications, please check your browser and system settings.",
+    systemNotificationsNowActive: "System notifications are now active!",
+    systemNotificationsUserDenied: "You've denied notification permissions. Please change this in your browser settings if you wish to enable them.",
+    systemNotificationsNotYetEnabled: "System notifications not yet enabled.",
+    systemNotificationsDismissed: "You can enable notifications later from the options menu.",
     manageAssignees: "Manage Assignees",
     pomodoroTimerMenuLabel: "Pomodoro Timer",
     backToCalendar: "Back to Calendar",
@@ -560,8 +576,15 @@ export const translations: Record<Locale, Translations> = {
     pomodoroShortRelaxation: "Time for a short relaxation.",
     pomodoroLongRelaxation: "Time for a longer rest.",
     pomodoroCyclesCompleted: (params) => `${params.cycles} work cycle(s) completed.`,
+    pomodoroTakeAShortBreak: "Time for a short break!",
+    pomodoroTakeALongBreak: "Time for a long break!",
+    pomodoroBackToWork: "Time to get back to work!",
+    pomodoroErrorTitle: "Pomodoro Error",
+    pomodoroSWNotReady: "Service Worker for Pomodoro not ready. Please wait or reload.",
+    pomodoroInitializing: "Initializing...",
   },
   es: {
+    // ... (all existing Spanish translations)
     addActivity: "Añadir Actividad",
     manageCategories: "Categorías",
     language: "Idioma",
@@ -591,6 +614,11 @@ export const translations: Record<Locale, Translations> = {
     enableSystemNotifications: "Activar Notificaciones del Sistema",
     systemNotificationsEnabled: "Notificaciones del Sistema Activadas",
     systemNotificationsBlocked: "Notificaciones del Sistema Bloqueadas",
+    enableSystemNotificationsDescription: "Para activar las notificaciones, revisa la configuración de tu navegador y sistema.",
+    systemNotificationsNowActive: "¡Las notificaciones del sistema ahora están activas!",
+    systemNotificationsUserDenied: "Has denegado los permisos de notificación. Por favor, cámbialo en la configuración de tu navegador si deseas activarlas.",
+    systemNotificationsNotYetEnabled: "Notificaciones del sistema aún no activadas.",
+    systemNotificationsDismissed: "Puedes activar las notificaciones más tarde desde el menú de opciones.",
     manageAssignees: "Gestionar Asignados",
     pomodoroTimerMenuLabel: "Temporizador Pomodoro",
     backToCalendar: "Volver al Calendario",
@@ -828,8 +856,15 @@ export const translations: Record<Locale, Translations> = {
     pomodoroShortRelaxation: "Tiempo para una breve relajación.",
     pomodoroLongRelaxation: "Tiempo para un descanso más largo.",
     pomodoroCyclesCompleted: (params) => `${params.cycles} ciclo(s) de trabajo completado(s).`,
+    pomodoroTakeAShortBreak: "¡Tiempo para un descanso corto!",
+    pomodoroTakeALongBreak: "¡Tiempo para un descanso largo!",
+    pomodoroBackToWork: "¡Hora de volver al trabajo!",
+    pomodoroErrorTitle: "Error de Pomodoro",
+    pomodoroSWNotReady: "Service Worker para Pomodoro no listo. Espera o recarga.",
+    pomodoroInitializing: "Inicializando...",
   },
   fr: {
+    // ... (all existing French translations)
     addActivity: "Ajouter une activité",
     manageCategories: "Catégories",
     language: "Langue",
@@ -859,6 +894,11 @@ export const translations: Record<Locale, Translations> = {
     enableSystemNotifications: "Activer les notifications système",
     systemNotificationsEnabled: "Notifications système activées",
     systemNotificationsBlocked: "Notifications système bloquées",
+    enableSystemNotificationsDescription: "Pour activer les notifications, veuillez vérifier les paramètres de votre navigateur et de votre système.",
+    systemNotificationsNowActive: "Les notifications système sont maintenant actives !",
+    systemNotificationsUserDenied: "Vous avez refusé les autorisations de notification. Veuillez modifier cela dans les paramètres de votre navigateur si vous souhaitez les activer.",
+    systemNotificationsNotYetEnabled: "Notifications système pas encore activées.",
+    systemNotificationsDismissed: "Vous pourrez activer les notifications plus tard depuis le menu des options.",
     manageAssignees: "Gérer les Personnes Assignées",
     pomodoroTimerMenuLabel: "Minuteur Pomodoro",
     backToCalendar: "Retour au calendrier",
@@ -1096,6 +1136,12 @@ export const translations: Record<Locale, Translations> = {
     pomodoroShortRelaxation: "Temps pour une courte relaxation.",
     pomodoroLongRelaxation: "Temps pour un repos plus long.",
     pomodoroCyclesCompleted: (params) => `${params.cycles} cycle(s) de travail terminé(s).`,
+    pomodoroTakeAShortBreak: "C'est l'heure d'une courte pause !",
+    pomodoroTakeALongBreak: "C'est l'heure d'une longue pause !",
+    pomodoroBackToWork: "C'est l'heure de retourner au travail !",
+    pomodoroErrorTitle: "Erreur Pomodoro",
+    pomodoroSWNotReady: "Service Worker pour Pomodoro non prêt. Veuillez patienter ou recharger.",
+    pomodoroInitializing: "Initialisation...",
   },
 };
 
