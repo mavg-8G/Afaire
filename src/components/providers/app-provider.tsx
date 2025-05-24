@@ -322,6 +322,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [pomodoroIsRunning, setPomodoroIsRunning] = useState(false);
   const [pomodoroCyclesCompleted, setPomodoroCyclesCompleted] = useState(0);
   const pomodoroIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [pomodoroPausedAt, setPomodoroPausedAt] = useState<number | null>(null);
 
 
   useEffect(() => {
@@ -364,7 +365,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
  const filteredCategories = useMemo(() => {
     if (isLoading) {
-      return []; // Return empty if still loading to prevent premature filtering
+      return []; 
     }
     return allCategories.filter(cat =>
       !cat.mode || cat.mode === 'all' || cat.mode === appModeState
@@ -376,7 +377,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (isLoading) {
       return [];
     }
-    // Assignees are always the full list, filtering happens in UI if needed (e.g. modal only shows them if personal mode)
     return allAssignees;
   }, [allAssignees, isLoading]);
 
@@ -408,18 +408,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       console.warn("[AppProvider] This browser does not support desktop notification. Unable to show: ", title);
       return;
     }
-    const currentBrowserPermission = Notification.permission;
-    console.log(`[AppProvider] showSystemNotification - Current browser notification permission is: ${currentBrowserPermission}`);
+    
+    const currentPermission = Notification.permission;
+    console.log(`[AppProvider] showSystemNotification - Current browser notification permission is: ${currentPermission}`);
 
-    if (currentBrowserPermission === 'granted') {
+    if (currentPermission === 'granted') {
       console.log("[AppProvider] Permission 'granted'. Showing system notification:", title);
-      new Notification(title, {
-        body: description,
-        icon: '/icons/icon-192x192.png',
-        lang: locale,
-      });
+      try {
+        new Notification(title, {
+          body: description,
+          icon: '/icons/icon-192x192.png', 
+          lang: locale,
+        });
+      } catch (error) {
+        console.error("[AppProvider] Error creating system notification:", error);
+      }
     } else {
-      console.log(`[AppProvider] System notification for "${title}" was not shown because permission is '${currentBrowserPermission}'. User can enable via settings menu or explicit button.`);
+      console.log(`[AppProvider] System notification for "${title}" was not shown because permission is '${currentPermission}'. User can enable via settings menu or explicit button.`);
     }
   }, [locale]);
 
@@ -427,48 +432,48 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     console.log("[AppProvider] requestSystemNotificationPermission called.");
     if (typeof window === 'undefined' || !('Notification' in window)) {
       console.warn("[AppProvider] This browser does not support desktop notification.");
-      setSystemNotificationPermission('denied');
+      setSystemNotificationPermission('denied'); // Update state
       toast({ title: t('systemNotificationsBlocked'), description: "Browser does not support notifications." });
       return;
     }
 
-    const currentBrowserPermission = Notification.permission;
-    console.log(`[AppProvider] Current browser notification permission (at request time) is: ${currentBrowserPermission}`);
+    const currentPermission = Notification.permission;
+    console.log(`[AppProvider] Current browser notification permission (at request time) is: ${currentPermission}`);
 
-    if (currentBrowserPermission === 'granted') {
+    if (currentPermission === 'granted') {
       console.log("[AppProvider] Notification permission already granted by browser.");
-      setSystemNotificationPermission('granted');
+      setSystemNotificationPermission('granted'); // Update state
       toast({ title: t('systemNotificationsEnabled') });
       return;
     }
 
-    if (currentBrowserPermission === 'denied') {
+    if (currentPermission === 'denied') {
       console.log("[AppProvider] Notification permission is 'denied' by browser. User needs to change this in browser/OS settings.");
-      setSystemNotificationPermission('denied');
+      setSystemNotificationPermission('denied'); // Update state
       toast({ title: t('systemNotificationsBlocked'), description: "Please check your browser's site settings to allow notifications.", duration: 5000 });
       return;
     }
 
-    if (currentBrowserPermission === 'default') {
-      console.log("[AppProvider] Notification permission is 'default'. Requesting permission from user via button click...");
-      try {
-        const permissionResult = await Notification.requestPermission();
-        console.log(`[AppProvider] Notification.requestPermission() result: ${permissionResult}`);
-        setSystemNotificationPermission(permissionResult);
+    // currentPermission is 'default'
+    console.log("[AppProvider] Notification permission is 'default'. Requesting permission from user via button click...");
+    try {
+      const permissionResult = await Notification.requestPermission();
+      console.log(`[AppProvider] Notification.requestPermission() result: ${permissionResult}`);
+      setSystemNotificationPermission(permissionResult); // Update state with the result
 
-        if (permissionResult === 'granted') {
-          console.log("[AppProvider] Notification permission granted by user.");
-          toast({ title: t('systemNotificationsEnabled'), description: "You will now receive system notifications." });
-        } else if (permissionResult === 'denied') {
-          console.log("[AppProvider] Notification permission denied by user via prompt.");
-          toast({ title: t('systemNotificationsBlocked'), description: "You have denied notification permissions." });
-        } else {
-          console.log("[AppProvider] Notification permission prompt dismissed by user (remains 'default').");
-        }
-      } catch (err) {
-        console.error("[AppProvider] Error requesting notification permission:", err);
-        setSystemNotificationPermission(Notification.permission);
+      if (permissionResult === 'granted') {
+        console.log("[AppProvider] Notification permission granted by user.");
+        toast({ title: t('systemNotificationsEnabled'), description: "You will now receive system notifications." });
+      } else if (permissionResult === 'denied') {
+        console.log("[AppProvider] Notification permission denied by user via prompt.");
+        toast({ title: t('systemNotificationsBlocked'), description: "You have denied notification permissions." });
+      } else {
+        console.log("[AppProvider] Notification permission prompt dismissed by user (remains 'default').");
       }
+    } catch (err) {
+      console.error("[AppProvider] Error requesting notification permission:", err);
+      // Fallback to checking the permission again in case of an unexpected error
+      setSystemNotificationPermission(Notification.permission);
     }
   }, [t, toast]);
 
@@ -480,11 +485,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setLockoutEndTimeState(null);
     setSessionExpiryTimestampState(null);
     setHistoryLog([]);
-    // Pomodoro reset on logout
+    
     setPomodoroPhase('off');
     setPomodoroTimeRemaining(POMODORO_WORK_DURATION_SECONDS);
     setPomodoroIsRunning(false);
     setPomodoroCyclesCompleted(0);
+    setPomodoroPausedAt(null);
 
 
     if (typeof window !== 'undefined') {
@@ -500,7 +506,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [addHistoryLogEntry]);
 
-  useEffect(() => {
+ useEffect(() => {
     setIsLoading(true);
     let initialAuth = false;
     try {
@@ -510,7 +516,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const storedWorkActivities = localStorage.getItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES);
       if (storedWorkActivities) setWorkActivities(JSON.parse(storedWorkActivities));
 
-      let loadedCategories: Category[] = [];
+      let loadedCategories: Category[] = INITIAL_CATEGORIES.map(cat => ({ ...cat, icon: getIconComponent(cat.iconName) }));
       const storedAllCategoriesString = localStorage.getItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES);
       if (storedAllCategoriesString) {
         try {
@@ -521,16 +527,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               icon: getIconComponent(cat.iconName || 'Package'),
               mode: cat.mode || 'all'
             }));
-          } else if (!parsedCategories || (Array.isArray(parsedCategories) && parsedCategories.length === 0)){
-             console.log("[AppProvider] localStorage categories empty or null, using defaults.");
-             loadedCategories = INITIAL_CATEGORIES.map(cat => ({ ...cat, icon: getIconComponent(cat.iconName) }));
           }
         } catch (e) {
           console.error("[AppProvider] Failed to parse categories from localStorage, using defaults.", e);
-          loadedCategories = INITIAL_CATEGORIES.map(cat => ({ ...cat, icon: getIconComponent(cat.iconName) }));
         }
-      } else {
-         loadedCategories = INITIAL_CATEGORIES.map(cat => ({ ...cat, icon: getIconComponent(cat.iconName) }));
       }
       setAllCategories(loadedCategories);
 
@@ -561,7 +561,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const expiryTime = parseInt(storedExpiry, 10);
         if (Date.now() > expiryTime) {
           initialAuth = false;
-          logout();
+          logout(); 
         } else {
           initialAuth = true;
           setSessionExpiryTimestampState(expiryTime);
@@ -596,7 +596,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } finally {
       setIsLoading(false);
     }
-  }, []); // Empty dependency array for one-time effect
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
 
 
   useEffect(() => {
@@ -805,23 +806,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   useEffect(() => {
-    if (pomodoroIsRunning) {
+    if (pomodoroIsRunning && pomodoroTimeRemaining > 0) {
       clearPomodoroInterval(); 
       pomodoroIntervalRef.current = setInterval(() => {
         setPomodoroTimeRemaining(prevTime => {
           if (prevTime > 0) {
             return prevTime - 1;
           } else {
+            // This else block will now only be reached if time explicitly becomes 0
+            // Phase transition logic
             const endedPhase = pomodoroPhase;
             let nextPhase: PomodoroPhase = 'work';
             let nextDuration = POMODORO_WORK_DURATION_SECONDS;
             let notificationTitleKey: keyof Translations = 'pomodoroWorkSessionEnded';
             let notificationDescKey: keyof Translations = 'pomodoroTakeABreakOrStartNext';
+            let newCyclesCompleted = pomodoroCyclesCompleted;
 
             if (endedPhase === 'work') {
-              const newCyclesCompleted = pomodoroCyclesCompleted + 1;
+              newCyclesCompleted = pomodoroCyclesCompleted + 1;
               setPomodoroCyclesCompleted(newCyclesCompleted);
-              if (newCyclesCompleted % POMODORO_CYCLES_BEFORE_LONG_BREAK === 0) {
+              if (newCyclesCompleted % POMODORO_CYCLES_BEFORE_LONG_BREAK === 0 && newCyclesCompleted > 0) {
                 nextPhase = 'longBreak';
                 nextDuration = POMODORO_LONG_BREAK_DURATION_SECONDS;
               } else {
@@ -829,37 +833,115 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 nextDuration = POMODORO_SHORT_BREAK_DURATION_SECONDS;
               }
               notificationTitleKey = 'pomodoroWorkSessionEnded';
-              addUINotification({ title: t(notificationTitleKey), description: t(notificationDescKey), activityId: `pomodoro_cycle_${newCyclesCompleted}` });
-              showSystemNotification(t(notificationTitleKey), t(notificationDescKey));
-              toast({ title: t(notificationTitleKey), description: t(notificationDescKey) });
             } else if (endedPhase === 'shortBreak') {
               nextPhase = 'work';
               nextDuration = POMODORO_WORK_DURATION_SECONDS;
               notificationTitleKey = 'pomodoroShortBreakEnded';
-              addUINotification({ title: t(notificationTitleKey), description: t(notificationDescKey) });
-              showSystemNotification(t(notificationTitleKey), t(notificationDescKey));
-              toast({ title: t(notificationTitleKey), description: t(notificationDescKey) });
             } else if (endedPhase === 'longBreak') {
               nextPhase = 'work';
               nextDuration = POMODORO_WORK_DURATION_SECONDS;
               notificationTitleKey = 'pomodoroLongBreakEnded';
-              addUINotification({ title: t(notificationTitleKey), description: t(notificationDescKey) });
-              showSystemNotification(t(notificationTitleKey), t(notificationDescKey));
-              toast({ title: t(notificationTitleKey), description: t(notificationDescKey) });
             }
+            
+            const title = t(notificationTitleKey);
+            const description = t(endedPhase === 'work' ? 'pomodoroTakeABreakOrStartNext' : 'pomodoroFocusOnTask');
+            addUINotification({ title, description, activityId: `pomodoro_cycle_${newCyclesCompleted}_${endedPhase}` });
+            showSystemNotification(title, description);
+            toast({ title, description });
             
             setPomodoroPhase(nextPhase);
             setPomodoroTimeRemaining(nextDuration);
-            setPomodoroIsRunning(false);
+            setPomodoroIsRunning(false); // Stop timer until user starts next phase
+            setPomodoroPausedAt(null); // Clear pause state
             return 0; 
           }
         });
       }, 1000);
+    } else if (pomodoroTimeRemaining <= 0 && pomodoroIsRunning) {
+        // Handles case where time became 0 due to correction, and interval needs to trigger phase end
+        setPomodoroIsRunning(false); // Stop interval
+        
+        // Manually trigger phase end logic from interval
+        const endedPhase = pomodoroPhase;
+        let nextPhase: PomodoroPhase = 'work';
+        let nextDuration = POMODORO_WORK_DURATION_SECONDS;
+        let notificationTitleKey: keyof Translations = 'pomodoroWorkSessionEnded';
+        let notificationDescKey: keyof Translations = 'pomodoroTakeABreakOrStartNext';
+        let newCyclesCompleted = pomodoroCyclesCompleted;
+
+        if (endedPhase === 'work') {
+          newCyclesCompleted = pomodoroCyclesCompleted + 1;
+          setPomodoroCyclesCompleted(newCyclesCompleted);
+          if (newCyclesCompleted % POMODORO_CYCLES_BEFORE_LONG_BREAK === 0 && newCyclesCompleted > 0) {
+            nextPhase = 'longBreak';
+            nextDuration = POMODORO_LONG_BREAK_DURATION_SECONDS;
+          } else {
+            nextPhase = 'shortBreak';
+            nextDuration = POMODORO_SHORT_BREAK_DURATION_SECONDS;
+          }
+          notificationTitleKey = 'pomodoroWorkSessionEnded';
+        } else if (endedPhase === 'shortBreak') {
+          nextPhase = 'work';
+          nextDuration = POMODORO_WORK_DURATION_SECONDS;
+          notificationTitleKey = 'pomodoroShortBreakEnded';
+        } else if (endedPhase === 'longBreak') {
+          nextPhase = 'work';
+          nextDuration = POMODORO_WORK_DURATION_SECONDS;
+          notificationTitleKey = 'pomodoroLongBreakEnded';
+        }
+        
+        const title = t(notificationTitleKey);
+        const description = t(endedPhase === 'work' ? 'pomodoroTakeABreakOrStartNext' : 'pomodoroFocusOnTask');
+        addUINotification({ title, description, activityId: `pomodoro_cycle_${newCyclesCompleted}_${endedPhase}` });
+        showSystemNotification(title, description);
+        toast({ title, description });
+        
+        setPomodoroPhase(nextPhase);
+        setPomodoroTimeRemaining(nextDuration);
+        setPomodoroPausedAt(null);
     } else {
       clearPomodoroInterval();
     }
     return clearPomodoroInterval;
-  }, [pomodoroIsRunning, pomodoroPhase, pomodoroCyclesCompleted, t, addUINotification, showSystemNotification, toast, clearPomodoroInterval]);
+  }, [pomodoroIsRunning, pomodoroPhase, pomodoroCyclesCompleted, pomodoroTimeRemaining, t, addUINotification, showSystemNotification, toast, clearPomodoroInterval]);
+
+  // Effect for Page Visibility API
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (pomodoroIsRunning) {
+          // Timer was running when tab was hidden
+          setPomodoroPausedAt(Date.now());
+          setPomodoroIsRunning(false); // Stop the interval
+          console.log('[Pomodoro] Tab hidden, timer paused.');
+        }
+      } else {
+        // Tab became visible
+        if (pomodoroPausedAt !== null) { // Timer was paused due to tab being hidden
+          const elapsedSeconds = Math.floor((Date.now() - pomodoroPausedAt) / 1000);
+          const newTimeRemaining = Math.max(0, pomodoroTimeRemaining - elapsedSeconds);
+          setPomodoroTimeRemaining(newTimeRemaining);
+          setPomodoroPausedAt(null);
+          console.log(`[Pomodoro] Tab visible, time corrected by ${elapsedSeconds}s. New time: ${newTimeRemaining}`);
+
+          if (newTimeRemaining > 0 && pomodoroPhase !== 'off') {
+            setPomodoroIsRunning(true); // Resume the interval
+            console.log('[Pomodoro] Timer resumed.');
+          } else if (newTimeRemaining <= 0 && pomodoroPhase !== 'off') {
+             // Time ran out while hidden, trigger phase end by setting running to true.
+             // The interval effect will catch this in its next check.
+            setPomodoroIsRunning(true);
+            console.log('[Pomodoro] Time ran out while hidden. Interval will trigger phase end.');
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [pomodoroIsRunning, pomodoroTimeRemaining, pomodoroPausedAt, pomodoroPhase]);
 
 
   const startPomodoroWork = useCallback(() => {
@@ -867,10 +949,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setPomodoroPhase('work');
     setPomodoroTimeRemaining(POMODORO_WORK_DURATION_SECONDS);
     setPomodoroIsRunning(true);
-    // Reset cycle count if starting work manually, implying a new set of cycles
-    if (pomodoroPhase !== 'work' && pomodoroPhase !== 'off') {
-        setPomodoroCyclesCompleted(0);
-    } else if (pomodoroPhase === 'off') {
+    setPomodoroPausedAt(null);
+    if (pomodoroPhase !== 'work') { // Reset cycles if starting a new work session from break/off
         setPomodoroCyclesCompleted(0);
     }
   }, [clearPomodoroInterval, pomodoroPhase]);
@@ -880,6 +960,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setPomodoroPhase('shortBreak');
     setPomodoroTimeRemaining(POMODORO_SHORT_BREAK_DURATION_SECONDS);
     setPomodoroIsRunning(true);
+    setPomodoroPausedAt(null);
   }, [clearPomodoroInterval]);
 
   const startPomodoroLongBreak = useCallback(() => {
@@ -887,17 +968,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setPomodoroPhase('longBreak');
     setPomodoroTimeRemaining(POMODORO_LONG_BREAK_DURATION_SECONDS);
     setPomodoroIsRunning(true);
+    setPomodoroPausedAt(null);
   }, [clearPomodoroInterval]);
 
   const pausePomodoro = useCallback(() => {
-    setPomodoroIsRunning(false);
-  }, []);
+    if (pomodoroIsRunning) {
+      setPomodoroIsRunning(false);
+      setPomodoroPausedAt(Date.now());
+      console.log('[Pomodoro] Timer manually paused.');
+    }
+  }, [pomodoroIsRunning]);
 
   const resumePomodoro = useCallback(() => {
-    if (pomodoroPhase !== 'off' && pomodoroTimeRemaining > 0) {
-      setPomodoroIsRunning(true);
+    if (!pomodoroIsRunning && pomodoroPhase !== 'off' && pomodoroTimeRemaining > 0) {
+      let newTime = pomodoroTimeRemaining;
+      if (pomodoroPausedAt !== null) {
+        const elapsedSeconds = Math.floor((Date.now() - pomodoroPausedAt) / 1000);
+        newTime = Math.max(0, pomodoroTimeRemaining - elapsedSeconds);
+        setPomodoroTimeRemaining(newTime);
+        setPomodoroPausedAt(null);
+        console.log(`[Pomodoro] Timer manually resumed, time corrected by ${elapsedSeconds}s. New time: ${newTime}`);
+      }
+      if (newTime > 0) {
+        setPomodoroIsRunning(true);
+      } else {
+        // If time ran out during manual pause, set running to true to trigger phase end.
+        setPomodoroIsRunning(true); 
+        console.log('[Pomodoro] Time ran out during manual pause. Interval will trigger phase end.');
+      }
     }
-  }, [pomodoroPhase, pomodoroTimeRemaining]);
+  }, [pomodoroIsRunning, pomodoroPhase, pomodoroTimeRemaining, pomodoroPausedAt]);
 
   const resetPomodoro = useCallback(() => {
     clearPomodoroInterval();
@@ -905,6 +1005,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setPomodoroTimeRemaining(POMODORO_WORK_DURATION_SECONDS);
     setPomodoroIsRunning(false);
     setPomodoroCyclesCompleted(0);
+    setPomodoroPausedAt(null);
+    console.log('[Pomodoro] Timer reset.');
   }, [clearPomodoroInterval]);
 
 
@@ -1011,7 +1113,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           
           const updatedResponsiblePersonId = appModeState === 'personal'
             ? (updates.responsiblePersonId !== undefined ? updates.responsiblePersonId : act.responsiblePersonId)
-            : undefined; // Always undefined for work mode
+            : undefined; 
 
           return { ...act, ...updates, recurrence: updatedRecurrence as RecurrenceRule | undefined, completedOccurrences: updatedCompletedOccurrences, responsiblePersonId: updatedResponsiblePersonId };
         }
@@ -1206,7 +1308,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const newAssignee: Assignee = { id: `asg_${uuidv4()}`, name };
     setAllAssignees(prev => [...prev, newAssignee]);
     toast({ title: t('toastAssigneeAddedTitle'), description: t('toastAssigneeAddedDescription', { assigneeName: name }) });
-    addHistoryLogEntry('historyLogAddAssignee', { name });
+    addHistoryLogEntry('historyLogAddAssignee', { name }, 'assignee');
   }, [t, toast, addHistoryLogEntry]);
 
   const updateAssignee = useCallback((assigneeId: string, updates: Partial<Omit<Assignee, 'id'>>) => {
@@ -1227,7 +1329,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const asgName = assigneeNameForLog || "Unknown Assignee";
     toast({ title: t('toastAssigneeUpdatedTitle'), description: t('toastAssigneeUpdatedDescription', { assigneeName: asgName }) });
-    addHistoryLogEntry('historyLogUpdateAssignee', { name: asgName, oldName: oldNameForLog !== asgName ? oldNameForLog : undefined });
+    addHistoryLogEntry('historyLogUpdateAssignee', { name: asgName, oldName: oldNameForLog !== asgName ? oldNameForLog : undefined }, 'assignee');
   }, [t, toast, addHistoryLogEntry]);
 
   const deleteAssignee = useCallback((assigneeId: string) => {
@@ -1243,7 +1345,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setPersonalActivities(clearAssigneeFromActivities);
 
     toast({ title: t('toastAssigneeDeletedTitle'), description: t('toastAssigneeDeletedDescription', { assigneeName: assigneeToDelete.name }) });
-    addHistoryLogEntry('historyLogDeleteAssignee', { name: assigneeToDelete.name });
+    addHistoryLogEntry('historyLogDeleteAssignee', { name: assigneeToDelete.name }, 'assignee');
   }, [allAssignees, t, toast, addHistoryLogEntry]);
 
   const getAssigneeById = useCallback((assigneeId: string) => {
@@ -1327,3 +1429,4 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+
