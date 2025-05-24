@@ -86,6 +86,7 @@ export type Translations = {
   activityDateLabel: string;
   pickADate: string;
   activityTimeLabel: string;
+  activityTimeDescription24Hour: string;
   activityNotesLabel: string;
   activityNotesPlaceholder: string;
   todosLabel: string;
@@ -272,17 +273,22 @@ export type Translations = {
   pomodoroTitle: string;
   pomodoroStartWork: string;
   pomodoroStartShortBreak: string;
+  pomodoroStartLongBreak: string;
   pomodoroPause: string;
   pomodoroResume: string;
   pomodoroReset: string;
   pomodoroWorkSession: string;
   pomodoroShortBreakSession: string;
+  pomodoroLongBreakSession: string;
   pomodoroReadyToStart: string;
   pomodoroWorkSessionEnded: string;
   pomodoroShortBreakEnded: string;
+  pomodoroLongBreakEnded: string;
   pomodoroTakeABreakOrStartNext: string;
   pomodoroFocusOnTask: string;
   pomodoroShortRelaxation: string;
+  pomodoroLongRelaxation: string;
+  pomodoroCyclesCompleted: (params: { cycles: number }) => string;
 
 };
 
@@ -363,6 +369,7 @@ export const translations: Record<Locale, Translations> = {
     activityDateLabel: "Start Date / Date",
     pickADate: "Pick a date",
     activityTimeLabel: "Activity Time (HH:MM)",
+    activityTimeDescription24Hour: "Please use 24-hour format (e.g., 14:30).",
     activityNotesLabel: "Notes",
     activityNotesPlaceholder: "Add any additional details or links here...",
     todosLabel: "Todos",
@@ -537,17 +544,22 @@ export const translations: Record<Locale, Translations> = {
     pomodoroTitle: "Pomodoro Timer",
     pomodoroStartWork: "Start Work (25 min)",
     pomodoroStartShortBreak: "Start Short Break (5 min)",
+    pomodoroStartLongBreak: "Start Long Break (15 min)",
     pomodoroPause: "Pause",
     pomodoroResume: "Resume",
     pomodoroReset: "Reset",
     pomodoroWorkSession: "Work Session",
     pomodoroShortBreakSession: "Short Break",
+    pomodoroLongBreakSession: "Long Break",
     pomodoroReadyToStart: "Ready to start?",
     pomodoroWorkSessionEnded: "Work Session Ended",
     pomodoroShortBreakEnded: "Short Break Ended",
+    pomodoroLongBreakEnded: "Long Break Ended",
     pomodoroTakeABreakOrStartNext: "Time for a break or start the next session!",
     pomodoroFocusOnTask: "Focus on your task!",
     pomodoroShortRelaxation: "Time for a short relaxation.",
+    pomodoroLongRelaxation: "Time for a longer rest.",
+    pomodoroCyclesCompleted: (params) => `${params.cycles} work cycle(s) completed.`,
   },
   es: {
     addActivity: "Añadir Actividad",
@@ -625,6 +637,7 @@ export const translations: Record<Locale, Translations> = {
     activityDateLabel: "Fecha de Inicio / Fecha",
     pickADate: "Elige una fecha",
     activityTimeLabel: "Hora de la Actividad (HH:MM)",
+    activityTimeDescription24Hour: "Por favor, usa el formato de 24 horas (ej: 14:30).",
     activityNotesLabel: "Notas",
     activityNotesPlaceholder: "Añade detalles adicionales o enlaces aquí...",
     todosLabel: "Tareas",
@@ -799,17 +812,22 @@ export const translations: Record<Locale, Translations> = {
     pomodoroTitle: "Temporizador Pomodoro",
     pomodoroStartWork: "Iniciar Trabajo (25 min)",
     pomodoroStartShortBreak: "Iniciar Descanso Corto (5 min)",
+    pomodoroStartLongBreak: "Iniciar Descanso Largo (15 min)",
     pomodoroPause: "Pausar",
     pomodoroResume: "Reanudar",
     pomodoroReset: "Reiniciar",
     pomodoroWorkSession: "Sesión de Trabajo",
     pomodoroShortBreakSession: "Descanso Corto",
+    pomodoroLongBreakSession: "Descanso Largo",
     pomodoroReadyToStart: "¿Listo para empezar?",
     pomodoroWorkSessionEnded: "Sesión de Trabajo Terminada",
     pomodoroShortBreakEnded: "Descanso Corto Terminado",
+    pomodoroLongBreakEnded: "Descanso Largo Terminado",
     pomodoroTakeABreakOrStartNext: "¡Tiempo de un descanso o de iniciar la siguiente sesión!",
     pomodoroFocusOnTask: "¡Concéntrate en tu tarea!",
     pomodoroShortRelaxation: "Tiempo para una breve relajación.",
+    pomodoroLongRelaxation: "Tiempo para un descanso más largo.",
+    pomodoroCyclesCompleted: (params) => `${params.cycles} ciclo(s) de trabajo completado(s).`,
   },
   fr: {
     addActivity: "Ajouter une activité",
@@ -887,6 +905,7 @@ export const translations: Record<Locale, Translations> = {
     activityDateLabel: "Date de début / Date",
     pickADate: "Choisissez une date",
     activityTimeLabel: "Heure de l'activité (HH:MM)",
+    activityTimeDescription24Hour: "Veuillez utiliser le format 24 heures (ex: 14:30).",
     activityNotesLabel: "Notes",
     activityNotesPlaceholder: "Ajoutez des détails supplémentaires ou des liens ici...",
     todosLabel: "Tâches",
@@ -1061,17 +1080,22 @@ export const translations: Record<Locale, Translations> = {
     pomodoroTitle: "Minuteur Pomodoro",
     pomodoroStartWork: "Démarrer Travail (25 min)",
     pomodoroStartShortBreak: "Démarrer Pause Courte (5 min)",
+    pomodoroStartLongBreak: "Démarrer Longue Pause (15 min)",
     pomodoroPause: "Pause",
     pomodoroResume: "Reprendre",
     pomodoroReset: "Réinitialiser",
     pomodoroWorkSession: "Session de Travail",
     pomodoroShortBreakSession: "Pause Courte",
+    pomodoroLongBreakSession: "Longue Pause",
     pomodoroReadyToStart: "Prêt à commencer ?",
     pomodoroWorkSessionEnded: "Session de travail terminée",
     pomodoroShortBreakEnded: "Pause courte terminée",
+    pomodoroLongBreakEnded: "Longue pause terminée",
     pomodoroTakeABreakOrStartNext: "C'est l'heure d'une pause ou de commencer la session suivante !",
     pomodoroFocusOnTask: "Concentrez-vous sur votre tâche !",
     pomodoroShortRelaxation: "Temps pour une courte relaxation.",
+    pomodoroLongRelaxation: "Temps pour un repos plus long.",
+    pomodoroCyclesCompleted: (params) => `${params.cycles} cycle(s) de travail terminé(s).`,
   },
 };
 

@@ -78,9 +78,9 @@ export type HistoryLogActionKey =
   | 'historyLogSwitchToPersonalMode'
   | 'historyLogSwitchToWorkMode'
   | 'historyLogPasswordChange'
-  | 'historyLogAddAssignee' // Simplified: no mode
-  | 'historyLogUpdateAssignee' // Simplified: no mode
-  | 'historyLogDeleteAssignee'; // Simplified: no mode
+  | 'historyLogAddAssignee'
+  | 'historyLogUpdateAssignee'
+  | 'historyLogDeleteAssignee';
 
 export interface HistoryLogEntry {
   id: string;
@@ -90,4 +90,4 @@ export interface HistoryLogEntry {
   scope: 'account' | 'personal' | 'work' | 'category' | 'assignee';
 }
 
-export type PomodoroPhase = 'work' | 'shortBreak' | 'off';
+export type PomodoroPhase = 'work' | 'shortBreak' | 'longBreak' | 'off';

@@ -4,7 +4,7 @@
 import React, { useMemo } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { Timer, Play, Pause, RotateCcw, Coffee, Briefcase } from 'lucide-react';
+import { Timer, Play, Pause, RotateCcw, Coffee, Briefcase, Brain } from 'lucide-react'; // Added Brain for Long Break
 import { useAppStore } from '@/hooks/use-app-store';
 import { useTranslations } from '@/contexts/language-context';
 import { Progress } from "@/components/ui/progress";
@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 
 const POMODORO_WORK_DURATION_SECONDS = 25 * 60;
 const POMODORO_SHORT_BREAK_DURATION_SECONDS = 5 * 60;
+const POMODORO_LONG_BREAK_DURATION_SECONDS = 15 * 60;
 
 function formatTime(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);
@@ -24,8 +25,10 @@ export default function PomodoroTimerPopover() {
     pomodoroPhase,
     pomodoroTimeRemaining,
     pomodoroIsRunning,
+    pomodoroCyclesCompleted,
     startPomodoroWork,
     startPomodoroShortBreak,
+    startPomodoroLongBreak,
     pausePomodoro,
     resumePomodoro,
     resetPomodoro,
@@ -37,15 +40,16 @@ export default function PomodoroTimerPopover() {
   const currentPhaseText = useMemo(() => {
     if (pomodoroPhase === 'work') return t('pomodoroWorkSession');
     if (pomodoroPhase === 'shortBreak') return t('pomodoroShortBreakSession');
+    if (pomodoroPhase === 'longBreak') return t('pomodoroLongBreakSession');
     return t('pomodoroReadyToStart');
   }, [pomodoroPhase, t]);
 
   const progressValue = useMemo(() => {
-    const totalDuration = pomodoroPhase === 'work'
-      ? POMODORO_WORK_DURATION_SECONDS
-      : pomodoroPhase === 'shortBreak'
-      ? POMODORO_SHORT_BREAK_DURATION_SECONDS
-      : POMODORO_WORK_DURATION_SECONDS; 
+    const totalDuration =
+      pomodoroPhase === 'work' ? POMODORO_WORK_DURATION_SECONDS :
+      pomodoroPhase === 'shortBreak' ? POMODORO_SHORT_BREAK_DURATION_SECONDS :
+      pomodoroPhase === 'longBreak' ? POMODORO_LONG_BREAK_DURATION_SECONDS :
+      POMODORO_WORK_DURATION_SECONDS; // Default to work duration for 'off' phase
     if (totalDuration === 0) return 0;
     return ((totalDuration - pomodoroTimeRemaining) / totalDuration) * 100;
   }, [pomodoroPhase, pomodoroTimeRemaining]);
@@ -74,9 +78,14 @@ export default function PomodoroTimerPopover() {
           <div className="text-center">
             <p className="text-xs text-muted-foreground">{currentPhaseText}</p>
             <p className="text-4xl font-bold tracking-tighter">{formattedTime}</p>
+            {pomodoroPhase === 'work' && pomodoroCyclesCompleted > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                    {t('pomodoroCyclesCompleted', { cycles: pomodoroCyclesCompleted })}
+                </p>
+            )}
           </div>
 
-          {pomodoroPhase !== 'off' && (
+          {(pomodoroPhase !== 'off') && (
              <Progress value={progressValue} className="h-2 [&>div]:bg-primary" />
           )}
 
@@ -99,34 +108,32 @@ export default function PomodoroTimerPopover() {
           </div>
 
 
-          <div className="grid grid-cols-2 gap-2">
-            {pomodoroPhase !== 'work' && pomodoroPhase !== 'off' && (
-              <Button 
-                variant="outline" 
-                onClick={startPomodoroWork} 
-                size="sm" 
-                className={cn(
-                  "w-full whitespace-normal h-auto py-1.5 text-center"
-                )}
-              >
-                <Briefcase className="mr-2 h-4 w-4 flex-shrink-0" /> 
-                <span>{t('pomodoroStartWork').split('(')[0].trim()}</span>
-              </Button>
-            )}
-            {pomodoroPhase !== 'shortBreak' && pomodoroPhase !== 'off' && (
-              <Button 
-                variant="outline" 
-                onClick={startPomodoroShortBreak} 
-                size="sm" 
-                className={cn(
-                  "w-full whitespace-normal h-auto py-1.5 text-center"
-                )}
-              >
-                <Coffee className="mr-2 h-4 w-4 flex-shrink-0" />
-                <span>{t('pomodoroStartShortBreak').split('(')[0].trim()}</span>
-              </Button>
-            )}
-          </div>
+          {pomodoroPhase === 'off' && (
+            <div className="grid grid-cols-2 gap-2">
+                <Button 
+                    variant="outline" 
+                    onClick={startPomodoroShortBreak} 
+                    size="sm" 
+                    className={cn(
+                    "w-full whitespace-normal h-auto py-1.5 text-center"
+                    )}
+                >
+                    <Coffee className="mr-2 h-4 w-4 flex-shrink-0" />
+                    <span>{t('pomodoroStartShortBreak').split('(')[0].trim()}</span>
+                </Button>
+                <Button 
+                    variant="outline" 
+                    onClick={startPomodoroLongBreak} 
+                    size="sm" 
+                    className={cn(
+                    "w-full whitespace-normal h-auto py-1.5 text-center"
+                    )}
+                >
+                    <Brain className="mr-2 h-4 w-4 flex-shrink-0" /> 
+                    <span>{t('pomodoroStartLongBreak').split('(')[0].trim()}</span>
+                </Button>
+            </div>
+          )}
           
           {(pomodoroPhase !== 'off' || pomodoroIsRunning) && (
              <Button variant="destructive" onClick={resetPomodoro} size="sm" className="w-full col-span-2">
