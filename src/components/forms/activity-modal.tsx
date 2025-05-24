@@ -60,6 +60,7 @@ const recurrenceSchema = z.object({
   dayOfMonth: z.number().min(1).max(31).optional().nullable(),
 }).default({ type: 'none' });
 
+const UNASSIGNED_RESPONSIBLE_PERSON_ID_KEY = "_NONE_";
 
 export default function ActivityModal({ isOpen, onClose, activity, initialDate, instanceDate }: ActivityModalProps) {
   const { addActivity, updateActivity, appMode, assignees } = useAppStore();
@@ -84,13 +85,28 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
     todos: z.array(todoSchema).optional(),
     notes: z.string().optional(),
     recurrence: recurrenceSchema,
-    responsiblePersonId: z.string().optional().nullable(), // New
+    responsiblePersonId: z.string().nullable().optional(),
   });
 
   type ActivityFormData = z.infer<typeof activityFormSchema>;
 
   const form = useForm<ActivityFormData>({
     resolver: zodResolver(activityFormSchema),
+    defaultValues: {
+      title: "",
+      categoryId: "",
+      activityDate: initialDate,
+      time: "",
+      todos: [],
+      notes: "",
+      recurrence: {
+        type: 'none',
+        endDate: null,
+        daysOfWeek: [],
+        dayOfMonth: initialDate.getDate(),
+      },
+      responsiblePersonId: null,
+    }
   });
 
   const { fields, append, remove } = useFieldArray({
@@ -103,7 +119,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
 
   useEffect(() => {
     if (isOpen) {
-      setIsSubmittingForm(false); 
+      setIsSubmittingForm(false);
       if (activity) {
         const baseDate = new Date(activity.createdAt);
         form.reset({
@@ -119,7 +135,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
             daysOfWeek: activity.recurrence?.daysOfWeek || [],
             dayOfMonth: activity.recurrence?.dayOfMonth || baseDate.getDate(),
           },
-          responsiblePersonId: activity.responsiblePersonId || null, 
+          responsiblePersonId: activity.responsiblePersonId || null,
         });
       } else {
         form.reset({
@@ -135,7 +151,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
             daysOfWeek: [],
             dayOfMonth: initialDate.getDate(),
           },
-          responsiblePersonId: null, 
+          responsiblePersonId: null,
         });
       }
       setIsStartDatePopoverOpen(false);
@@ -165,7 +181,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
       notes: data.notes,
       recurrence: recurrenceRule,
       completedOccurrences: activity?.completedOccurrences || {},
-      responsiblePersonId: data.responsiblePersonId === "" ? undefined : data.responsiblePersonId, 
+      responsiblePersonId: data.responsiblePersonId,
     };
 
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -240,14 +256,17 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>{t('responsiblePersonLabel')}</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <Select
+                        onValueChange={(value) => field.onChange(value === UNASSIGNED_RESPONSIBLE_PERSON_ID_KEY ? null : value)}
+                        value={field.value === null || field.value === undefined ? UNASSIGNED_RESPONSIBLE_PERSON_ID_KEY : field.value}
+                      >
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder={t('selectResponsiblePersonPlaceholder')} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">{t('unassigned')}</SelectItem>
+                          <SelectItem value={UNASSIGNED_RESPONSIBLE_PERSON_ID_KEY}>{t('unassigned')}</SelectItem>
                           {assignees.map((assignee: Assignee) => (
                             <SelectItem key={assignee.id} value={assignee.id}>
                               {assignee.name}
@@ -261,7 +280,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                 />
               )}
             </div>
-            
+
             <div className="grid grid-cols-2 gap-2 sm:gap-4">
               <FormField
                 control={form.control}
@@ -318,11 +337,11 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                     <FormLabel className="min-h-8">{t('activityTimeLabel')}</FormLabel>
                     <FormControl>
                        <div className="relative w-full">
-                        <Input type="time" {...field} className="w-full pr-6" />
+                        <Input type="time" {...field} className="w-full pr-7" />
                         <Clock className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
                       </div>
                     </FormControl>
-                     <FormMessage />
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -584,6 +603,5 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
-
 
     
