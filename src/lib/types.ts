@@ -44,7 +44,7 @@ export interface Category {
 export interface Assignee {
   id: string;
   name: string;
-  // mode?: AppMode | 'all'; // Removed mode from Assignee
+  // mode is no longer part of Assignee, they are implicitly personal
 }
 
 export interface UINotification {
@@ -78,9 +78,9 @@ export type HistoryLogActionKey =
   | 'historyLogSwitchToPersonalMode'
   | 'historyLogSwitchToWorkMode'
   | 'historyLogPasswordChange'
-  | 'historyLogAddAssignee'
-  | 'historyLogUpdateAssignee'
-  | 'historyLogDeleteAssignee';
+  | 'historyLogAddAssignee' // Simplified: no mode
+  | 'historyLogUpdateAssignee' // Simplified: no mode
+  | 'historyLogDeleteAssignee'; // Simplified: no mode
 
 export interface HistoryLogEntry {
   id: string;
@@ -90,3 +90,4 @@ export interface HistoryLogEntry {
   scope: 'account' | 'personal' | 'work' | 'category' | 'assignee';
 }
 
+export type PomodoroPhase = 'work' | 'shortBreak' | 'off';

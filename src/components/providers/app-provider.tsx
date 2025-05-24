@@ -1,8 +1,8 @@
 
 "use client";
 import type { ReactNode } from 'react';
-import React, { createContext, useState, useCallback, useEffect, useMemo } from 'react';
-import type { Activity, Todo, Category, AppMode, RecurrenceRule, UINotification, HistoryLogEntry, HistoryLogActionKey, Translations, Assignee } from '@/lib/types';
+import React, { createContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import type { Activity, Todo, Category, AppMode, RecurrenceRule, UINotification, HistoryLogEntry, HistoryLogActionKey, Translations, Assignee, PomodoroPhase } from '@/lib/types';
 import { INITIAL_CATEGORIES }
 from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
@@ -29,7 +29,7 @@ export interface AppContextType {
   activities: Activity[];
   getRawActivities: () => Activity[];
   categories: Category[];
-  assignees: Assignee[]; // This will now be the complete list, not filtered by mode
+  assignees: Assignee[];
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
   addActivity: (
@@ -52,8 +52,8 @@ export interface AppContextType {
   addCategory: (name: string, iconName: string, mode: AppMode | 'all') => void;
   updateCategory: (categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => void;
   deleteCategory: (categoryId: string) => void;
-  addAssignee: (name: string) => void; // Mode removed
-  updateAssignee: (assigneeId: string, updates: Partial<Omit<Assignee, 'id'>>) => void; // Mode removed from updates
+  addAssignee: (name: string) => void;
+  updateAssignee: (assigneeId: string, updates: Partial<Omit<Assignee, 'id'>>) => void;
   deleteAssignee: (assigneeId: string) => void;
   getAssigneeById: (assigneeId: string) => Assignee | undefined;
   isLoading: boolean;
@@ -80,6 +80,16 @@ export interface AppContextType {
 
   systemNotificationPermission: NotificationPermission | null;
   requestSystemNotificationPermission: () => Promise<void>;
+
+  // Pomodoro Timer
+  pomodoroPhase: PomodoroPhase;
+  pomodoroTimeRemaining: number; // in seconds
+  pomodoroIsRunning: boolean;
+  startPomodoroWork: () => void;
+  startPomodoroShortBreak: () => void;
+  pausePomodoro: () => void;
+  resumePomodoro: () => void;
+  resetPomodoro: () => void;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -87,7 +97,7 @@ export const AppContext = createContext<AppContextType | undefined>(undefined);
 const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities_v2';
 const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities_v2';
 const LOCAL_STORAGE_KEY_ALL_CATEGORIES = 'todoFlowAllCategories_v1';
-const LOCAL_STORAGE_KEY_ASSIGNEES = 'todoFlowAssignees_v2'; // Key remains, structure changes (no mode)
+const LOCAL_STORAGE_KEY_ASSIGNEES = 'todoFlowAssignees_v2';
 const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode';
 const LOCAL_STORAGE_KEY_IS_AUTHENTICATED = 'todoFlowIsAuthenticated';
 const LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS = 'todoFlowLoginAttempts';
@@ -269,12 +279,14 @@ function hslToHex(h: number, s: number, l: number): string {
   return `#${toHexByte(f(0))}${toHexByte(f(8))}${toHexByte(f(4))}`;
 }
 
+const POMODORO_WORK_DURATION_SECONDS = 25 * 60;
+const POMODORO_SHORT_BREAK_DURATION_SECONDS = 5 * 60;
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [personalActivities, setPersonalActivities] = useState<Activity[]>([]);
   const [workActivities, setWorkActivities] = useState<Activity[]>([]);
   const [allCategories, setAllCategories] = useState<Category[]>([]);
-  const [allAssignees, setAllAssignees] = useState<Assignee[]>([]); // Renamed from assignees to allAssignees for internal state
+  const [allAssignees, setAllAssignees] = useState<Assignee[]>([]);
   const [appModeState, setAppModeState] = useState<AppMode>('personal');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -299,6 +311,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [historyLog, setHistoryLog] = useState<HistoryLogEntry[]>([]);
   const { theme, resolvedTheme } = useTheme();
   const [systemNotificationPermission, setSystemNotificationPermission] = useState<NotificationPermission | null>(null);
+
+  // Pomodoro State
+  const [pomodoroPhase, setPomodoroPhase] = useState<PomodoroPhase>('off');
+  const [pomodoroTimeRemaining, setPomodoroTimeRemaining] = useState(POMODORO_WORK_DURATION_SECONDS);
+  const [pomodoroIsRunning, setPomodoroIsRunning] = useState(false);
+  const pomodoroIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
 
   useEffect(() => {
@@ -348,11 +366,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
   }, [allCategories, appModeState, isLoading]);
 
-  // Assignees are no longer filtered by mode for the context. All assignees are available for Personal mode.
   const assigneesForContext = useMemo(() => {
     if (isLoading) {
       return [];
     }
+    // Assignees are always the full list, filtering happens in UI if needed (e.g. modal only shows them if personal mode)
     return allAssignees;
   }, [allAssignees, isLoading]);
 
@@ -391,7 +409,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       console.log("[AppProvider] Permission 'granted'. Showing system notification:", title);
       new Notification(title, {
         body: description,
-        icon: '/icons/icon-192x192.png', // Ensure this icon exists
+        icon: '/icons/icon-192x192.png',
         lang: locale,
       });
     } else {
@@ -403,23 +421,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     console.log("[AppProvider] requestSystemNotificationPermission called.");
     if (typeof window === 'undefined' || !('Notification' in window)) {
       console.warn("[AppProvider] This browser does not support desktop notification.");
-      setSystemNotificationPermission('denied'); // Update state
+      setSystemNotificationPermission('denied');
       toast({ title: t('systemNotificationsBlocked'), description: "Browser does not support notifications." });
       return;
     }
 
     const currentBrowserPermission = Notification.permission;
-    console.log(`[AppProvider] Current browser notification permission is: ${currentBrowserPermission}`);
-    setSystemNotificationPermission(currentBrowserPermission); // Reflect current browser state
+    console.log(`[AppProvider] Current browser notification permission (at request time) is: ${currentBrowserPermission}`);
+    // setSystemNotificationPermission(currentBrowserPermission); // Set based on the immediate check
 
     if (currentBrowserPermission === 'granted') {
       console.log("[AppProvider] Notification permission already granted by browser.");
+      setSystemNotificationPermission('granted'); // Ensure state reflects this
       toast({ title: t('systemNotificationsEnabled') });
       return;
     }
 
     if (currentBrowserPermission === 'denied') {
       console.log("[AppProvider] Notification permission is 'denied' by browser. User needs to change this in browser/OS settings.");
+      setSystemNotificationPermission('denied'); // Ensure state reflects this
       toast({ title: t('systemNotificationsBlocked'), description: "Please check your browser's site settings to allow notifications.", duration: 5000 });
       return;
     }
@@ -430,7 +450,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       try {
         const permissionResult = await Notification.requestPermission();
         console.log(`[AppProvider] Notification.requestPermission() result: ${permissionResult}`);
-        setSystemNotificationPermission(permissionResult); // Update state with the result
+        setSystemNotificationPermission(permissionResult);
 
         if (permissionResult === 'granted') {
           console.log("[AppProvider] Notification permission granted by user.");
@@ -440,11 +460,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           toast({ title: t('systemNotificationsBlocked'), description: "You have denied notification permissions." });
         } else {
           console.log("[AppProvider] Notification permission prompt dismissed by user (remains 'default').");
-          // No toast here as the user actively dismissed it.
         }
       } catch (err) {
         console.error("[AppProvider] Error requesting notification permission:", err);
-        setSystemNotificationPermission(Notification.permission); // Re-sync with actual permission
+        setSystemNotificationPermission(Notification.permission);
       }
     }
   }, [t, toast]);
@@ -457,6 +476,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setLockoutEndTimeState(null);
     setSessionExpiryTimestampState(null);
     setHistoryLog([]);
+    // Pomodoro reset on logout
+    setPomodoroPhase('off');
+    setPomodoroTimeRemaining(POMODORO_WORK_DURATION_SECONDS);
+    setPomodoroIsRunning(false);
+
 
     if (typeof window !== 'undefined') {
         localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
@@ -472,6 +496,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [addHistoryLogEntry]);
 
   useEffect(() => {
+    setIsLoading(true);
     let initialAuth = false;
     try {
       const storedPersonalActivities = localStorage.getItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES);
@@ -504,9 +529,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const storedAssigneesString = localStorage.getItem(LOCAL_STORAGE_KEY_ASSIGNEES);
       if (storedAssigneesString) {
           try {
-              const parsedAssignees = JSON.parse(storedAssigneesString) as Omit<Assignee, 'mode'>[]; // No mode property to parse
+              const parsedAssignees = JSON.parse(storedAssigneesString) as Assignee[];
               if (Array.isArray(parsedAssignees)) {
-                  loadedAssignees = parsedAssignees.map(asg => ({...asg})); // Create new objects
+                  loadedAssignees = parsedAssignees.map(asg => ({...asg}));
               }
           } catch (e) {
               console.error("[AppProvider] Failed to parse assignees from localStorage, using empty list.", e);
@@ -527,7 +552,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const expiryTime = parseInt(storedExpiry, 10);
         if (Date.now() > expiryTime) {
           initialAuth = false;
-          logout(); // Call logout to ensure broadcast and full cleanup
+          logout();
         } else {
           initialAuth = true;
           setSessionExpiryTimestampState(expiryTime);
@@ -562,8 +587,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } finally {
       setIsLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // This useEffect should run only once on mount
+  }, [logout]);
 
 
   useEffect(() => {
@@ -587,7 +611,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     if (!isLoading) {
-      // Assignees no longer have a 'mode' property to serialize
       localStorage.setItem(LOCAL_STORAGE_KEY_ASSIGNEES, JSON.stringify(allAssignees));
     }
   }, [allAssignees, isLoading]);
@@ -700,7 +723,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
           const recurrenceType = masterActivity.recurrence.type;
-          const futureCheckEndDate = addDays(today, 8); // Check up to 8 days ahead for weekly/monthly notifications
+          const futureCheckEndDate = addDays(today, 8);
           const upcomingInstances = generateFutureInstancesForNotifications(masterActivity, addDays(today,1), futureCheckEndDate);
 
           upcomingInstances.forEach(instance => {
@@ -746,7 +769,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, 60000);
 
     return () => clearInterval(intervalId);
-  }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification, dateFnsLocale, showSystemNotification, systemNotificationPermission, locale]); // Added locale to dependencies
+  }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification, dateFnsLocale, showSystemNotification, systemNotificationPermission, locale]);
 
 
   useEffect(() => {
@@ -763,6 +786,78 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     };
   }, [isAuthenticated, logout]);
+
+  // Pomodoro Timer Logic
+  const clearPomodoroInterval = useCallback(() => {
+    if (pomodoroIntervalRef.current) {
+      clearInterval(pomodoroIntervalRef.current);
+      pomodoroIntervalRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (pomodoroIsRunning) {
+      clearPomodoroInterval(); // Clear any existing interval before starting a new one
+      pomodoroIntervalRef.current = setInterval(() => {
+        setPomodoroTimeRemaining(prevTime => {
+          if (prevTime > 0) {
+            return prevTime - 1;
+          } else {
+            // Time's up for the current phase
+            const endedPhase = pomodoroPhase;
+            const nextPhase: PomodoroPhase = endedPhase === 'work' ? 'shortBreak' : 'work';
+            const nextDuration = nextPhase === 'work' ? POMODORO_WORK_DURATION_SECONDS : POMODORO_SHORT_BREAK_DURATION_SECONDS;
+
+            const titleKey = endedPhase === 'work' ? 'pomodoroWorkSessionEnded' : 'pomodoroShortBreakEnded';
+            addUINotification({ title: t(titleKey), description: t('pomodoroTakeABreakOrStartNext') });
+            showSystemNotification(t(titleKey), t('pomodoroTakeABreakOrStartNext'));
+            toast({ title: t(titleKey), description: t('pomodoroTakeABreakOrStartNext')});
+            
+            setPomodoroPhase(nextPhase);
+            setPomodoroTimeRemaining(nextDuration);
+            setPomodoroIsRunning(false); // Stop the timer, user must manually start next phase or resume
+            return 0; // Return 0 to ensure time doesn't go negative if interval fires again quickly
+          }
+        });
+      }, 1000);
+    } else {
+      clearPomodoroInterval();
+    }
+    return clearPomodoroInterval;
+  }, [pomodoroIsRunning, pomodoroPhase, t, addUINotification, showSystemNotification, toast, clearPomodoroInterval]);
+
+
+  const startPomodoroWork = useCallback(() => {
+    clearPomodoroInterval();
+    setPomodoroPhase('work');
+    setPomodoroTimeRemaining(POMODORO_WORK_DURATION_SECONDS);
+    setPomodoroIsRunning(true);
+  }, [clearPomodoroInterval]);
+
+  const startPomodoroShortBreak = useCallback(() => {
+    clearPomodoroInterval();
+    setPomodoroPhase('shortBreak');
+    setPomodoroTimeRemaining(POMODORO_SHORT_BREAK_DURATION_SECONDS);
+    setPomodoroIsRunning(true);
+  }, [clearPomodoroInterval]);
+
+  const pausePomodoro = useCallback(() => {
+    setPomodoroIsRunning(false);
+  }, []);
+
+  const resumePomodoro = useCallback(() => {
+    if (pomodoroPhase !== 'off' && pomodoroTimeRemaining > 0) {
+      setPomodoroIsRunning(true);
+    }
+  }, [pomodoroPhase, pomodoroTimeRemaining]);
+
+  const resetPomodoro = useCallback(() => {
+    clearPomodoroInterval();
+    setPomodoroPhase('off');
+    setPomodoroTimeRemaining(POMODORO_WORK_DURATION_SECONDS);
+    setPomodoroIsRunning(false);
+  }, [clearPomodoroInterval]);
+
 
   const setAppMode = useCallback((mode: AppMode) => {
     if (mode !== appModeState) {
@@ -831,7 +926,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       completed: false,
       recurrence: activityData.recurrence || { type: 'none' },
       completedOccurrences: {},
-      responsiblePersonId: activityData.responsiblePersonId || undefined,
+      responsiblePersonId: appModeState === 'personal' ? activityData.responsiblePersonId : undefined,
     };
     currentActivitySetter(prev => [...prev, newActivity]);
     addHistoryLogEntry(
@@ -864,7 +959,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                       )) {
             updatedCompletedOccurrences = {};
           }
-          return { ...act, ...updates, recurrence: updatedRecurrence as RecurrenceRule | undefined, completedOccurrences: updatedCompletedOccurrences };
+          
+          const updatedResponsiblePersonId = appModeState === 'personal'
+            ? (updates.responsiblePersonId !== undefined ? updates.responsiblePersonId : act.responsiblePersonId)
+            : undefined; // Always undefined for work mode
+
+          return { ...act, ...updates, recurrence: updatedRecurrence as RecurrenceRule | undefined, completedOccurrences: updatedCompletedOccurrences, responsiblePersonId: updatedResponsiblePersonId };
         }
         return act;
       })
@@ -1053,14 +1153,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [toast, allCategories, t, addHistoryLogEntry]);
 
 
-  const addAssignee = useCallback((name: string) => { // Mode parameter removed
+  const addAssignee = useCallback((name: string) => {
     const newAssignee: Assignee = { id: `asg_${uuidv4()}`, name };
     setAllAssignees(prev => [...prev, newAssignee]);
     toast({ title: t('toastAssigneeAddedTitle'), description: t('toastAssigneeAddedDescription', { assigneeName: name }) });
-    addHistoryLogEntry('historyLogAddAssignee', { name }, 'assignee'); // Simplified history log
+    addHistoryLogEntry('historyLogAddAssignee', { name }, 'assignee');
   }, [t, toast, addHistoryLogEntry]);
 
-  const updateAssignee = useCallback((assigneeId: string, updates: Partial<Omit<Assignee, 'id'>>) => { // Mode removed from updates
+  const updateAssignee = useCallback((assigneeId: string, updates: Partial<Omit<Assignee, 'id'>>) => {
     let assigneeNameForLog = updates.name;
     let oldNameForLog: string | undefined = undefined;
 
@@ -1078,7 +1178,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const asgName = assigneeNameForLog || "Unknown Assignee";
     toast({ title: t('toastAssigneeUpdatedTitle'), description: t('toastAssigneeUpdatedDescription', { assigneeName: asgName }) });
-    addHistoryLogEntry('historyLogUpdateAssignee', { name: asgName, oldName: oldNameForLog !== asgName ? oldNameForLog : undefined }, 'assignee'); // Simplified history log
+    addHistoryLogEntry('historyLogUpdateAssignee', { name: asgName, oldName: oldNameForLog !== asgName ? oldNameForLog : undefined }, 'assignee');
   }, [t, toast, addHistoryLogEntry]);
 
   const deleteAssignee = useCallback((assigneeId: string) => {
@@ -1092,8 +1192,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         act.responsiblePersonId === assigneeId ? { ...act, responsiblePersonId: undefined } : act
       );
     setPersonalActivities(clearAssigneeFromActivities);
-    // No need to clear from workActivities if assignees are personal-only
-    // setWorkActivities(clearAssigneeFromActivities); 
 
     toast({ title: t('toastAssigneeDeletedTitle'), description: t('toastAssigneeDeletedDescription', { assigneeName: assigneeToDelete.name }) });
     addHistoryLogEntry('historyLogDeleteAssignee', { name: assigneeToDelete.name }, 'assignee');
@@ -1125,7 +1223,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         activities: getRawActivities(),
         getRawActivities,
         categories: filteredCategories,
-        assignees: assigneesForContext, // Use the memoized assignees for context
+        assignees: assigneesForContext,
         appMode: appModeState,
         setAppMode,
         addActivity,
@@ -1163,10 +1261,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addHistoryLogEntry,
         systemNotificationPermission,
         requestSystemNotificationPermission,
+        // Pomodoro
+        pomodoroPhase,
+        pomodoroTimeRemaining,
+        pomodoroIsRunning,
+        startPomodoroWork,
+        startPomodoroShortBreak,
+        pausePomodoro,
+        resumePomodoro,
+        resetPomodoro,
       }}
     >
       {children}
     </AppContext.Provider>
   );
 };
-

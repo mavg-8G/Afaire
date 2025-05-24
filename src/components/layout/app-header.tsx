@@ -1,9 +1,9 @@
 
 "use client";
-import React, { useState, useMemo } from 'react'; // Removed useEffect
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Layers, Languages, Sun, Moon, Laptop, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings, MoreVertical, BellRing, BellOff, BellPlus, Users } from 'lucide-react';
+import { Layers, Languages, Sun, Moon, Laptop, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings, MoreVertical, BellRing, BellOff, BellPlus, Users, Timer } from 'lucide-react';
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { APP_NAME } from '@/lib/constants';
 import ChangePasswordModal from '@/components/forms/change-password-modal';
@@ -20,12 +20,12 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useAppStore } from '@/hooks/use-app-store';
-// import type { UINotification } from '@/lib/types'; // Not used here
 import { useRouter } from 'next/navigation';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { enUS, es, fr } from 'date-fns/locale';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import PomodoroTimerPopover from '@/components/pomodoro/pomodoro-timer-popover'; // Import Pomodoro
 
 export default function AppHeader() {
   const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
@@ -41,6 +41,7 @@ export default function AppHeader() {
     clearAllUINotifications,
     systemNotificationPermission,
     requestSystemNotificationPermission,
+    pomodoroIsRunning, // Get Pomodoro state
   } = useAppStore();
   const router = useRouter();
 
@@ -177,7 +178,7 @@ export default function AppHeader() {
             {t('viewHistory')}
         </Link>
       </DropdownMenuItem>
-      {(isMobileMenu || appMode === 'personal') && ( // Show in mobile menu OR if in personal mode for desktop
+      {appMode === 'personal' && ( // Show only if personal mode, for both mobile and desktop options
          <DropdownMenuItem asChild>
             <Link href="/assignees" className="flex items-center w-full">
                 <Users className="mr-2 h-4 w-4" />
@@ -242,6 +243,9 @@ export default function AppHeader() {
 
           {/* Right Group - This will be pushed to the far right by justify-between */}
           <div className="flex items-center gap-x-1 sm:gap-x-2 mr-4">
+            
+            <PomodoroTimerPopover /> {/* Add Pomodoro Timer Button */}
+
             {/* Notification Bell - Visible on all screen sizes */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -271,7 +275,7 @@ export default function AppHeader() {
                   <Layers className="h-5 w-5" />
                 </Button>
               </Link>
-              {appMode === 'personal' && ( // Only show "Manage Assignees" button if in personal mode
+              {appMode === 'personal' && (
                 <Link href="/assignees" passHref>
                   <Button variant="outline" size="icon" aria-label={t('manageAssignees')}>
                     <Users className="h-5 w-5" />
@@ -328,4 +332,3 @@ export default function AppHeader() {
     </>
   );
 }
-    

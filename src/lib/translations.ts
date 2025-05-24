@@ -16,7 +16,7 @@ export type Translations = {
   moreOptions: string;
   moreOptionsDesktop: string;
   personalMode: string;
-  workMode: "Work";
+  workMode: "Work"; // Keep as "Work" for type consistency, translation will handle "Trabajo"
   switchToPersonalMode: string;
   switchToWorkMode: string;
   logout: string;
@@ -33,6 +33,7 @@ export type Translations = {
   systemNotificationsEnabled: string;
   systemNotificationsBlocked: string;
   manageAssignees: string;
+  pomodoroTimerMenuLabel: string;
 
 
   // CategoriesPage
@@ -59,7 +60,7 @@ export type Translations = {
   categoriesCount: (params: { count: number }) => string;
   noCategoriesYet: string;
 
-  // AssigneesPage - New Section
+  // AssigneesPage
   addNewAssignee: string;
   editAssignee: string;
   assigneeNameLabel: string;
@@ -71,8 +72,6 @@ export type Translations = {
   confirmDeleteAssigneeDescription: (params: { assigneeName: string }) => string;
   assigneesCount: (params: { count: number }) => string;
   noAssigneesYet: string;
-  // assigneeMode: string; // Removed
-  // assigneeModeDescription: (params: {mode: string}) => string; // Removed
 
 
   // ActivityModal
@@ -117,7 +116,6 @@ export type Translations = {
   dayFri: string;
   daySat: string;
   invalidTimeFormat24Hour: string;
-  // timeFormatDescription24Hour: string; // This was already removed earlier
   responsiblePersonLabel: string;
   selectResponsiblePersonPlaceholder: string;
   unassigned: string;
@@ -270,6 +268,22 @@ export type Translations = {
   // Motivational Phrases
   motivationalPhrases: string[];
 
+  // Pomodoro Timer
+  pomodoroTitle: string;
+  pomodoroStartWork: string;
+  pomodoroStartShortBreak: string;
+  pomodoroPause: string;
+  pomodoroResume: string;
+  pomodoroReset: string;
+  pomodoroWorkSession: string;
+  pomodoroShortBreakSession: string;
+  pomodoroReadyToStart: string;
+  pomodoroWorkSessionEnded: string;
+  pomodoroShortBreakEnded: string;
+  pomodoroTakeABreakOrStartNext: string;
+  pomodoroFocusOnTask: string;
+  pomodoroShortRelaxation: string;
+
 };
 
 export const translations: Record<Locale, Translations> = {
@@ -304,6 +318,7 @@ export const translations: Record<Locale, Translations> = {
     systemNotificationsEnabled: "System Notifications Enabled",
     systemNotificationsBlocked: "System Notifications Blocked",
     manageAssignees: "Manage Assignees",
+    pomodoroTimerMenuLabel: "Pomodoro Timer",
     backToCalendar: "Back to Calendar",
     addCategory: "Add Category",
     editCategory: "Edit Category",
@@ -337,8 +352,6 @@ export const translations: Record<Locale, Translations> = {
     confirmDeleteAssigneeDescription: (params) => `This action will delete the assignee "${params.assigneeName}". Activities assigned to them will become unassigned. This cannot be undone.`,
     assigneesCount: (params) => `You have ${params.count} assignee${params.count === 1 ? '' : 's'}.`,
     noAssigneesYet: "No assignees added yet. Use the form to add your first assignee.",
-    // assigneeMode: "Assignee Mode", // Removed
-    // assigneeModeDescription: (params) => `This assignee will be available in ${params.mode} mode.`, // Removed
     editActivityTitle: "Edit Activity",
     addActivityTitle: "Add New Activity",
     editActivityDescription: (params) => `Update the details of your activity. Default date: ${params.formattedInitialDate}.`,
@@ -521,6 +534,20 @@ export const translations: Record<Locale, Translations> = {
       "Well done is better than well said.",
       "You are never too old to set another goal or to dream a new dream."
     ],
+    pomodoroTitle: "Pomodoro Timer",
+    pomodoroStartWork: "Start Work (25 min)",
+    pomodoroStartShortBreak: "Start Short Break (5 min)",
+    pomodoroPause: "Pause",
+    pomodoroResume: "Resume",
+    pomodoroReset: "Reset",
+    pomodoroWorkSession: "Work Session",
+    pomodoroShortBreakSession: "Short Break",
+    pomodoroReadyToStart: "Ready to start?",
+    pomodoroWorkSessionEnded: "Work Session Ended",
+    pomodoroShortBreakEnded: "Short Break Ended",
+    pomodoroTakeABreakOrStartNext: "Time for a break or start the next session!",
+    pomodoroFocusOnTask: "Focus on your task!",
+    pomodoroShortRelaxation: "Time for a short relaxation.",
   },
   es: {
     addActivity: "Añadir Actividad",
@@ -553,6 +580,7 @@ export const translations: Record<Locale, Translations> = {
     systemNotificationsEnabled: "Notificaciones del Sistema Activadas",
     systemNotificationsBlocked: "Notificaciones del Sistema Bloqueadas",
     manageAssignees: "Gestionar Asignados",
+    pomodoroTimerMenuLabel: "Temporizador Pomodoro",
     backToCalendar: "Volver al Calendario",
     addCategory: "Añadir Categoría",
     editCategory: "Editar Categoría",
@@ -586,8 +614,6 @@ export const translations: Record<Locale, Translations> = {
     confirmDeleteAssigneeDescription: (params) => `Esta acción eliminará al asignado "${params.assigneeName}". Las actividades asignadas a esta persona quedarán sin asignar. Esto no se puede deshacer.`,
     assigneesCount: (params) => `Tienes ${params.count} asignado${params.count === 1 ? '' : 's'}.`,
     noAssigneesYet: "Aún no has añadido asignados. Usa el formulario para añadir tu primer asignado.",
-    // assigneeMode: "Modo del Asignado", // Removed
-    // assigneeModeDescription: (params) => `Este asignado estará disponible en modo ${params.mode}.`, // Removed
     editActivityTitle: "Editar Actividad",
     addActivityTitle: "Añadir Nueva Actividad",
     editActivityDescription: (params) => `Actualiza los detalles de tu actividad. Fecha por defecto: ${params.formattedInitialDate}.`,
@@ -770,6 +796,20 @@ export const translations: Record<Locale, Translations> = {
       "Bien hecho es mejor que bien dicho.",
       "Nunca eres demasiado viejo para establecer otra meta o para soñar un nuevo sueño."
     ],
+    pomodoroTitle: "Temporizador Pomodoro",
+    pomodoroStartWork: "Iniciar Trabajo (25 min)",
+    pomodoroStartShortBreak: "Iniciar Descanso Corto (5 min)",
+    pomodoroPause: "Pausar",
+    pomodoroResume: "Reanudar",
+    pomodoroReset: "Reiniciar",
+    pomodoroWorkSession: "Sesión de Trabajo",
+    pomodoroShortBreakSession: "Descanso Corto",
+    pomodoroReadyToStart: "¿Listo para empezar?",
+    pomodoroWorkSessionEnded: "Sesión de Trabajo Terminada",
+    pomodoroShortBreakEnded: "Descanso Corto Terminado",
+    pomodoroTakeABreakOrStartNext: "¡Tiempo de un descanso o de iniciar la siguiente sesión!",
+    pomodoroFocusOnTask: "¡Concéntrate en tu tarea!",
+    pomodoroShortRelaxation: "Tiempo para una breve relajación.",
   },
   fr: {
     addActivity: "Ajouter une activité",
@@ -802,6 +842,7 @@ export const translations: Record<Locale, Translations> = {
     systemNotificationsEnabled: "Notifications système activées",
     systemNotificationsBlocked: "Notifications système bloquées",
     manageAssignees: "Gérer les Personnes Assignées",
+    pomodoroTimerMenuLabel: "Minuteur Pomodoro",
     backToCalendar: "Retour au calendrier",
     addCategory: "Ajouter une catégorie",
     editCategory: "Modifier la catégorie",
@@ -835,8 +876,6 @@ export const translations: Record<Locale, Translations> = {
     confirmDeleteAssigneeDescription: (params) => `Cette action supprimera la personne assignée "${params.assigneeName}". Les activités qui lui sont assignées deviendront non assignées. Cette action est irréversible.`,
     assigneesCount: (params) => `Vous avez ${params.count} personne${params.count === 1 ? '' : 's'} assignée${params.count === 1 ? '' : 's'}.`,
     noAssigneesYet: "Aucune personne assignée pour le moment. Utilisez le formulaire pour en ajouter.",
-    // assigneeMode: "Mode de l'Assigné", // Removed
-    // assigneeModeDescription: (params) => `Cette personne assignée sera disponible en mode ${params.mode}.`, // Removed
     editActivityTitle: "Modifier l'activité",
     addActivityTitle: "Ajouter une nouvelle activité",
     editActivityDescription: (params) => `Mettez à jour les détails de votre activité. Date par défaut : ${params.formattedInitialDate}.`,
@@ -1019,6 +1058,20 @@ export const translations: Record<Locale, Translations> = {
         "Bien fait vaut mieux que bien dit.",
         "On n'est jamais trop vieux pour se fixer un autre but ou pour rêver un nouveau rêve."
     ],
+    pomodoroTitle: "Minuteur Pomodoro",
+    pomodoroStartWork: "Démarrer Travail (25 min)",
+    pomodoroStartShortBreak: "Démarrer Pause Courte (5 min)",
+    pomodoroPause: "Pause",
+    pomodoroResume: "Reprendre",
+    pomodoroReset: "Réinitialiser",
+    pomodoroWorkSession: "Session de Travail",
+    pomodoroShortBreakSession: "Pause Courte",
+    pomodoroReadyToStart: "Prêt à commencer ?",
+    pomodoroWorkSessionEnded: "Session de travail terminée",
+    pomodoroShortBreakEnded: "Pause courte terminée",
+    pomodoroTakeABreakOrStartNext: "C'est l'heure d'une pause ou de commencer la session suivante !",
+    pomodoroFocusOnTask: "Concentrez-vous sur votre tâche !",
+    pomodoroShortRelaxation: "Temps pour une courte relaxation.",
   },
 };
 
@@ -1033,4 +1086,3 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
-
