@@ -1,9 +1,9 @@
 
 "use client";
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Layers, Languages, Sun, Moon, Laptop, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings, MoreVertical, BellRing, BellOff, BellPlus, Users } from 'lucide-react'; // Added Users
+import { Layers, Languages, Sun, Moon, Laptop, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings, MoreVertical, BellRing, BellOff, BellPlus, Users } from 'lucide-react';
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { APP_NAME } from '@/lib/constants';
 import ChangePasswordModal from '@/components/forms/change-password-modal';
@@ -43,6 +43,16 @@ export default function AppHeader() {
     requestSystemNotificationPermission,
   } = useAppStore();
   const router = useRouter();
+  const [currentPhrase, setCurrentPhrase] = useState('');
+
+  useEffect(() => {
+    const phrasesForLocale = translations[locale]?.motivationalPhrases || translations['en'].motivationalPhrases;
+    if (phrasesForLocale && phrasesForLocale.length > 0) {
+      setCurrentPhrase(phrasesForLocale[Math.floor(Math.random() * phrasesForLocale.length)]);
+    } else {
+      setCurrentPhrase("Keep up the great work!");
+    }
+  }, [locale]);
   
   const dateLocale = useMemo(() => {
     if (locale === 'es') return es;
@@ -169,7 +179,6 @@ export default function AppHeader() {
     }
   };
 
-
   const sharedOptionsItems = (
     <>
       <DropdownMenuItem asChild>
@@ -223,7 +232,6 @@ export default function AppHeader() {
     </>
   );
 
-
   return (
     <>
       <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -237,9 +245,7 @@ export default function AppHeader() {
           </div>
 
           {/* Center Group: Desktop App Mode Toggle Switch */}
-          <div className="hidden md:flex">
-            {desktopAppModeToggleSwitch}
-          </div>
+          {desktopAppModeToggleSwitch}
 
 
           {/* Right Group - This will be pushed to the far right by justify-between */}
@@ -277,7 +283,7 @@ export default function AppHeader() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="icon" aria-label={t('moreOptionsDesktop')}>
-                    <MoreHorizontal className="h-5 w-5" />
+                    <MoreHorizontal className="h-5 w-5" /> {/* Changed from Settings icon */}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -323,3 +329,5 @@ export default function AppHeader() {
     </>
   );
 }
+
+    
