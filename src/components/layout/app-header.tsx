@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react'; // Removed useEffect
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Layers, Languages, Sun, Moon, Laptop, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings, MoreVertical, BellRing, BellOff, BellPlus, Users } from 'lucide-react';
@@ -20,7 +20,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useAppStore } from '@/hooks/use-app-store';
-import type { UINotification } from '@/lib/types';
+// import type { UINotification } from '@/lib/types'; // Not used here
 import { useRouter } from 'next/navigation';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { enUS, es, fr } from 'date-fns/locale';
@@ -177,15 +177,7 @@ export default function AppHeader() {
             {t('viewHistory')}
         </Link>
       </DropdownMenuItem>
-      {!isMobileMenu && ( // Only hide from desktop general options if it's NOT mobile
-         <DropdownMenuItem asChild>
-            <Link href="/assignees" className="flex items-center w-full">
-                <Users className="mr-2 h-4 w-4" />
-                {t('manageAssignees')}
-            </Link>
-        </DropdownMenuItem>
-      )}
-      {isMobileMenu && ( // Add to mobile menu
+      {(isMobileMenu || appMode === 'personal') && ( // Show in mobile menu OR if in personal mode for desktop
          <DropdownMenuItem asChild>
             <Link href="/assignees" className="flex items-center w-full">
                 <Users className="mr-2 h-4 w-4" />
@@ -279,11 +271,13 @@ export default function AppHeader() {
                   <Layers className="h-5 w-5" />
                 </Button>
               </Link>
-              <Link href="/assignees" passHref>
-                <Button variant="outline" size="icon" aria-label={t('manageAssignees')}>
-                  <Users className="h-5 w-5" />
-                </Button>
-              </Link>
+              {appMode === 'personal' && ( // Only show "Manage Assignees" button if in personal mode
+                <Link href="/assignees" passHref>
+                  <Button variant="outline" size="icon" aria-label={t('manageAssignees')}>
+                    <Users className="h-5 w-5" />
+                  </Button>
+                </Link>
+              )}
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

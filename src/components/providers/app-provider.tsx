@@ -29,8 +29,7 @@ export interface AppContextType {
   activities: Activity[];
   getRawActivities: () => Activity[];
   categories: Category[];
-  allAssignees: Assignee[]; // Expose all for management
-  assignees: Assignee[]; // Filtered for selection
+  assignees: Assignee[]; // This will now be the complete list, not filtered by mode
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
   addActivity: (
@@ -53,8 +52,8 @@ export interface AppContextType {
   addCategory: (name: string, iconName: string, mode: AppMode | 'all') => void;
   updateCategory: (categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => void;
   deleteCategory: (categoryId: string) => void;
-  addAssignee: (name: string, mode: AppMode | 'all') => void;
-  updateAssignee: (assigneeId: string, updates: Partial<Omit<Assignee, 'id'>>) => void;
+  addAssignee: (name: string) => void; // Mode removed
+  updateAssignee: (assigneeId: string, updates: Partial<Omit<Assignee, 'id'>>) => void; // Mode removed from updates
   deleteAssignee: (assigneeId: string) => void;
   getAssigneeById: (assigneeId: string) => Assignee | undefined;
   isLoading: boolean;
@@ -88,7 +87,7 @@ export const AppContext = createContext<AppContextType | undefined>(undefined);
 const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities_v2';
 const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities_v2';
 const LOCAL_STORAGE_KEY_ALL_CATEGORIES = 'todoFlowAllCategories_v1';
-const LOCAL_STORAGE_KEY_ASSIGNEES = 'todoFlowAssignees_v2';
+const LOCAL_STORAGE_KEY_ASSIGNEES = 'todoFlowAssignees_v2'; // Key remains, structure changes (no mode)
 const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode';
 const LOCAL_STORAGE_KEY_IS_AUTHENTICATED = 'todoFlowIsAuthenticated';
 const LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS = 'todoFlowLoginAttempts';
@@ -275,7 +274,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [personalActivities, setPersonalActivities] = useState<Activity[]>([]);
   const [workActivities, setWorkActivities] = useState<Activity[]>([]);
   const [allCategories, setAllCategories] = useState<Category[]>([]);
-  const [allAssignees, setAllAssignees] = useState<Assignee[]>([]);
+  const [allAssignees, setAllAssignees] = useState<Assignee[]>([]); // Renamed from assignees to allAssignees for internal state
   const [appModeState, setAppModeState] = useState<AppMode>('personal');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -349,14 +348,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
   }, [allCategories, appModeState, isLoading]);
 
-  const filteredAssignees = useMemo(() => {
+  // Assignees are no longer filtered by mode for the context. All assignees are available for Personal mode.
+  const assigneesForContext = useMemo(() => {
     if (isLoading) {
       return [];
     }
-    return allAssignees.filter(asg =>
-      !asg.mode || asg.mode === 'all' || asg.mode === appModeState
-    );
-  }, [allAssignees, appModeState, isLoading]);
+    return allAssignees;
+  }, [allAssignees, isLoading]);
 
 
   const addHistoryLogEntry = useCallback((actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope: HistoryLogEntry['scope'] = 'account') => {
@@ -386,50 +384,53 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       console.warn("[AppProvider] This browser does not support desktop notification. Unable to show: ", title);
       return;
     }
-    const currentPermission = Notification.permission;
-    console.log(`[AppProvider] showSystemNotification - Current browser notification permission is: ${currentPermission}`);
+    const currentBrowserPermission = Notification.permission;
+    console.log(`[AppProvider] showSystemNotification - Current browser notification permission is: ${currentBrowserPermission}`);
 
-    if (currentPermission === 'granted') {
+    if (currentBrowserPermission === 'granted') {
       console.log("[AppProvider] Permission 'granted'. Showing system notification:", title);
       new Notification(title, {
         body: description,
-        icon: '/icons/icon-192x192.png',
+        icon: '/icons/icon-192x192.png', // Ensure this icon exists
         lang: locale,
       });
     } else {
-      console.log(`[AppProvider] System notification for "${title}" was not shown because permission is '${currentPermission}'. User can enable via settings menu.`);
+      console.log(`[AppProvider] System notification for "${title}" was not shown because permission is '${currentBrowserPermission}'. User can enable via settings menu.`);
     }
   }, [locale]);
 
   const requestSystemNotificationPermission = useCallback(async () => {
+    console.log("[AppProvider] requestSystemNotificationPermission called.");
     if (typeof window === 'undefined' || !('Notification' in window)) {
       console.warn("[AppProvider] This browser does not support desktop notification.");
-      setSystemNotificationPermission('denied');
+      setSystemNotificationPermission('denied'); // Update state
+      toast({ title: t('systemNotificationsBlocked'), description: "Browser does not support notifications." });
       return;
     }
 
     const currentBrowserPermission = Notification.permission;
-    console.log(`[AppProvider] requestSystemNotificationPermission called. Current browser permission is: ${currentBrowserPermission}`);
-    setSystemNotificationPermission(currentBrowserPermission);
+    console.log(`[AppProvider] Current browser notification permission is: ${currentBrowserPermission}`);
+    setSystemNotificationPermission(currentBrowserPermission); // Reflect current browser state
 
     if (currentBrowserPermission === 'granted') {
       console.log("[AppProvider] Notification permission already granted by browser.");
-      toast({ title: t('systemNotificationsEnabled')});
+      toast({ title: t('systemNotificationsEnabled') });
       return;
     }
 
     if (currentBrowserPermission === 'denied') {
       console.log("[AppProvider] Notification permission is 'denied' by browser. User needs to change this in browser/OS settings.");
-      toast({ title: t('systemNotificationsBlocked'), description: "Please check your browser's site settings to allow notifications." , duration: 5000});
+      toast({ title: t('systemNotificationsBlocked'), description: "Please check your browser's site settings to allow notifications.", duration: 5000 });
       return;
     }
 
+    // Only if permission is 'default', then request it.
     if (currentBrowserPermission === 'default') {
       console.log("[AppProvider] Notification permission is 'default'. Requesting permission from user...");
       try {
         const permissionResult = await Notification.requestPermission();
         console.log(`[AppProvider] Notification.requestPermission() result: ${permissionResult}`);
-        setSystemNotificationPermission(permissionResult);
+        setSystemNotificationPermission(permissionResult); // Update state with the result
 
         if (permissionResult === 'granted') {
           console.log("[AppProvider] Notification permission granted by user.");
@@ -439,13 +440,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           toast({ title: t('systemNotificationsBlocked'), description: "You have denied notification permissions." });
         } else {
           console.log("[AppProvider] Notification permission prompt dismissed by user (remains 'default').");
+          // No toast here as the user actively dismissed it.
         }
       } catch (err) {
         console.error("[AppProvider] Error requesting notification permission:", err);
-        setSystemNotificationPermission(Notification.permission);
+        setSystemNotificationPermission(Notification.permission); // Re-sync with actual permission
       }
     }
   }, [t, toast]);
+
 
   const logout = useCallback(() => {
     addHistoryLogEntry('historyLogLogout', undefined, 'account');
@@ -501,9 +504,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const storedAssigneesString = localStorage.getItem(LOCAL_STORAGE_KEY_ASSIGNEES);
       if (storedAssigneesString) {
           try {
-              const parsedAssignees = JSON.parse(storedAssigneesString) as Assignee[];
+              const parsedAssignees = JSON.parse(storedAssigneesString) as Omit<Assignee, 'mode'>[]; // No mode property to parse
               if (Array.isArray(parsedAssignees)) {
-                  loadedAssignees = parsedAssignees.map(asg => ({...asg, mode: asg.mode || 'all'}));
+                  loadedAssignees = parsedAssignees.map(asg => ({...asg})); // Create new objects
               }
           } catch (e) {
               console.error("[AppProvider] Failed to parse assignees from localStorage, using empty list.", e);
@@ -524,7 +527,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const expiryTime = parseInt(storedExpiry, 10);
         if (Date.now() > expiryTime) {
           initialAuth = false;
-          logout();
+          logout(); // Call logout to ensure broadcast and full cleanup
         } else {
           initialAuth = true;
           setSessionExpiryTimestampState(expiryTime);
@@ -553,13 +556,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (err) {
       console.error("[AppProvider] Failed to load data from local storage", err);
       setError("Failed to load saved data.");
-       if (allCategories.length === 0) {
+       if (allCategories.length === 0 && Array.isArray(INITIAL_CATEGORIES) && INITIAL_CATEGORIES.length > 0) {
         setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
       }
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // This useEffect should run only once on mount
 
 
   useEffect(() => {
@@ -583,6 +587,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     if (!isLoading) {
+      // Assignees no longer have a 'mode' property to serialize
       localStorage.setItem(LOCAL_STORAGE_KEY_ASSIGNEES, JSON.stringify(allAssignees));
     }
   }, [allAssignees, isLoading]);
@@ -741,7 +746,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, 60000);
 
     return () => clearInterval(intervalId);
-  }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification, dateFnsLocale, showSystemNotification, systemNotificationPermission]);
+  }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification, dateFnsLocale, showSystemNotification, systemNotificationPermission, locale]); // Added locale to dependencies
 
 
   useEffect(() => {
@@ -1048,21 +1053,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [toast, allCategories, t, addHistoryLogEntry]);
 
 
-  const addAssignee = useCallback((name: string, mode: AppMode | 'all') => {
-    const newAssignee: Assignee = { id: `asg_${uuidv4()}`, name, mode };
+  const addAssignee = useCallback((name: string) => { // Mode parameter removed
+    const newAssignee: Assignee = { id: `asg_${uuidv4()}`, name };
     setAllAssignees(prev => [...prev, newAssignee]);
     toast({ title: t('toastAssigneeAddedTitle'), description: t('toastAssigneeAddedDescription', { assigneeName: name }) });
-
-    let actionKey: HistoryLogActionKey;
-    if (mode === 'personal') actionKey = 'historyLogAddAssigneePersonal';
-    else if (mode === 'work') actionKey = 'historyLogAddAssigneeWork';
-    else actionKey = 'historyLogAddAssigneeAll';
-    addHistoryLogEntry(actionKey, { name }, 'assignee');
+    addHistoryLogEntry('historyLogAddAssignee', { name }, 'assignee'); // Simplified history log
   }, [t, toast, addHistoryLogEntry]);
 
-  const updateAssignee = useCallback((assigneeId: string, updates: Partial<Omit<Assignee, 'id'>>) => {
+  const updateAssignee = useCallback((assigneeId: string, updates: Partial<Omit<Assignee, 'id'>>) => { // Mode removed from updates
     let assigneeNameForLog = updates.name;
-    let assigneeModeForLog = updates.mode;
     let oldNameForLog: string | undefined = undefined;
 
     setAllAssignees(prev =>
@@ -1070,26 +1069,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (asg.id === assigneeId) {
           oldNameForLog = asg.name;
           const newName = updates.name !== undefined ? updates.name : asg.name;
-          const newMode = updates.mode !== undefined ? updates.mode : asg.mode;
-
           if (!assigneeNameForLog) assigneeNameForLog = newName;
-          if (!assigneeModeForLog) assigneeModeForLog = newMode;
-
-          return { ...asg, name: newName, mode: newMode };
+          return { ...asg, name: newName };
         }
         return asg;
       })
     );
 
     const asgName = assigneeNameForLog || "Unknown Assignee";
-    const asgMode = assigneeModeForLog || "all";
     toast({ title: t('toastAssigneeUpdatedTitle'), description: t('toastAssigneeUpdatedDescription', { assigneeName: asgName }) });
-
-    let actionKey: HistoryLogActionKey;
-    if (asgMode === 'personal') actionKey = 'historyLogUpdateAssigneePersonal';
-    else if (asgMode === 'work') actionKey = 'historyLogUpdateAssigneeWork';
-    else actionKey = 'historyLogUpdateAssigneeAll';
-    addHistoryLogEntry(actionKey, { name: asgName, oldName: oldNameForLog !== asgName ? oldNameForLog : undefined }, 'assignee');
+    addHistoryLogEntry('historyLogUpdateAssignee', { name: asgName, oldName: oldNameForLog !== asgName ? oldNameForLog : undefined }, 'assignee'); // Simplified history log
   }, [t, toast, addHistoryLogEntry]);
 
   const deleteAssignee = useCallback((assigneeId: string) => {
@@ -1103,7 +1092,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         act.responsiblePersonId === assigneeId ? { ...act, responsiblePersonId: undefined } : act
       );
     setPersonalActivities(clearAssigneeFromActivities);
-    setWorkActivities(clearAssigneeFromActivities);
+    // No need to clear from workActivities if assignees are personal-only
+    // setWorkActivities(clearAssigneeFromActivities); 
 
     toast({ title: t('toastAssigneeDeletedTitle'), description: t('toastAssigneeDeletedDescription', { assigneeName: assigneeToDelete.name }) });
     addHistoryLogEntry('historyLogDeleteAssignee', { name: assigneeToDelete.name }, 'assignee');
@@ -1135,8 +1125,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         activities: getRawActivities(),
         getRawActivities,
         categories: filteredCategories,
-        allAssignees: allAssignees,
-        assignees: filteredAssignees,
+        assignees: assigneesForContext, // Use the memoized assignees for context
         appMode: appModeState,
         setAppMode,
         addActivity,
@@ -1180,3 +1169,4 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+

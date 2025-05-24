@@ -71,8 +71,8 @@ export type Translations = {
   confirmDeleteAssigneeDescription: (params: { assigneeName: string }) => string;
   assigneesCount: (params: { count: number }) => string;
   noAssigneesYet: string;
-  assigneeMode: string;
-  assigneeModeDescription: (params: {mode: string}) => string;
+  // assigneeMode: string; // Removed
+  // assigneeModeDescription: (params: {mode: string}) => string; // Removed
 
 
   // ActivityModal
@@ -117,7 +117,7 @@ export type Translations = {
   dayFri: string;
   daySat: string;
   invalidTimeFormat24Hour: string;
-  timeFormatDescription24Hour: string;
+  // timeFormatDescription24Hour: string; // This was already removed earlier
   responsiblePersonLabel: string;
   selectResponsiblePersonPlaceholder: string;
   unassigned: string;
@@ -258,12 +258,8 @@ export type Translations = {
   historyLogSwitchToPersonalMode: string;
   historyLogSwitchToWorkMode: string;
   historyLogPasswordChange: string;
-  historyLogAddAssigneePersonal: (params: { name: string }) => string;
-  historyLogAddAssigneeWork: (params: { name: string }) => string;
-  historyLogAddAssigneeAll: (params: { name: string }) => string;
-  historyLogUpdateAssigneePersonal: (params: { name: string, oldName?: string }) => string;
-  historyLogUpdateAssigneeWork: (params: { name: string, oldName?: string }) => string;
-  historyLogUpdateAssigneeAll: (params: { name: string, oldName?: string }) => string;
+  historyLogAddAssignee: (params: { name: string }) => string;
+  historyLogUpdateAssignee: (params: { name: string, oldName?: string }) => string;
   historyLogDeleteAssignee: (params: { name: string }) => string;
   historyScopeAccount: string;
   historyScopePersonal: string;
@@ -341,8 +337,8 @@ export const translations: Record<Locale, Translations> = {
     confirmDeleteAssigneeDescription: (params) => `This action will delete the assignee "${params.assigneeName}". Activities assigned to them will become unassigned. This cannot be undone.`,
     assigneesCount: (params) => `You have ${params.count} assignee${params.count === 1 ? '' : 's'}.`,
     noAssigneesYet: "No assignees added yet. Use the form to add your first assignee.",
-    assigneeMode: "Assignee Mode",
-    assigneeModeDescription: (params) => `This assignee will be available in ${params.mode} mode.`,
+    // assigneeMode: "Assignee Mode", // Removed
+    // assigneeModeDescription: (params) => `This assignee will be available in ${params.mode} mode.`, // Removed
     editActivityTitle: "Edit Activity",
     addActivityTitle: "Add New Activity",
     editActivityDescription: (params) => `Update the details of your activity. Default date: ${params.formattedInitialDate}.`,
@@ -384,7 +380,6 @@ export const translations: Record<Locale, Translations> = {
     dayFri: "Fri",
     daySat: "Sat",
     invalidTimeFormat24Hour: "Invalid time format. Use HH:MM (24-hour).",
-    timeFormatDescription24Hour: "Please use 24-hour format (e.g., 14:30).",
     responsiblePersonLabel: "Responsible Person",
     selectResponsiblePersonPlaceholder: "Select an assignee",
     unassigned: "Unassigned",
@@ -506,12 +501,8 @@ export const translations: Record<Locale, Translations> = {
     historyLogSwitchToPersonalMode: "Switched to Personal Mode.",
     historyLogSwitchToWorkMode: "Switched to Work Mode.",
     historyLogPasswordChange: "Password changed.",
-    historyLogAddAssigneePersonal: (params) => `Added Personal Assignee: "${params.name}".`,
-    historyLogAddAssigneeWork: (params) => `Added Work Assignee: "${params.name}".`,
-    historyLogAddAssigneeAll: (params) => `Added Assignee (All Modes): "${params.name}".`,
-    historyLogUpdateAssigneePersonal: (params) => `Updated Personal Assignee: "${params.oldName ? params.oldName + ' to ' : ''}${params.name}".`,
-    historyLogUpdateAssigneeWork: (params) => `Updated Work Assignee: "${params.oldName ? params.oldName + ' to ' : ''}${params.name}".`,
-    historyLogUpdateAssigneeAll: (params) => `Updated Assignee (All Modes): "${params.oldName ? params.oldName + ' to ' : ''}${params.name}".`,
+    historyLogAddAssignee: (params) => `Added Assignee: "${params.name}".`,
+    historyLogUpdateAssignee: (params) => `Updated Assignee: "${params.oldName ? params.oldName + ' to ' : ''}${params.name}".`,
     historyLogDeleteAssignee: (params) => `Deleted Assignee: "${params.name}".`,
     historyScopeAccount: "Account",
     historyScopePersonal: "Personal",
@@ -595,8 +586,8 @@ export const translations: Record<Locale, Translations> = {
     confirmDeleteAssigneeDescription: (params) => `Esta acción eliminará al asignado "${params.assigneeName}". Las actividades asignadas a esta persona quedarán sin asignar. Esto no se puede deshacer.`,
     assigneesCount: (params) => `Tienes ${params.count} asignado${params.count === 1 ? '' : 's'}.`,
     noAssigneesYet: "Aún no has añadido asignados. Usa el formulario para añadir tu primer asignado.",
-    assigneeMode: "Modo del Asignado",
-    assigneeModeDescription: (params) => `Este asignado estará disponible en modo ${params.mode}.`,
+    // assigneeMode: "Modo del Asignado", // Removed
+    // assigneeModeDescription: (params) => `Este asignado estará disponible en modo ${params.mode}.`, // Removed
     editActivityTitle: "Editar Actividad",
     addActivityTitle: "Añadir Nueva Actividad",
     editActivityDescription: (params) => `Actualiza los detalles de tu actividad. Fecha por defecto: ${params.formattedInitialDate}.`,
@@ -638,7 +629,6 @@ export const translations: Record<Locale, Translations> = {
     dayFri: "Vie",
     daySat: "Sáb",
     invalidTimeFormat24Hour: "Formato de hora inválido. Usa HH:MM (24 horas).",
-    timeFormatDescription24Hour: "Por favor, usa el formato de 24 horas (ej: 14:30).",
     responsiblePersonLabel: "Persona Responsable",
     selectResponsiblePersonPlaceholder: "Selecciona un asignado",
     unassigned: "Sin asignar",
@@ -760,12 +750,8 @@ export const translations: Record<Locale, Translations> = {
     historyLogSwitchToPersonalMode: "Cambiado a Modo Personal.",
     historyLogSwitchToWorkMode: "Cambiado a Modo Trabajo.",
     historyLogPasswordChange: "Contraseña cambiada.",
-    historyLogAddAssigneePersonal: (params) => `Asignado Personal añadido: "${params.name}".`,
-    historyLogAddAssigneeWork: (params) => `Asignado de Trabajo añadido: "${params.name}".`,
-    historyLogAddAssigneeAll: (params) => `Asignado (Todos los Modos) añadido: "${params.name}".`,
-    historyLogUpdateAssigneePersonal: (params) => `Asignado Personal actualizado: "${params.oldName ? params.oldName + ' a ' : ''}${params.name}".`,
-    historyLogUpdateAssigneeWork: (params) => `Asignado de Trabajo actualizado: "${params.oldName ? params.oldName + ' a ' : ''}${params.name}".`,
-    historyLogUpdateAssigneeAll: (params) => `Asignado (Todos los Modos) actualizado: "${params.oldName ? params.oldName + ' a ' : ''}${params.name}".`,
+    historyLogAddAssignee: (params) => `Asignado añadido: "${params.name}".`,
+    historyLogUpdateAssignee: (params) => `Asignado actualizado: "${params.oldName ? params.oldName + ' a ' : ''}${params.name}".`,
     historyLogDeleteAssignee: (params) => `Asignado eliminado: "${params.name}".`,
     historyScopeAccount: "Cuenta",
     historyScopePersonal: "Personal",
@@ -849,8 +835,8 @@ export const translations: Record<Locale, Translations> = {
     confirmDeleteAssigneeDescription: (params) => `Cette action supprimera la personne assignée "${params.assigneeName}". Les activités qui lui sont assignées deviendront non assignées. Cette action est irréversible.`,
     assigneesCount: (params) => `Vous avez ${params.count} personne${params.count === 1 ? '' : 's'} assignée${params.count === 1 ? '' : 's'}.`,
     noAssigneesYet: "Aucune personne assignée pour le moment. Utilisez le formulaire pour en ajouter.",
-    assigneeMode: "Mode de l'Assigné",
-    assigneeModeDescription: (params) => `Cette personne assignée sera disponible en mode ${params.mode}.`,
+    // assigneeMode: "Mode de l'Assigné", // Removed
+    // assigneeModeDescription: (params) => `Cette personne assignée sera disponible en mode ${params.mode}.`, // Removed
     editActivityTitle: "Modifier l'activité",
     addActivityTitle: "Ajouter une nouvelle activité",
     editActivityDescription: (params) => `Mettez à jour les détails de votre activité. Date par défaut : ${params.formattedInitialDate}.`,
@@ -892,7 +878,6 @@ export const translations: Record<Locale, Translations> = {
     dayFri: "Ven",
     daySat: "Sam",
     invalidTimeFormat24Hour: "Format d'heure invalide. Utilisez HH:MM (24 heures).",
-    timeFormatDescription24Hour: "Veuillez utiliser le format 24 heures (par exemple, 14:30).",
     responsiblePersonLabel: "Personne Responsable",
     selectResponsiblePersonPlaceholder: "Sélectionnez une personne",
     unassigned: "Non assigné",
@@ -1014,13 +999,9 @@ export const translations: Record<Locale, Translations> = {
     historyLogSwitchToPersonalMode: "Passé en mode Personnel.",
     historyLogSwitchToWorkMode: "Passé en mode Travail.",
     historyLogPasswordChange: "Mot de passe changé.",
-    historyLogAddAssigneePersonal: (params) => `Personne Assignée Personnelle ajoutée : "${params.name}".`,
-    historyLogAddAssigneeWork: (params) => `Personne Assignée Professionnelle ajoutée : "${params.name}".`,
-    historyLogAddAssigneeAll: (params) => `Personne Assignée (Tous Modes) ajoutée : "${params.name}".`,
-    historyLogUpdateAssigneePersonal: (params) => `Personne Assignée Personnelle mise à jour : "${params.oldName ? params.oldName + ' à ' : ''}${params.name}".`,
-    historyLogUpdateAssigneeWork: (params) => `Personne Assignée Professionnelle mise à jour : "${params.oldName ? params.oldName + ' à ' : ''}${params.name}".`,
-    historyLogUpdateAssigneeAll: (params) => `Personne Assignée (Tous Modes) mise à jour : "${params.oldName ? params.oldName + ' à ' : ''}${params.name}".`,
-    historyLogDeleteAssignee: (params) => `Personne Assignée supprimée : "${params.name}".`,
+    historyLogAddAssignee: (params) => `Personne assignée ajoutée : "${params.name}".`,
+    historyLogUpdateAssignee: (params) => `Personne assignée mise à jour : "${params.oldName ? params.oldName + ' à ' : ''}${params.name}".`,
+    historyLogDeleteAssignee: (params) => `Personne assignée supprimée : "${params.name}".`,
     historyScopeAccount: "Compte",
     historyScopePersonal: "Personnel",
     historyScopeWork: "Travail",
@@ -1052,3 +1033,4 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
+

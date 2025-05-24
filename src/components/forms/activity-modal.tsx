@@ -181,7 +181,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
       notes: data.notes,
       recurrence: recurrenceRule,
       completedOccurrences: activity?.completedOccurrences || {},
-      responsiblePersonId: data.responsiblePersonId,
+      responsiblePersonId: appMode === 'personal' ? data.responsiblePersonId : undefined, // Only set if in personal mode
     };
 
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -337,7 +337,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                     <FormLabel className="min-h-8">{t('activityTimeLabel')}</FormLabel>
                     <FormControl>
                        <div className="relative w-full">
-                        <Input type="time" {...field} className="w-full pr-7" />
+                        <Input type="time" {...field} className="w-full pr-6" />
                         <Clock className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
                       </div>
                     </FormControl>

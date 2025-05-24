@@ -44,7 +44,7 @@ export interface Category {
 export interface Assignee {
   id: string;
   name: string;
-  mode?: AppMode | 'all'; // Added mode to Assignee
+  // mode?: AppMode | 'all'; // Removed mode from Assignee
 }
 
 export interface UINotification {
@@ -78,12 +78,8 @@ export type HistoryLogActionKey =
   | 'historyLogSwitchToPersonalMode'
   | 'historyLogSwitchToWorkMode'
   | 'historyLogPasswordChange'
-  | 'historyLogAddAssigneePersonal' // Updated
-  | 'historyLogAddAssigneeWork'   // Updated
-  | 'historyLogAddAssigneeAll'    // New
-  | 'historyLogUpdateAssigneePersonal' // Updated
-  | 'historyLogUpdateAssigneeWork' // Updated
-  | 'historyLogUpdateAssigneeAll' // New
+  | 'historyLogAddAssignee'
+  | 'historyLogUpdateAssignee'
   | 'historyLogDeleteAssignee';
 
 export interface HistoryLogEntry {
@@ -93,3 +89,4 @@ export interface HistoryLogEntry {
   details?: Record<string, string | number | boolean | undefined>;
   scope: 'account' | 'personal' | 'work' | 'category' | 'assignee';
 }
+
