@@ -315,7 +315,7 @@ export default function ActivityCalendarView() {
 
   const handleAddNewActivityGeneric = () => {
     setEditingActivity(undefined);
-    setDateForModal(selectedDate || new Date());
+    setDateForModal(new Date()); // Always default to today for new activity via FAB
     setEditingInstanceDate(undefined);
     setIsActivityModalOpen(true);
   };
@@ -360,7 +360,7 @@ export default function ActivityCalendarView() {
     } else if (date) {
         setCurrentDisplayMonth(date);
     }
-    if (date) setDateForModal(date);
+    if (date) setDateForModal(date); // This line was missing for the FAB context
   };
 
   const handleTodayButtonClick = () => {
@@ -467,7 +467,7 @@ export default function ActivityCalendarView() {
           </CardHeader>
           <CardContent className="flex-grow">
             {selectedDate && activitiesForView.length > 0 ? (
-              <ScrollArea className="h-[calc(100vh-20rem)] sm:h-[calc(100vh-20rem)] pr-1">
+              <ScrollArea className="h-[calc(100vh-24rem)] sm:h-[calc(100vh-22rem)] pr-1"> {/* Increased height */}
                 <div className="space-y-3">
                   {activitiesForView.map(activity => (
                     <ActivityListItem
@@ -528,10 +528,12 @@ export default function ActivityCalendarView() {
         variant="ghost"
         onClick={handleAddNewActivityGeneric}
         className={cn(
-            "fixed bottom-18 right-6 z-50 shadow-lg", 
+            "fixed bottom-10 right-6 z-50 shadow-lg", // Reverted from bottom-18
             "bg-[hsl(var(--accent))]/15 text-accent-foreground backdrop-blur-md border border-border/50 hover:bg-[hsl(var(--accent))]/30",
             "flex items-center justify-center",
+            // Mobile: Round button
             "h-14 w-14 rounded-full p-0",
+            // Desktop (md and up): Squircle with text
             "md:h-12 md:w-auto md:rounded-2xl md:px-4 md:gap-2"
         )}
         aria-label={t('addActivity')}
@@ -542,6 +544,4 @@ export default function ActivityCalendarView() {
     </div>
   );
 }
-
-
     
