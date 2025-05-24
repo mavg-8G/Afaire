@@ -23,7 +23,7 @@ import { useAppStore } from '@/hooks/use-app-store';
 import type { UINotification } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { formatDistanceToNowStrict } from 'date-fns';
-import { enUS, es } from 'date-fns/locale';
+import { enUS, es, fr } from 'date-fns/locale';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 
@@ -43,7 +43,12 @@ export default function AppHeader() {
     requestSystemNotificationPermission,
   } = useAppStore();
   const router = useRouter();
-  const dateLocale = locale === 'es' ? es : enUS;
+  
+  const dateLocale = useMemo(() => {
+    if (locale === 'es') return es;
+    if (locale === 'fr') return fr;
+    return enUS;
+  }, [locale]);
 
   const handleModeToggle = (isWorkMode: boolean) => {
     setAppMode(isWorkMode ? 'work' : 'personal');
@@ -197,6 +202,9 @@ export default function AppHeader() {
       <DropdownMenuItem onClick={() => setLocale('es')} disabled={locale === 'es'}>
         {t('spanish')}
       </DropdownMenuItem>
+      <DropdownMenuItem onClick={() => setLocale('fr')} disabled={locale === 'fr'}>
+        {t('french')}
+      </DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem onClick={() => setIsChangePasswordModalOpen(true)}>
         <KeyRound className="mr-2 h-4 w-4" />
@@ -223,7 +231,9 @@ export default function AppHeader() {
           </div>
 
           {/* Center Group: Desktop App Mode Toggle Switch */}
-          {desktopAppModeToggleSwitch}
+          <div className="hidden md:flex">
+            {desktopAppModeToggleSwitch}
+          </div>
 
 
           {/* Right Group - This will be pushed to the far right by justify-between */}

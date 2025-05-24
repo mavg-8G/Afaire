@@ -27,7 +27,7 @@ export const LanguageProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const storedLocale = typeof window !== "undefined" ? localStorage.getItem(LOCAL_STORAGE_LOCALE_KEY) as Locale | null : null;
-    if (storedLocale && (storedLocale === 'en' || storedLocale === 'es')) {
+    if (storedLocale && (storedLocale === 'en' || storedLocale === 'es' || storedLocale === 'fr')) {
       setLocaleState(storedLocale);
     }
   }, []);
@@ -81,3 +81,5 @@ export const useTranslations = (): LanguageContextType => {
   }
   return context;
 };
+
+    
