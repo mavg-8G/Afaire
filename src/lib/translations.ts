@@ -32,6 +32,7 @@ export type Translations = {
   enableSystemNotifications: string;
   systemNotificationsEnabled: string;
   systemNotificationsBlocked: string;
+  manageAssignees: string; // New
 
 
   // CategoriesPage
@@ -57,6 +58,19 @@ export type Translations = {
   confirmDeleteCategoryDescription: (params: { categoryName: string }) => string;
   categoriesCount: (params: { count: number }) => string;
   noCategoriesYet: string;
+
+  // AssigneesPage - New Section
+  addNewAssignee: string;
+  editAssignee: string;
+  assigneeNameLabel: string;
+  assigneeNamePlaceholder: string;
+  createAssigneeDescription: string;
+  updateAssigneeDetails: string;
+  existingAssignees: string;
+  viewEditManageAssignees: string;
+  confirmDeleteAssigneeDescription: (params: { assigneeName: string }) => string;
+  assigneesCount: (params: { count: number }) => string;
+  noAssigneesYet: string;
 
 
   // ActivityModal
@@ -102,6 +116,9 @@ export type Translations = {
   daySat: string;
   invalidTimeFormat24Hour: string;
   timeFormatDescription24Hour: string;
+  responsiblePersonLabel: string; // New
+  selectResponsiblePersonPlaceholder: string; // New
+  unassigned: string; // New
 
 
   // ActivityCalendarView
@@ -191,6 +208,12 @@ export type Translations = {
   toastActivityInOneWeekDescription: (params: { activityTitle: string }) => string;
   loginSuccessNotificationTitle: string;
   loginSuccessNotificationDescription: string;
+  toastAssigneeAddedTitle: string; // New
+  toastAssigneeAddedDescription: (params: { assigneeName: string }) => string; // New
+  toastAssigneeUpdatedTitle: string; // New
+  toastAssigneeUpdatedDescription: (params: { assigneeName: string }) => string; // New
+  toastAssigneeDeletedTitle: string; // New
+  toastAssigneeDeletedDescription: (params: { assigneeName: string }) => string; // New
 
 
   // Dashboard Page
@@ -233,10 +256,14 @@ export type Translations = {
   historyLogSwitchToPersonalMode: string;
   historyLogSwitchToWorkMode: string;
   historyLogPasswordChange: string;
+  historyLogAddAssignee: (params: { name: string }) => string; // New
+  historyLogUpdateAssignee: (params: { name: string }) => string; // New
+  historyLogDeleteAssignee: (params: { name: string }) => string; // New
   historyScopeAccount: string;
   historyScopePersonal: string;
   historyScopeWork: string;
   historyScopeCategory: string;
+  historyScopeAssignee: string; // New
 
   // Motivational Phrases
   motivationalPhrases: string[];
@@ -274,6 +301,7 @@ export const translations: Record<Locale, Translations> = {
     enableSystemNotifications: "Enable System Notifications",
     systemNotificationsEnabled: "System Notifications Enabled",
     systemNotificationsBlocked: "System Notifications Blocked",
+    manageAssignees: "Manage Assignees",
     backToCalendar: "Back to Calendar",
     addCategory: "Add Category",
     editCategory: "Edit Category",
@@ -296,6 +324,17 @@ export const translations: Record<Locale, Translations> = {
     confirmDeleteCategoryDescription: (params) => `This action will delete the category "${params.categoryName}". Activities using this category will no longer be associated with it. This cannot be undone.`,
     categoriesCount: (params) => `You have ${params.count} categor${params.count === 1 ? 'y' : 'ies'}.`,
     noCategoriesYet: "No categories added yet. Use the form to add your first category.",
+    addNewAssignee: "Add New Assignee",
+    editAssignee: "Edit Assignee",
+    assigneeNameLabel: "Assignee Name",
+    assigneeNamePlaceholder: "e.g., John Doe, Partner",
+    createAssigneeDescription: "Create a new assignee for your personal tasks.",
+    updateAssigneeDetails: "Update the details of this assignee.",
+    existingAssignees: "Existing Assignees",
+    viewEditManageAssignees: "View, edit, and manage your assignees.",
+    confirmDeleteAssigneeDescription: (params) => `This action will delete the assignee "${params.assigneeName}". Activities assigned to them will become unassigned. This cannot be undone.`,
+    assigneesCount: (params) => `You have ${params.count} assignee${params.count === 1 ? '' : 's'}.`,
+    noAssigneesYet: "No assignees added yet. Use the form to add your first assignee.",
     editActivityTitle: "Edit Activity",
     addActivityTitle: "Add New Activity",
     editActivityDescription: (params) => `Update the details of your activity. Default date: ${params.formattedInitialDate}.`,
@@ -338,6 +377,9 @@ export const translations: Record<Locale, Translations> = {
     daySat: "Sat",
     invalidTimeFormat24Hour: "Invalid time format. Use HH:MM (24-hour).",
     timeFormatDescription24Hour: "Please use 24-hour format (e.g., 14:30).",
+    responsiblePersonLabel: "Responsible Person",
+    selectResponsiblePersonPlaceholder: "Select an assignee",
+    unassigned: "Unassigned",
     activitiesForDate: (params) => `Activities for ${params.date}`,
     activitiesForWeek: (params) => `Activities for week: ${params.startDate} - ${params.endDate}`,
     activitiesForMonth: (params) => `Activities for ${params.month}`,
@@ -413,6 +455,12 @@ export const translations: Record<Locale, Translations> = {
     toastActivityInOneWeekDescription: (params) => `"${params.activityTitle}" is scheduled in one week.`,
     loginSuccessNotificationTitle: "Login Successful",
     loginSuccessNotificationDescription: "Welcome back! You are now logged in.",
+    toastAssigneeAddedTitle: "Assignee Added",
+    toastAssigneeAddedDescription: (params) => `Assignee "${params.assigneeName}" has been added.`,
+    toastAssigneeUpdatedTitle: "Assignee Updated",
+    toastAssigneeUpdatedDescription: (params) => `Assignee "${params.assigneeName}" has been updated.`,
+    toastAssigneeDeletedTitle: "Assignee Deleted",
+    toastAssigneeDeletedDescription: (params) => `Assignee "${params.assigneeName}" has been removed.`,
     dashboardTitle: "Activity Dashboard",
     dashboardMainDescription: "Track your activity progress and view summaries.",
     dashboardChartView: "Chart View",
@@ -450,10 +498,14 @@ export const translations: Record<Locale, Translations> = {
     historyLogSwitchToPersonalMode: "Switched to Personal Mode.",
     historyLogSwitchToWorkMode: "Switched to Work Mode.",
     historyLogPasswordChange: "Password changed.",
+    historyLogAddAssignee: (params) => `Added Assignee: "${params.name}".`,
+    historyLogUpdateAssignee: (params) => `Updated Assignee: "${params.name}".`,
+    historyLogDeleteAssignee: (params) => `Deleted Assignee: "${params.name}".`,
     historyScopeAccount: "Account",
     historyScopePersonal: "Personal",
     historyScopeWork: "Work",
     historyScopeCategory: "Category",
+    historyScopeAssignee: "Assignee",
     motivationalPhrases: [
       "The secret of getting ahead is getting started.",
       "Don't watch the clock; do what it does. Keep going.",
@@ -497,6 +549,7 @@ export const translations: Record<Locale, Translations> = {
     enableSystemNotifications: "Activar Notificaciones del Sistema",
     systemNotificationsEnabled: "Notificaciones del Sistema Activadas",
     systemNotificationsBlocked: "Notificaciones del Sistema Bloqueadas",
+    manageAssignees: "Gestionar Asignados",
     backToCalendar: "Volver al Calendario",
     addCategory: "Añadir Categoría",
     editCategory: "Editar Categoría",
@@ -519,6 +572,17 @@ export const translations: Record<Locale, Translations> = {
     confirmDeleteCategoryDescription: (params) => `Esta acción eliminará la categoría "${params.categoryName}". Las actividades que usan esta categoría ya no estarán asociadas a ella. Esto no se puede deshacer.`,
     categoriesCount: (params) => `Tienes ${params.count} categorí${params.count === 1 ? 'a' : 'as'}.`,
     noCategoriesYet: "Aún no has añadido categorías. Usa el formulario para añadir tu primera categoría.",
+    addNewAssignee: "Añadir Nuevo Asignado",
+    editAssignee: "Editar Asignado",
+    assigneeNameLabel: "Nombre del Asignado",
+    assigneeNamePlaceholder: "Ej: Juan Pérez, Compañero",
+    createAssigneeDescription: "Crea un nuevo asignado para tus tareas personales.",
+    updateAssigneeDetails: "Actualiza los detalles de este asignado.",
+    existingAssignees: "Asignados Existentes",
+    viewEditManageAssignees: "Ver, editar y gestionar tus asignados.",
+    confirmDeleteAssigneeDescription: (params) => `Esta acción eliminará al asignado "${params.assigneeName}". Las actividades asignadas a esta persona quedarán sin asignar. Esto no se puede deshacer.`,
+    assigneesCount: (params) => `Tienes ${params.count} asignado${params.count === 1 ? '' : 's'}.`,
+    noAssigneesYet: "Aún no has añadido asignados. Usa el formulario para añadir tu primer asignado.",
     editActivityTitle: "Editar Actividad",
     addActivityTitle: "Añadir Nueva Actividad",
     editActivityDescription: (params) => `Actualiza los detalles de tu actividad. Fecha por defecto: ${params.formattedInitialDate}.`,
@@ -561,6 +625,9 @@ export const translations: Record<Locale, Translations> = {
     daySat: "Sáb",
     invalidTimeFormat24Hour: "Formato de hora inválido. Usa HH:MM (24 horas).",
     timeFormatDescription24Hour: "Por favor, usa el formato de 24 horas (ej: 14:30).",
+    responsiblePersonLabel: "Persona Responsable",
+    selectResponsiblePersonPlaceholder: "Selecciona un asignado",
+    unassigned: "Sin asignar",
     activitiesForDate: (params) => `Actividades para ${params.date}`,
     activitiesForWeek: (params) => `Actividades para la semana: ${params.startDate} - ${params.endDate}`,
     activitiesForMonth: (params) => `Actividades para ${params.month}`,
@@ -636,6 +703,12 @@ export const translations: Record<Locale, Translations> = {
     toastActivityInOneWeekDescription: (params) => `"${params.activityTitle}" está programada en una semana.`,
     loginSuccessNotificationTitle: "Inicio de Sesión Exitoso",
     loginSuccessNotificationDescription: "¡Bienvenido de nuevo! Has iniciado sesión.",
+    toastAssigneeAddedTitle: "Asignado Añadido",
+    toastAssigneeAddedDescription: (params) => `El asignado "${params.assigneeName}" ha sido añadido.`,
+    toastAssigneeUpdatedTitle: "Asignado Actualizado",
+    toastAssigneeUpdatedDescription: (params) => `El asignado "${params.assigneeName}" ha sido actualizado.`,
+    toastAssigneeDeletedTitle: "Asignado Eliminado",
+    toastAssigneeDeletedDescription: (params) => `El asignado "${params.assigneeName}" ha sido eliminado.`,
     dashboardTitle: "Panel de Actividades",
     dashboardMainDescription: "Sigue el progreso de tus actividades y visualiza resúmenes.",
     dashboardChartView: "Vista de Gráfico",
@@ -673,10 +746,14 @@ export const translations: Record<Locale, Translations> = {
     historyLogSwitchToPersonalMode: "Cambiado a Modo Personal.",
     historyLogSwitchToWorkMode: "Cambiado a Modo Trabajo.",
     historyLogPasswordChange: "Contraseña cambiada.",
+    historyLogAddAssignee: (params) => `Asignado añadido: "${params.name}".`,
+    historyLogUpdateAssignee: (params) => `Asignado actualizado: "${params.name}".`,
+    historyLogDeleteAssignee: (params) => `Asignado eliminado: "${params.name}".`,
     historyScopeAccount: "Cuenta",
     historyScopePersonal: "Personal",
     historyScopeWork: "Trabajo",
     historyScopeCategory: "Categoría",
+    historyScopeAssignee: "Asignado",
     motivationalPhrases: [
       "El secreto para salir adelante es empezar.",
       "No mires el reloj; haz lo que él hace. Sigue adelante.",
@@ -720,6 +797,7 @@ export const translations: Record<Locale, Translations> = {
     enableSystemNotifications: "Activer les notifications système",
     systemNotificationsEnabled: "Notifications système activées",
     systemNotificationsBlocked: "Notifications système bloquées",
+    manageAssignees: "Gérer les Personnes Assignées",
     backToCalendar: "Retour au calendrier",
     addCategory: "Ajouter une catégorie",
     editCategory: "Modifier la catégorie",
@@ -742,6 +820,17 @@ export const translations: Record<Locale, Translations> = {
     confirmDeleteCategoryDescription: (params) => `Cette action supprimera la catégorie "${params.categoryName}". Les activités utilisant cette catégorie ne lui seront plus associées. Cette action est irréversible.`,
     categoriesCount: (params) => `Vous avez ${params.count} catégorie${params.count === 1 ? '' : 's'}.`,
     noCategoriesYet: "Aucune catégorie ajoutée pour le moment. Utilisez le formulaire pour ajouter votre première catégorie.",
+    addNewAssignee: "Ajouter une Nouvelle Personne Assignée",
+    editAssignee: "Modifier la Personne Assignée",
+    assigneeNameLabel: "Nom de la Personne Assignée",
+    assigneeNamePlaceholder: "Ex : Jean Dupont, Partenaire",
+    createAssigneeDescription: "Créez une nouvelle personne assignée pour vos tâches personnelles.",
+    updateAssigneeDetails: "Mettez à jour les détails de cette personne assignée.",
+    existingAssignees: "Personnes Assignées Existantes",
+    viewEditManageAssignees: "Visualisez, modifiez et gérez vos personnes assignées.",
+    confirmDeleteAssigneeDescription: (params) => `Cette action supprimera la personne assignée "${params.assigneeName}". Les activités qui lui sont assignées deviendront non assignées. Cette action est irréversible.`,
+    assigneesCount: (params) => `Vous avez ${params.count} personne${params.count === 1 ? '' : 's'} assignée${params.count === 1 ? '' : 's'}.`,
+    noAssigneesYet: "Aucune personne assignée pour le moment. Utilisez le formulaire pour en ajouter.",
     editActivityTitle: "Modifier l'activité",
     addActivityTitle: "Ajouter une nouvelle activité",
     editActivityDescription: (params) => `Mettez à jour les détails de votre activité. Date par défaut : ${params.formattedInitialDate}.`,
@@ -784,6 +873,9 @@ export const translations: Record<Locale, Translations> = {
     daySat: "Sam",
     invalidTimeFormat24Hour: "Format d'heure invalide. Utilisez HH:MM (24 heures).",
     timeFormatDescription24Hour: "Veuillez utiliser le format 24 heures (par exemple, 14:30).",
+    responsiblePersonLabel: "Personne Responsable",
+    selectResponsiblePersonPlaceholder: "Sélectionnez une personne",
+    unassigned: "Non assigné",
     activitiesForDate: (params) => `Activités pour ${params.date}`,
     activitiesForWeek: (params) => `Activités pour la semaine : ${params.startDate} - ${params.endDate}`,
     activitiesForMonth: (params) => `Activités pour ${params.month}`,
@@ -859,6 +951,12 @@ export const translations: Record<Locale, Translations> = {
     toastActivityInOneWeekDescription: (params) => `"${params.activityTitle}" est prévue dans une semaine.`,
     loginSuccessNotificationTitle: "Connexion réussie",
     loginSuccessNotificationDescription: "Bienvenue ! Vous êtes maintenant connecté.",
+    toastAssigneeAddedTitle: "Personne Assignée Ajoutée",
+    toastAssigneeAddedDescription: (params) => `La personne "${params.assigneeName}" a été ajoutée.`,
+    toastAssigneeUpdatedTitle: "Personne Assignée Mise à Jour",
+    toastAssigneeUpdatedDescription: (params) => `La personne "${params.assigneeName}" a été mise à jour.`,
+    toastAssigneeDeletedTitle: "Personne Assignée Supprimée",
+    toastAssigneeDeletedDescription: (params) => `La personne "${params.assigneeName}" a été supprimée.`,
     dashboardTitle: "Tableau de bord des activités",
     dashboardMainDescription: "Suivez la progression de vos activités et consultez des résumés.",
     dashboardChartView: "Vue graphique",
@@ -896,10 +994,14 @@ export const translations: Record<Locale, Translations> = {
     historyLogSwitchToPersonalMode: "Passé en mode Personnel.",
     historyLogSwitchToWorkMode: "Passé en mode Travail.",
     historyLogPasswordChange: "Mot de passe changé.",
+    historyLogAddAssignee: (params) => `Personne assignée ajoutée : "${params.name}".`,
+    historyLogUpdateAssignee: (params) => `Personne assignée mise à jour : "${params.name}".`,
+    historyLogDeleteAssignee: (params) => `Personne assignée supprimée : "${params.name}".`,
     historyScopeAccount: "Compte",
     historyScopePersonal: "Personnel",
     historyScopeWork: "Travail",
     historyScopeCategory: "Catégorie",
+    historyScopeAssignee: "Personne Assignée",
     motivationalPhrases: [
         "Le secret pour avancer, c'est de commencer.",
         "Ne regarde pas l'horloge ; fais ce qu'elle fait. Continue.",
@@ -926,5 +1028,3 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
-
-    

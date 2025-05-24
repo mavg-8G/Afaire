@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Layers, Languages, Sun, Moon, Laptop, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings, MoreVertical, BellRing, BellOff, BellPlus } from 'lucide-react';
+import { Layers, Languages, Sun, Moon, Laptop, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings, MoreVertical, BellRing, BellOff, BellPlus, Users } from 'lucide-react'; // Added Users
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { APP_NAME } from '@/lib/constants';
 import ChangePasswordModal from '@/components/forms/change-password-modal';
@@ -178,6 +178,12 @@ export default function AppHeader() {
             {t('viewHistory')}
         </Link>
       </DropdownMenuItem>
+      <DropdownMenuItem asChild>
+        <Link href="/assignees" className="flex items-center w-full">
+            <Users className="mr-2 h-4 w-4" />
+            {t('manageAssignees')}
+        </Link>
+      </DropdownMenuItem>
       <DropdownMenuSeparator />
       {systemNotificationMenuItem()}
       <DropdownMenuSeparator />
@@ -317,5 +323,3 @@ export default function AppHeader() {
     </>
   );
 }
-
-    

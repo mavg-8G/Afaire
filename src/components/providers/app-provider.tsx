@@ -2,7 +2,7 @@
 "use client";
 import type { ReactNode } from 'react';
 import React, { createContext, useState, useCallback, useEffect, useMemo } from 'react';
-import type { Activity, Todo, Category, AppMode, RecurrenceRule, UINotification, HistoryLogEntry, HistoryLogActionKey, Translations } from '@/lib/types';
+import type { Activity, Todo, Category, AppMode, RecurrenceRule, UINotification, HistoryLogEntry, HistoryLogActionKey, Translations, Assignee } from '@/lib/types';
 import { INITIAL_CATEGORIES }
 from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
@@ -29,14 +29,16 @@ export interface AppContextType {
   activities: Activity[];
   getRawActivities: () => Activity[];
   categories: Category[];
+  assignees: Assignee[]; // New
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
   addActivity: (
-    activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'notes' | 'recurrence' | 'completedOccurrences'> & {
+    activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonId'> & {
       todos?: Omit<Todo, 'id' | 'completed'>[];
       time?: string;
       notes?: string;
       recurrence?: RecurrenceRule | null;
+      responsiblePersonId?: string;
     },
     customCreatedAt?: number
   ) => void;
@@ -50,6 +52,10 @@ export interface AppContextType {
   addCategory: (name: string, iconName: string, mode: AppMode | 'all') => void;
   updateCategory: (categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => void;
   deleteCategory: (categoryId: string) => void;
+  addAssignee: (name: string) => void; // New
+  updateAssignee: (assigneeId: string, newName: string) => void; // New
+  deleteAssignee: (assigneeId: string) => void; // New
+  getAssigneeById: (assigneeId: string) => Assignee | undefined; // New
   isLoading: boolean;
   error: string | null;
 
@@ -81,6 +87,7 @@ export const AppContext = createContext<AppContextType | undefined>(undefined);
 const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities_v2';
 const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities_v2';
 const LOCAL_STORAGE_KEY_ALL_CATEGORIES = 'todoFlowAllCategories_v1';
+const LOCAL_STORAGE_KEY_ASSIGNEES = 'todoFlowAssignees_v1'; // New
 const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode';
 const LOCAL_STORAGE_KEY_IS_AUTHENTICATED = 'todoFlowIsAuthenticated';
 const LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS = 'todoFlowLoginAttempts';
@@ -267,6 +274,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [personalActivities, setPersonalActivities] = useState<Activity[]>([]);
   const [workActivities, setWorkActivities] = useState<Activity[]>([]);
   const [allCategories, setAllCategories] = useState<Category[]>([]);
+  const [assignees, setAssignees] = useState<Assignee[]>([]); // New
   const [appModeState, setAppModeState] = useState<AppMode>('personal');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -370,8 +378,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     const currentBrowserPermission = Notification.permission;
-    console.log(`[AppProvider] Current browser notification permission is: ${currentBrowserPermission}`);
-    // Sync app's state if it's different from browser's actual permission
+    console.log(`[AppProvider] showSystemNotification - Current browser notification permission is: ${currentBrowserPermission}`);
+    
     if (systemNotificationPermission !== currentBrowserPermission) {
         console.log(`[AppProvider] Syncing app's notification permission state. Browser: ${currentBrowserPermission}, App State: ${systemNotificationPermission}`);
         setSystemNotificationPermission(currentBrowserPermission);
@@ -428,12 +436,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           toast({ title: t('systemNotificationsBlocked'), description: "You have denied notification permissions." });
         } else { 
           console.log("[AppProvider] Notification permission prompt dismissed by user (remains 'default').");
+          // Optionally, provide feedback that the prompt was dismissed without a choice.
         }
       } catch (err) {
         console.error("[AppProvider] Error requesting notification permission:", err);
+        // It's possible Notification.permission might have changed due to the error or a browser quirk.
         setSystemNotificationPermission(Notification.permission); 
       }
     } else {
+      // This case should ideally not be reached if the above conditions are exhaustive for typical Notification.permission values
       console.warn(`[AppProvider] Unexpected currentBrowserPermission state: ${currentBrowserPermission}. Syncing app state.`);
       setSystemNotificationPermission(currentBrowserPermission);
     }
@@ -474,14 +485,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (storedAllCategoriesString) {
         try {
           const parsedCategories = JSON.parse(storedAllCategoriesString) as Array<Omit<Category, 'icon'>>;
-          if (Array.isArray(parsedCategories) && parsedCategories.length > 0) { // Check if it's a non-empty array
-            loadedCategories = parsedCategories.map((cat) => ({
+           if (Array.isArray(parsedCategories) && parsedCategories.length > 0) {
+             loadedCategories = parsedCategories.map((cat) => ({
               ...cat,
               icon: getIconComponent(cat.iconName || 'Package'),
               mode: cat.mode || 'all'
             }));
           } else if (parsedCategories === null || (Array.isArray(parsedCategories) && parsedCategories.length === 0)){
-            // If localStorage has an empty array or null, still use INITIAL_CATEGORIES
             console.log("[AppProvider] localStorage categories empty or null, using defaults.");
           }
         } catch (e) {
@@ -489,6 +499,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
       }
       setAllCategories(loadedCategories);
+
+      const storedAssignees = localStorage.getItem(LOCAL_STORAGE_KEY_ASSIGNEES); // New
+      if (storedAssignees) setAssignees(JSON.parse(storedAssignees)); // New
 
 
       const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
@@ -538,7 +551,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } finally {
       setIsLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
 
@@ -560,6 +572,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       localStorage.setItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES, JSON.stringify(serializableCategories));
     }
   }, [allCategories, isLoading]);
+
+  useEffect(() => { // New for assignees
+    if (!isLoading) {
+      localStorage.setItem(LOCAL_STORAGE_KEY_ASSIGNEES, JSON.stringify(assignees));
+    }
+  }, [assignees, isLoading]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -781,11 +799,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   const addActivity = useCallback((
-      activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'notes' | 'recurrence' | 'completedOccurrences'> & {
+      activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'notes' | 'recurrence' | 'completedOccurrences'| 'responsiblePersonId'> & {
         todos?: Omit<Todo, 'id' | 'completed'>[];
         time?: string;
         notes?: string;
         recurrence?: RecurrenceRule | null;
+        responsiblePersonId?: string;
       },
       customCreatedAt?: number
     ) => {
@@ -800,6 +819,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       completed: false,
       recurrence: activityData.recurrence || { type: 'none' },
       completedOccurrences: {},
+      responsiblePersonId: activityData.responsiblePersonId || undefined,
     };
     currentActivitySetter(prev => [...prev, newActivity]);
     addHistoryLogEntry(
@@ -1020,6 +1040,52 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     toast({ title: t('toastCategoryDeletedTitle'), description: toastDesc });
   }, [toast, allCategories, t, addHistoryLogEntry]);
 
+
+  // Assignee Management Functions - New
+  const addAssignee = useCallback((name: string) => {
+    const newAssignee: Assignee = { id: `asg_${uuidv4()}`, name };
+    setAssignees(prev => [...prev, newAssignee]);
+    toast({ title: t('toastAssigneeAddedTitle'), description: t('toastAssigneeAddedDescription', { assigneeName: name }) });
+    addHistoryLogEntry('historyLogAddAssignee', { name }, 'assignee');
+  }, [t, toast, addHistoryLogEntry]);
+
+  const updateAssignee = useCallback((assigneeId: string, newName: string) => {
+    let oldName = "Unknown Assignee";
+    setAssignees(prev =>
+      prev.map(asg => {
+        if (asg.id === assigneeId) {
+          oldName = asg.name;
+          return { ...asg, name: newName };
+        }
+        return asg;
+      })
+    );
+    toast({ title: t('toastAssigneeUpdatedTitle'), description: t('toastAssigneeUpdatedDescription', { assigneeName: newName }) });
+    addHistoryLogEntry('historyLogUpdateAssignee', { name: newName, oldName: oldName !== newName ? oldName : undefined }, 'assignee');
+  }, [t, toast, addHistoryLogEntry]);
+
+  const deleteAssignee = useCallback((assigneeId: string) => {
+    const assigneeToDelete = assignees.find(asg => asg.id === assigneeId);
+    if (!assigneeToDelete) return;
+
+    setAssignees(prev => prev.filter(asg => asg.id !== assigneeId));
+    // Also clear responsiblePersonId from activities
+    const clearAssigneeFromActivities = (activities: Activity[]) =>
+      activities.map(act =>
+        act.responsiblePersonId === assigneeId ? { ...act, responsiblePersonId: undefined } : act
+      );
+    setPersonalActivities(clearAssigneeFromActivities);
+    // No need to clear from workActivities if assignees are personal-only feature
+
+    toast({ title: t('toastAssigneeDeletedTitle'), description: t('toastAssigneeDeletedDescription', { assigneeName: assigneeToDelete.name }) });
+    addHistoryLogEntry('historyLogDeleteAssignee', { name: assigneeToDelete.name }, 'assignee');
+  }, [assignees, t, toast, addHistoryLogEntry]);
+
+  const getAssigneeById = useCallback((assigneeId: string) => {
+    return assignees.find(asg => asg.id === assigneeId);
+  }, [assignees]);
+
+
   const markUINotificationAsRead = useCallback((notificationId: string) => {
     setUINotifications(prev =>
       prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
@@ -1041,6 +1107,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         activities: getRawActivities(),
         getRawActivities,
         categories: filteredCategories,
+        assignees, // New
         appMode: appModeState,
         setAppMode,
         addActivity,
@@ -1054,6 +1121,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addCategory,
         updateCategory,
         deleteCategory,
+        addAssignee, // New
+        updateAssignee, // New
+        deleteAssignee, // New
+        getAssigneeById, // New
         isLoading,
         error,
         isAuthenticated,
@@ -1080,5 +1151,3 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
-
-    

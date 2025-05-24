@@ -27,9 +27,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Trash2, CalendarIcon, Clock, X, Loader2 } from 'lucide-react';
+import { PlusCircle, Trash2, CalendarIcon, Clock, X, Loader2, UserCheck } from 'lucide-react';
 import { useAppStore } from '@/hooks/use-app-store';
-import type { Activity, Todo, RecurrenceRule } from '@/lib/types';
+import type { Activity, Todo, RecurrenceRule, Assignee } from '@/lib/types';
 import CategorySelector from '@/components/shared/category-selector';
 import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -37,7 +37,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format, parseISO, setDate as setDateOfMonth, addMonths, addDays } from 'date-fns';
 import { useTranslations } from '@/contexts/language-context';
-import { enUS, es } from 'date-fns/locale';
+import { enUS, es, fr } from 'date-fns/locale';
 
 interface ActivityModalProps {
   isOpen: boolean;
@@ -62,14 +62,19 @@ const recurrenceSchema = z.object({
 
 
 export default function ActivityModal({ isOpen, onClose, activity, initialDate, instanceDate }: ActivityModalProps) {
-  const { addActivity, updateActivity } = useAppStore();
+  const { addActivity, updateActivity, appMode, assignees } = useAppStore();
   const { toast } = useToast();
   const { t, locale } = useTranslations();
   const [isStartDatePopoverOpen, setIsStartDatePopoverOpen] = useState(false);
   const [isRecurrenceEndDatePopoverOpen, setIsRecurrenceEndDatePopoverOpen] = useState(false);
   const [isSubmittingForm, setIsSubmittingForm] = useState(false);
 
-  const dateLocale = locale === 'es' ? es : enUS;
+  const dateLocale = useMemo(() => {
+    if (locale === 'es') return es;
+    if (locale === 'fr') return fr;
+    return enUS;
+  }, [locale]);
+
 
   const activityFormSchema = z.object({
     title: z.string().min(1, t('activityTitleLabel')),
@@ -79,6 +84,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
     todos: z.array(todoSchema).optional(),
     notes: z.string().optional(),
     recurrence: recurrenceSchema,
+    responsiblePersonId: z.string().optional().nullable(), // New
   });
 
   type ActivityFormData = z.infer<typeof activityFormSchema>;
@@ -112,7 +118,8 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
             endDate: activity.recurrence?.endDate ? new Date(activity.recurrence.endDate) : null,
             daysOfWeek: activity.recurrence?.daysOfWeek || [],
             dayOfMonth: activity.recurrence?.dayOfMonth || baseDate.getDate(),
-          }
+          },
+          responsiblePersonId: activity.responsiblePersonId || null, // New
         });
       } else {
         form.reset({
@@ -127,7 +134,8 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
             endDate: null,
             daysOfWeek: [],
             dayOfMonth: initialDate.getDate(),
-          }
+          },
+          responsiblePersonId: null, // New
         });
       }
       setIsStartDatePopoverOpen(false);
@@ -157,6 +165,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
       notes: data.notes,
       recurrence: recurrenceRule,
       completedOccurrences: activity?.completedOccurrences || {},
+      responsiblePersonId: data.responsiblePersonId === "" ? undefined : data.responsiblePersonId, // Handle empty string from select
     };
 
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -208,21 +217,51 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="categoryId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('categoryLabel')}</FormLabel>
-                  <CategorySelector
-                    value={field.value}
-                    onChange={field.onChange}
-                    placeholder={t('selectCategoryPlaceholder')}
-                  />
-                  <FormMessage />
-                </FormItem>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="categoryId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('categoryLabel')}</FormLabel>
+                    <CategorySelector
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder={t('selectCategoryPlaceholder')}
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {appMode === 'personal' && (
+                <FormField
+                  control={form.control}
+                  name="responsiblePersonId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('responsiblePersonLabel')}</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder={t('selectResponsiblePersonPlaceholder')} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="">{t('unassigned')}</SelectItem>
+                          {assignees.map((assignee: Assignee) => (
+                            <SelectItem key={assignee.id} value={assignee.id}>
+                              {assignee.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               )}
-            />
+            </div>
+            
             <div className="grid grid-cols-2 gap-2 sm:gap-4">
               <FormField
                 control={form.control}

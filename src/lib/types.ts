@@ -28,6 +28,7 @@ export interface Activity {
   isRecurringInstance?: boolean;
   originalInstanceDate?: number;
   masterActivityId?: string;
+  responsiblePersonId?: string; // New field for assignee
 }
 
 export type AppMode = 'personal' | 'work';
@@ -38,6 +39,11 @@ export interface Category {
   icon: LucideIcon;
   iconName: string;
   mode?: AppMode | 'all';
+}
+
+export interface Assignee {
+  id: string;
+  name: string;
 }
 
 export interface UINotification {
@@ -70,12 +76,15 @@ export type HistoryLogActionKey =
   | 'historyLogDeleteCategory'
   | 'historyLogSwitchToPersonalMode'
   | 'historyLogSwitchToWorkMode'
-  | 'historyLogPasswordChange';
+  | 'historyLogPasswordChange'
+  | 'historyLogAddAssignee' // New
+  | 'historyLogUpdateAssignee' // New
+  | 'historyLogDeleteAssignee'; // New
 
 export interface HistoryLogEntry {
   id: string;
   timestamp: number;
   actionKey: HistoryLogActionKey;
   details?: Record<string, string | number | boolean | undefined>;
-  scope: 'account' | 'personal' | 'work' | 'category';
+  scope: 'account' | 'personal' | 'work' | 'category' | 'assignee'; // Added 'assignee'
 }
