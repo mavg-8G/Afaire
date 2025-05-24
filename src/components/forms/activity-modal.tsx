@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import * as z from "zod";
@@ -119,7 +119,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
             daysOfWeek: activity.recurrence?.daysOfWeek || [],
             dayOfMonth: activity.recurrence?.dayOfMonth || baseDate.getDate(),
           },
-          responsiblePersonId: activity.responsiblePersonId || null, // New
+          responsiblePersonId: activity.responsiblePersonId || null, 
         });
       } else {
         form.reset({
@@ -135,7 +135,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
             daysOfWeek: [],
             dayOfMonth: initialDate.getDate(),
           },
-          responsiblePersonId: null, // New
+          responsiblePersonId: null, 
         });
       }
       setIsStartDatePopoverOpen(false);
@@ -165,7 +165,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
       notes: data.notes,
       recurrence: recurrenceRule,
       completedOccurrences: activity?.completedOccurrences || {},
-      responsiblePersonId: data.responsiblePersonId === "" ? undefined : data.responsiblePersonId, // Handle empty string from select
+      responsiblePersonId: data.responsiblePersonId === "" ? undefined : data.responsiblePersonId, 
     };
 
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -322,7 +322,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                         <Clock className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
                       </div>
                     </FormControl>
-                    <FormMessage />
+                     <FormMessage />
                   </FormItem>
                 )}
               />
@@ -584,3 +584,6 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
+
+
+    
