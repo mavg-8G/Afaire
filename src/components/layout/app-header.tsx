@@ -43,7 +43,6 @@ export default function AppHeader() {
     requestSystemNotificationPermission,
   } = useAppStore();
   const router = useRouter();
-  // currentPhrase state and useEffect for motivational phrases removed from here
 
   const dateLocale = useMemo(() => {
     if (locale === 'es') return es;
@@ -170,7 +169,7 @@ export default function AppHeader() {
     }
   };
 
-  const sharedOptionsItems = (
+  const sharedOptionsItems = (isMobileMenu: boolean) => (
     <>
       <DropdownMenuItem asChild>
         <Link href="/history" className="flex items-center w-full">
@@ -178,12 +177,22 @@ export default function AppHeader() {
             {t('viewHistory')}
         </Link>
       </DropdownMenuItem>
-      <DropdownMenuItem asChild>
-        <Link href="/assignees" className="flex items-center w-full">
-            <Users className="mr-2 h-4 w-4" />
-            {t('manageAssignees')}
-        </Link>
-      </DropdownMenuItem>
+      {!isMobileMenu && ( // Only hide from desktop general options if it's NOT mobile
+         <DropdownMenuItem asChild>
+            <Link href="/assignees" className="flex items-center w-full">
+                <Users className="mr-2 h-4 w-4" />
+                {t('manageAssignees')}
+            </Link>
+        </DropdownMenuItem>
+      )}
+      {isMobileMenu && ( // Add to mobile menu
+         <DropdownMenuItem asChild>
+            <Link href="/assignees" className="flex items-center w-full">
+                <Users className="mr-2 h-4 w-4" />
+                {t('manageAssignees')}
+            </Link>
+        </DropdownMenuItem>
+      )}
       <DropdownMenuSeparator />
       {systemNotificationMenuItem()}
       <DropdownMenuSeparator />
@@ -270,15 +279,20 @@ export default function AppHeader() {
                   <Layers className="h-5 w-5" />
                 </Button>
               </Link>
+              <Link href="/assignees" passHref>
+                <Button variant="outline" size="icon" aria-label={t('manageAssignees')}>
+                  <Users className="h-5 w-5" />
+                </Button>
+              </Link>
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="icon" aria-label={t('moreOptionsDesktop')}>
-                    <MoreHorizontal className="h-5 w-5" /> {/* Changed from Settings icon */}
+                    <MoreHorizontal className="h-5 w-5" /> 
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  {sharedOptionsItems}
+                  {sharedOptionsItems(false)} 
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -309,7 +323,7 @@ export default function AppHeader() {
                       {t('manageCategories')}
                     </Link>
                   </DropdownMenuItem>
-                  {sharedOptionsItems}
+                  {sharedOptionsItems(true)} 
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -320,5 +334,4 @@ export default function AppHeader() {
     </>
   );
 }
-
     
