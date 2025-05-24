@@ -68,7 +68,7 @@ function generateRecurringInstances(
 
   const instances: Activity[] = [];
   const recurrence = masterActivity.recurrence;
-  let currentDate = new Date(masterActivity.createdAt); 
+  let currentDate = new Date(masterActivity.createdAt);
 
   if (isBefore(currentDate, viewStartDate)) {
       if (recurrence.type === 'daily') {
@@ -77,7 +77,7 @@ function generateRecurringInstances(
           let tempDate = startOfWeek(viewStartDate, { weekStartsOn: 0 });
           while(isBefore(tempDate, new Date(masterActivity.createdAt)) || !recurrence.daysOfWeek.includes(getDay(tempDate))) {
               tempDate = addDays(tempDate, 1);
-              if (isAfter(tempDate, viewEndDate) && isAfter(tempDate, currentDate)) break; 
+              if (isAfter(tempDate, viewEndDate) && isAfter(tempDate, currentDate)) break;
           }
           currentDate = tempDate;
       } else if (recurrence.type === 'monthly' && recurrence.dayOfMonth) {
@@ -94,10 +94,10 @@ function generateRecurringInstances(
   }
 
   const seriesEndDate = recurrence.endDate ? new Date(recurrence.endDate) : null;
-  let iterations = 0; 
-  const maxIterations = 366 * 2; 
+  let iterations = 0;
+  const maxIterations = 366 * 2;
 
-  while (iterations < maxIterations && isBefore(currentDate, addDays(viewEndDate,1))) { 
+  while (iterations < maxIterations && isBefore(currentDate, addDays(viewEndDate,1))) {
     iterations++;
     if (seriesEndDate && isAfter(currentDate, seriesEndDate)) break;
     if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
@@ -114,7 +114,7 @@ function generateRecurringInstances(
         isValidOccurrence = true;
         break;
       case 'weekly':
-        if (recurrence.daysOfWeek?.includes(getDay(currentDate))) { 
+        if (recurrence.daysOfWeek?.includes(getDay(currentDate))) {
           isValidOccurrence = true;
         }
         break;
@@ -193,7 +193,7 @@ export default function ActivityCalendarView() {
     } else if (viewMode === 'weekly') {
       viewStartDate = startOfWeek(selectedDate, { locale: dateLocale });
       viewEndDate = endOfWeek(selectedDate, { locale: dateLocale });
-    } else { 
+    } else {
       viewStartDate = startOfMonth(selectedDate);
       viewEndDate = endOfMonth(selectedDate);
     }
@@ -230,33 +230,33 @@ export default function ActivityCalendarView() {
             : !!b.completed;
 
         if (aIsCompleted !== bIsCompleted) {
-            return aIsCompleted ? 1 : -1; 
+            return aIsCompleted ? 1 : -1;
         }
 
         const aTime = a.time ? parseInt(a.time.replace(':', ''), 10) : Infinity;
         const bTime = b.time ? parseInt(b.time.replace(':', ''), 10) : Infinity;
 
-        if (a.time && !b.time) return -1; 
-        if (!a.time && b.time) return 1;  
+        if (a.time && !b.time) return -1;
+        if (!a.time && b.time) return 1;
 
         if (a.time && b.time && aTime !== bTime) {
             return aTime - bTime;
         }
-        
+
         const aDate = a.originalInstanceDate ? new Date(a.originalInstanceDate).getTime() : new Date(a.createdAt).getTime();
         const bDate = b.originalInstanceDate ? new Date(b.originalInstanceDate).getTime() : new Date(b.createdAt).getTime();
         if (aDate !== bDate) {
             return aDate - bDate;
         }
 
-        return 0; 
+        return 0;
     });
-    
+
     const allCompleted = sortedActivities.length > 0 && sortedActivities.every(act => {
       const isInstanceCompleted = act.isRecurringInstance && act.originalInstanceDate
         ? !!act.completedOccurrences?.[formatISO(new Date(act.originalInstanceDate), { representation: 'date' })]
         : !!act.completed;
-      
+
       if (!isInstanceCompleted) return false;
       if (act.todos && act.todos.length > 0) {
         return act.todos.every(todo => todo.completed);
@@ -307,7 +307,7 @@ export default function ActivityCalendarView() {
       const instanceOrDefaultDate = activityInstanceOrMaster.originalInstanceDate
         ? new Date(activityInstanceOrMaster.originalInstanceDate)
         : new Date(masterActivity.createdAt);
-      setDateForModal(instanceOrDefaultDate); 
+      setDateForModal(instanceOrDefaultDate);
       setEditingInstanceDate(instanceOrDefaultDate);
       setIsActivityModalOpen(true);
     }
@@ -315,8 +315,8 @@ export default function ActivityCalendarView() {
 
   const handleAddNewActivityGeneric = () => {
     setEditingActivity(undefined);
-    setDateForModal(selectedDate || new Date()); 
-    setEditingInstanceDate(undefined); 
+    setDateForModal(selectedDate || new Date());
+    setEditingInstanceDate(undefined);
     setIsActivityModalOpen(true);
   };
 
@@ -501,7 +501,7 @@ export default function ActivityCalendarView() {
             isOpen={isActivityModalOpen}
             onClose={handleCloseModal}
             activity={editingActivity}
-            initialDate={dateForModal} 
+            initialDate={dateForModal}
             instanceDate={editingInstanceDate}
           />
         )}
@@ -528,11 +528,11 @@ export default function ActivityCalendarView() {
         variant="ghost"
         onClick={handleAddNewActivityGeneric}
         className={cn(
-            "fixed bottom-10 right-6 z-50 shadow-lg",
+            "fixed bottom-18 right-6 z-50 shadow-lg", 
             "bg-[hsl(var(--accent))]/15 text-accent-foreground backdrop-blur-md border border-border/50 hover:bg-[hsl(var(--accent))]/30",
-            "flex items-center justify-center", // Common flex properties
-            "h-14 w-14 rounded-full p-0", // Mobile: round, icon-only
-            "md:h-12 md:w-auto md:rounded-2xl md:px-4 md:gap-2" // Desktop: squircle, text + icon
+            "flex items-center justify-center",
+            "h-14 w-14 rounded-full p-0",
+            "md:h-12 md:w-auto md:rounded-2xl md:px-4 md:gap-2"
         )}
         aria-label={t('addActivity')}
       >
@@ -543,3 +543,5 @@ export default function ActivityCalendarView() {
   );
 }
 
+
+    
