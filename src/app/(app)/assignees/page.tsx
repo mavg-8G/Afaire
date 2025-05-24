@@ -16,9 +16,8 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-// import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"; // Removed
 import { useAppStore } from '@/hooks/use-app-store';
-import type { Assignee } from '@/lib/types'; // AppMode removed from imports here as not used
+import type { Assignee } from '@/lib/types';
 import { Trash2, PlusCircle, Edit3, XCircle, ArrowLeft, Users } from 'lucide-react';
 import {
   AlertDialog,
@@ -33,18 +32,18 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslations } from '@/contexts/language-context';
-// import { FormDescription } from "@/components/ui/form"; // Removed as not used
+import { useRouter } from 'next/navigation'; // Import useRouter
 
 const assigneeFormSchema = z.object({
   name: z.string().min(1, "Assignee name is required."),
-  // mode: z.enum(['personal', 'work', 'all']).default('all'), // Removed mode from schema
 });
 
 type AssigneeFormData = z.infer<typeof assigneeFormSchema>;
 
 export default function ManageAssigneesPage() {
-  const { assignees, addAssignee, updateAssignee, deleteAssignee } = useAppStore(); // Removed appMode
+  const { assignees, addAssignee, updateAssignee, deleteAssignee, appMode } = useAppStore();
   const { t } = useTranslations();
+  const router = useRouter(); // Initialize useRouter
   const [assigneeToDelete, setAssigneeToDelete] = useState<string | null>(null);
   const [editingAssignee, setEditingAssignee] = useState<Assignee | null>(null);
 
@@ -52,29 +51,33 @@ export default function ManageAssigneesPage() {
     resolver: zodResolver(assigneeFormSchema),
     defaultValues: {
       name: "",
-      // mode: appMode, // Removed mode default value
     },
   });
+
+  useEffect(() => {
+    if (appMode === 'work') {
+      router.replace('/');
+    }
+  }, [appMode, router]);
 
   useEffect(() => {
     if (editingAssignee) {
       form.reset({
         name: editingAssignee.name,
-        // mode: editingAssignee.mode || appMode, // Removed mode reset
       });
     } else {
-      form.reset({ name: "" }); // Removed mode reset
+      form.reset({ name: "" });
     }
-  }, [editingAssignee, form]); // Removed appMode from dependencies
+  }, [editingAssignee, form]);
 
   const onSubmit = (data: AssigneeFormData) => {
     if (editingAssignee) {
-      updateAssignee(editingAssignee.id, { name: data.name }); // Removed mode update
+      updateAssignee(editingAssignee.id, { name: data.name });
       setEditingAssignee(null);
     } else {
-      addAssignee(data.name); // Removed mode add
+      addAssignee(data.name);
     }
-    form.reset({ name: "" }); // Removed mode reset
+    form.reset({ name: "" });
   };
 
   const handleDeleteAssignee = (assigneeId: string) => {
@@ -82,7 +85,7 @@ export default function ManageAssigneesPage() {
     setAssigneeToDelete(null);
     if (editingAssignee?.id === assigneeId) {
       setEditingAssignee(null);
-      form.reset({ name: "" }); // Removed mode reset
+      form.reset({ name: "" });
     }
   };
 
@@ -92,15 +95,8 @@ export default function ManageAssigneesPage() {
 
   const handleCancelEdit = () => {
     setEditingAssignee(null);
-    form.reset({ name: "" }); // Removed mode reset
+    form.reset({ name: "" });
   };
-
-  // const getModeTranslation = (modeValue: 'personal' | 'work' | 'all' | undefined) => { // Removed
-  //   if (modeValue === 'personal') return t('modePersonal');
-  //   if (modeValue === 'work') return t('modeWork');
-  //   if (modeValue === 'all') return t('modeAll');
-  //   return '';
-  // };
 
   return (
     <div className="flex flex-col flex-grow min-h-screen">
@@ -137,7 +133,6 @@ export default function ManageAssigneesPage() {
                       </FormItem>
                     )}
                   />
-                  {/* Mode RadioGroup Removed */}
                   <div className="flex space-x-2">
                     <Button type="submit" className="flex-grow">
                       {editingAssignee ? <Edit3 className="mr-2 h-5 w-5" /> : <PlusCircle className="mr-2 h-5 w-5" />}
@@ -169,7 +164,6 @@ export default function ManageAssigneesPage() {
                         <div className="flex items-center gap-3">
                           <Users className="h-5 w-5 text-primary" />
                           <span className="font-medium">{assignee.name}</span>
-                          {/* Mode display removed */}
                         </div>
                         <div className="flex items-center">
                           <Button variant="ghost" size="icon" onClick={() => handleEditAssignee(assignee)} className="text-primary hover:text-primary/80">
@@ -218,4 +212,3 @@ export default function ManageAssigneesPage() {
     </div>
   );
 }
-
