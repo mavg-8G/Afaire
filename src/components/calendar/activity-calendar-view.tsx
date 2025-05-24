@@ -360,7 +360,7 @@ export default function ActivityCalendarView() {
     } else if (date) {
         setCurrentDisplayMonth(date);
     }
-    if (date) setDateForModal(date); // This line was missing for the FAB context
+    if (date) setDateForModal(date);
   };
 
   const handleTodayButtonClick = () => {
@@ -467,7 +467,7 @@ export default function ActivityCalendarView() {
           </CardHeader>
           <CardContent className="flex-grow">
             {selectedDate && activitiesForView.length > 0 ? (
-              <ScrollArea className="h-[calc(100vh-24rem)] sm:h-[calc(100vh-22rem)] pr-1"> {/* Increased height */}
+              <ScrollArea className="h-[calc(100vh-24rem)] sm:h-[calc(100vh-22rem)] pr-1">
                 <div className="space-y-3">
                   {activitiesForView.map(activity => (
                     <ActivityListItem
@@ -528,7 +528,7 @@ export default function ActivityCalendarView() {
         variant="ghost"
         onClick={handleAddNewActivityGeneric}
         className={cn(
-            "fixed bottom-10 right-6 z-50 shadow-lg", // Reverted from bottom-18
+            "fixed bottom-12 right-6 z-50 shadow-lg", // Adjusted from bottom-10
             "bg-[hsl(var(--accent))]/15 text-accent-foreground backdrop-blur-md border border-border/50 hover:bg-[hsl(var(--accent))]/30",
             "flex items-center justify-center",
             // Mobile: Round button
