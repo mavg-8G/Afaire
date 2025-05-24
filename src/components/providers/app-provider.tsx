@@ -11,7 +11,7 @@ import {
   isSameDay, formatISO, parseISO,
   addDays, addWeeks, addMonths,
   subDays, subWeeks,
-  startOfDay, endOfDay,
+  startOfDay as dateFnsStartOfDay, endOfDay as dateFnsEndOfDay, // Renamed to avoid conflict
   isBefore, isAfter,
   getDay, getDate,
   isWithinInterval,
@@ -21,7 +21,7 @@ import {
 } from 'date-fns';
 import * as Icons from 'lucide-react';
 import { useTranslations } from '@/contexts/language-context';
-import { enUS, es } from 'date-fns/locale';
+import { enUS, es, fr } from 'date-fns/locale'; // Added fr
 import { useTheme } from 'next-themes';
 
 
@@ -48,7 +48,7 @@ export interface AppContextType {
   deleteTodoFromActivity: (activityId: string, todoId: string, masterActivityId?: string) => void;
   getCategoryById: (categoryId: string) => Category | undefined;
   addCategory: (name: string, iconName: string, mode: AppMode | 'all') => void;
-  updateCategory: (categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData: Category) => void;
+  updateCategory: (categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => void;
   deleteCategory: (categoryId: string) => void;
   isLoading: boolean;
   error: string | null;
@@ -137,7 +137,7 @@ function generateFutureInstancesForNotifications(
       if (recurrence.type === 'daily') {
           currentDate = rangeStartDate;
       } else if (recurrence.type === 'weekly' && recurrence.daysOfWeek && recurrence.daysOfWeek.length > 0) {
-          let tempDate = startOfDay(rangeStartDate);
+          let tempDate = dateFnsStartOfDay(rangeStartDate);
           while(isBefore(tempDate, new Date(masterActivity.createdAt)) || !recurrence.daysOfWeek.includes(getDay(tempDate)) || isBefore(tempDate, rangeStartDate)) {
               tempDate = addDays(tempDate, 1);
               if (isAfter(tempDate, rangeEndDate)) break;
@@ -272,7 +272,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const { t, locale } = useTranslations();
-  const dateLocale = locale === 'es' ? es : enUS;
+  
+  const dateFnsLocale = useMemo(() => {
+    if (locale === 'es') return es;
+    if (locale === 'fr') return fr;
+    return enUS;
+  }, [locale]);
 
   const [lastNotificationCheckDay, setLastNotificationCheckDay] = useState<number | null>(null);
   const [notifiedToday, setNotifiedToday] = useState<Set<string>>(new Set());
@@ -309,7 +314,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
         metaThemeColor.setAttribute('content', hexColor);
         } else {
-            console.warn("Could not parse --background HSL string:", backgroundHslString);
+            console.warn("[AppProvider] Could not parse --background HSL string for theme-color:", backgroundHslString);
         }
     }, 0);
 
@@ -390,7 +395,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }));
           }
         } catch (e) {
-          console.error("Failed to parse categories from localStorage, using defaults.", e);
+          console.error("[AppProvider] Failed to parse categories from localStorage, using defaults.", e);
         }
       }
       setAllCategories(loadedCategories);
@@ -408,7 +413,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const expiryTime = parseInt(storedExpiry, 10);
         if (Date.now() > expiryTime) {
           initialAuth = false;
-          logout(); // Call logout which handles cleanup and broadcast
+          logout(); 
         } else {
           initialAuth = true;
           setSessionExpiryTimestampState(expiryTime);
@@ -435,7 +440,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
 
     } catch (err) {
-      console.error("Failed to load data from local storage", err);
+      console.error("[AppProvider] Failed to load data from local storage", err);
       setError("Failed to load saved data.");
        if (allCategories.length === 0) {
         setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
@@ -443,7 +448,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array ensures this runs only once on mount
 
 
   useEffect(() => {
@@ -536,49 +542,81 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 const requestSystemNotificationPermission = useCallback(async () => {
     if (typeof window === 'undefined' || !('Notification' in window)) {
-      console.warn("This browser does not support desktop notification.");
-      setSystemNotificationPermission('denied'); // Or 'default' if you want to allow future checks
-      return;
-    }
-    const currentPermission = Notification.permission;
-    if (currentPermission === 'default') {
-      console.log("Requesting notification permission via UI action...");
-      try {
-        const permission = await Notification.requestPermission();
-        setSystemNotificationPermission(permission);
-        console.log(`Notification permission state after UI request: ${permission}`);
-      } catch (err) {
-        console.error("Error requesting notification permission via UI:", err);
-        setSystemNotificationPermission('default'); // Fallback to default if error
-      }
-    } else {
-      // If already granted or denied, just ensure state is in sync
-      setSystemNotificationPermission(currentPermission);
-    }
-  }, []);
-
-
-  const showSystemNotification = useCallback((title: string, description: string) => {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
-      console.warn("This browser does not support desktop notification. Unable to show: ", title);
+      console.warn("[AppProvider] This browser does not support desktop notification.");
+      setSystemNotificationPermission('denied');
       return;
     }
 
     const currentBrowserPermission = Notification.permission;
-    // Update state if it's out of sync, though requestSystemNotificationPermission should handle this
+    console.log(`[AppProvider] requestSystemNotificationPermission called. Current browser permission is: ${currentBrowserPermission}`);
+
+    if (currentBrowserPermission === 'granted') {
+      console.log("[AppProvider] Notification permission already granted by browser. Syncing app state.");
+      setSystemNotificationPermission('granted');
+      // toast({ title: t('systemNotificationsEnabled') }); // Optional: notify user
+      return;
+    }
+
+    if (currentBrowserPermission === 'denied') {
+      console.log("[AppProvider] Notification permission is 'denied' by browser. User needs to change this in browser/OS settings.");
+      setSystemNotificationPermission('denied');
+      toast({ title: t('systemNotificationsBlocked'), description: "Please check your browser's site settings to allow notifications." , duration: 5000});
+      return;
+    }
+
+    // currentBrowserPermission should be 'default' here
+    if (currentBrowserPermission === 'default') {
+      console.log("[AppProvider] Notification permission is 'default'. Requesting permission from user...");
+      try {
+        const permissionResult = await Notification.requestPermission();
+        // permissionResult will be 'granted', 'denied', or 'default' (if prompt dismissed)
+        console.log(`[AppProvider] Notification.requestPermission() result: ${permissionResult}`);
+        setSystemNotificationPermission(permissionResult); // Update app state with the result
+
+        if (permissionResult === 'granted') {
+          console.log("[AppProvider] Notification permission granted by user.");
+          toast({ title: t('systemNotificationsEnabled'), description: "You will now receive system notifications." });
+        } else if (permissionResult === 'denied') {
+          console.log("[AppProvider] Notification permission denied by user via prompt.");
+          toast({ title: t('systemNotificationsBlocked'), description: "You have denied notification permissions." });
+        } else { // 'default' - prompt was dismissed
+          console.log("[AppProvider] Notification permission prompt dismissed by user (remains 'default').");
+        }
+      } catch (err) {
+        console.error("[AppProvider] Error requesting notification permission:", err);
+        setSystemNotificationPermission(Notification.permission); // Re-sync with actual browser state on error
+      }
+    } else {
+      // Should not be reached if logic is correct, but as a fallback:
+      console.warn(`[AppProvider] Unexpected currentBrowserPermission state: ${currentBrowserPermission}. Syncing app state.`);
+      setSystemNotificationPermission(currentBrowserPermission);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t, toast]); // Added t and toast as dependencies because they are used now
+
+
+  const showSystemNotification = useCallback((title: string, description: string) => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      console.warn("[AppProvider] This browser does not support desktop notification. Unable to show: ", title);
+      return;
+    }
+
+    const currentBrowserPermission = Notification.permission;
+    // Sync app's state if it's different from browser's actual permission
     if (systemNotificationPermission !== currentBrowserPermission) {
+        console.log(`[AppProvider] Syncing app's notification permission state. Browser: ${currentBrowserPermission}, App State: ${systemNotificationPermission}`);
         setSystemNotificationPermission(currentBrowserPermission);
     }
 
     if (currentBrowserPermission === 'granted') {
-      console.log("Permission granted. Showing system notification:", title);
+      console.log("[AppProvider] Permission 'granted'. Showing system notification:", title);
       new Notification(title, {
         body: description,
-        icon: '/icons/icon-192x192.png',
+        icon: '/icons/icon-192x192.png', // Ensure this icon exists in public/icons
         lang: locale,
       });
     } else {
-      console.log(`System notification for "${title}" was not shown because permission is ${currentBrowserPermission}. User should enable via settings.`);
+      console.log(`[AppProvider] System notification for "${title}" was not shown because permission is '${currentBrowserPermission}'. User can enable via settings menu.`);
     }
   }, [locale, systemNotificationPermission]);
 
@@ -605,7 +643,7 @@ const requestSystemNotificationPermission = useCallback(async () => {
 
 
         if (masterActivity.time) {
-          const todayInstances = generateFutureInstancesForNotifications(masterActivity, today, endOfDay(today));
+          const todayInstances = generateFutureInstancesForNotifications(masterActivity, today, dateFnsEndOfDay(today));
           todayInstances.forEach(instance => {
             const occurrenceDateKey = formatISO(instance.instanceDate, { representation: 'date' });
             const notificationKey5Min = `${masterId}:${occurrenceDateKey}:5min_soon`;
@@ -634,7 +672,7 @@ const requestSystemNotificationPermission = useCallback(async () => {
 
         if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
           const recurrenceType = masterActivity.recurrence.type;
-          const futureCheckEndDate = addDays(today, 8);
+          const futureCheckEndDate = addDays(today, 8); // Check up to 8 days ahead for weekly/monthly notifications
           const upcomingInstances = generateFutureInstancesForNotifications(masterActivity, addDays(today,1), futureCheckEndDate);
 
           upcomingInstances.forEach(instance => {
@@ -654,35 +692,33 @@ const requestSystemNotificationPermission = useCallback(async () => {
                 setNotifiedToday(prev => new Set(prev).add(notificationFullKey));
               }
             };
+            
+            const oneDayBeforeInstance = dateFnsStartOfDay(subDays(instance.instanceDate, 1));
+            const twoDaysBeforeInstance = dateFnsStartOfDay(subDays(instance.instanceDate, 2));
+            const oneWeekBeforeInstance = dateFnsStartOfDay(subWeeks(instance.instanceDate, 1));
 
             if (recurrenceType === 'weekly') {
-              const oneDayBefore = subDays(instance.instanceDate, 1);
-              if (isSameDay(today, oneDayBefore)) {
+              if (isSameDay(today, oneDayBeforeInstance)) {
                 notify('1day_weekly', 'toastActivityTomorrowTitle', 'toastActivityTomorrowDescription', { activityTitle });
               }
             } else if (recurrenceType === 'monthly') {
-              const oneWeekBefore = subWeeks(instance.instanceDate, 1);
-              if (isSameDay(today, oneWeekBefore)) {
+              if (isSameDay(today, oneWeekBeforeInstance)) {
                  notify('1week_monthly', 'toastActivityInOneWeekTitle', 'toastActivityInOneWeekDescription', { activityTitle });
               }
-
-              const twoDaysBefore = subDays(instance.instanceDate, 2);
-              if (isSameDay(today, twoDaysBefore)) {
+              if (isSameDay(today, twoDaysBeforeInstance)) {
                  notify('2days_monthly', 'toastActivityInTwoDaysTitle', 'toastActivityInTwoDaysDescription', { activityTitle });
               }
-
-              const oneDayBefore = subDays(instance.instanceDate, 1);
-              if (isSameDay(today, oneDayBefore)) {
+              if (isSameDay(today, oneDayBeforeInstance)) {
                  notify('1day_monthly', 'toastActivityTomorrowTitle', 'toastActivityTomorrowDescription', { activityTitle });
               }
             }
           });
         }
       });
-    }, 60000); // Check every minute
+    }, 60000); 
 
     return () => clearInterval(intervalId);
-  }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification, dateLocale, showSystemNotification, systemNotificationPermission]);
+  }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, addUINotification, dateFnsLocale, showSystemNotification, systemNotificationPermission]);
 
 
   useEffect(() => {
@@ -843,7 +879,7 @@ const requestSystemNotificationPermission = useCallback(async () => {
     );
     addHistoryLogEntry(
         appModeState === 'personal' ? 'historyLogToggleActivityCompletionPersonal' : 'historyLogToggleActivityCompletionWork',
-        { title: activityTitleForLog, completed: completedState },
+        { title: activityTitleForLog, completed: completedState ? 1 : 0 }, // Sending 1 or 0 for boolean
         appModeState
     );
   }, [currentActivitySetter, appModeState, addHistoryLogEntry, personalActivities, workActivities]);
@@ -914,13 +950,22 @@ const requestSystemNotificationPermission = useCallback(async () => {
 
   }, [toast, t, addHistoryLogEntry]);
 
-  const updateCategory = useCallback((categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData: Category) => {
+  const updateCategory = useCallback((categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => {
+    let categoryNameForLog = updates.name;
+    let categoryModeForLog = updates.mode;
+
     setAllCategories(prev =>
       prev.map(cat => {
         if (cat.id === categoryId) {
+          const originalName = cat.name;
+          const originalMode = cat.mode;
           const newName = updates.name !== undefined ? updates.name : cat.name;
           const newIconName = updates.iconName !== undefined ? updates.iconName : cat.iconName;
           const newMode = updates.mode !== undefined ? updates.mode : cat.mode;
+
+          if (!categoryNameForLog) categoryNameForLog = newName; // Use new name if updates.name was undefined
+          if (!categoryModeForLog) categoryModeForLog = newMode;
+
           return {
             ...cat,
             name: newName,
@@ -932,8 +977,9 @@ const requestSystemNotificationPermission = useCallback(async () => {
         return cat;
       })
     );
-    const catName = updates.name || oldCategoryData.name || "";
-    const catMode = updates.mode || oldCategoryData.mode || "all";
+    
+    const catName = categoryNameForLog || oldCategoryData?.name || "Unknown Category";
+    const catMode = categoryModeForLog || oldCategoryData?.mode || "all";
     const toastDesc = t('toastCategoryUpdatedDescription', { categoryName: catName });
     toast({ title: t('toastCategoryUpdatedTitle'), description: toastDesc });
 
