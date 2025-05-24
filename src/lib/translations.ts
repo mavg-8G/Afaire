@@ -189,6 +189,8 @@ export type Translations = {
   toastActivityInTwoDaysDescription: (params: { activityTitle: string }) => string;
   toastActivityInOneWeekTitle: string;
   toastActivityInOneWeekDescription: (params: { activityTitle: string }) => string;
+  loginSuccessNotificationTitle: string;
+  loginSuccessNotificationDescription: string;
 
 
   // Dashboard Page
@@ -409,6 +411,8 @@ export const translations: Record<Locale, Translations> = {
     toastActivityInTwoDaysDescription: (params) => `"${params.activityTitle}" is scheduled in 2 days.`,
     toastActivityInOneWeekTitle: "Activity Reminder: In 1 Week",
     toastActivityInOneWeekDescription: (params) => `"${params.activityTitle}" is scheduled in one week.`,
+    loginSuccessNotificationTitle: "Login Successful",
+    loginSuccessNotificationDescription: "Welcome back! You are now logged in.",
     dashboardTitle: "Activity Dashboard",
     dashboardMainDescription: "Track your activity progress and view summaries.",
     dashboardChartView: "Chart View",
@@ -630,6 +634,8 @@ export const translations: Record<Locale, Translations> = {
     toastActivityInTwoDaysDescription: (params) => `"${params.activityTitle}" está programada en 2 días.`,
     toastActivityInOneWeekTitle: "Recordatorio: En 1 Semana",
     toastActivityInOneWeekDescription: (params) => `"${params.activityTitle}" está programada en una semana.`,
+    loginSuccessNotificationTitle: "Inicio de Sesión Exitoso",
+    loginSuccessNotificationDescription: "¡Bienvenido de nuevo! Has iniciado sesión.",
     dashboardTitle: "Panel de Actividades",
     dashboardMainDescription: "Sigue el progreso de tus actividades y visualiza resúmenes.",
     dashboardChartView: "Vista de Gráfico",
@@ -851,6 +857,8 @@ export const translations: Record<Locale, Translations> = {
     toastActivityInTwoDaysDescription: (params) => `"${params.activityTitle}" est prévue dans 2 jours.`,
     toastActivityInOneWeekTitle: "Rappel d'activité : Dans 1 semaine",
     toastActivityInOneWeekDescription: (params) => `"${params.activityTitle}" est prévue dans une semaine.`,
+    loginSuccessNotificationTitle: "Connexion réussie",
+    loginSuccessNotificationDescription: "Bienvenue ! Vous êtes maintenant connecté.",
     dashboardTitle: "Tableau de bord des activités",
     dashboardMainDescription: "Suivez la progression de vos activités et consultez des résumés.",
     dashboardChartView: "Vue graphique",

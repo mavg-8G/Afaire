@@ -2,7 +2,7 @@
 "use client";
 import type { ReactNode } from 'react';
 import React, { createContext, useState, useCallback, useEffect, useMemo } from 'react';
-import type { Activity, Todo, Category, AppMode, RecurrenceRule, UINotification, HistoryLogEntry, HistoryLogActionKey } from '@/lib/types';
+import type { Activity, Todo, Category, AppMode, RecurrenceRule, UINotification, HistoryLogEntry, HistoryLogActionKey, Translations } from '@/lib/types';
 import { INITIAL_CATEGORIES }
 from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
@@ -352,6 +352,93 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setHistoryLog(prevLog => [newEntry, ...prevLog.slice(0, 99)]);
   }, []);
 
+  const addUINotification = useCallback((data: Omit<UINotification, 'id' | 'timestamp' | 'read'>) => {
+    const newNotification: UINotification = {
+      ...data,
+      id: uuidv4(),
+      timestamp: Date.now(),
+      read: false,
+    };
+    setUINotifications(prev => [newNotification, ...prev.slice(0, 49)]);
+  }, []);
+
+  const showSystemNotification = useCallback((title: string, description: string) => {
+    console.log(`[AppProvider] Attempting to show system notification. Title: "${title}"`);
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      console.warn("[AppProvider] This browser does not support desktop notification. Unable to show: ", title);
+      return;
+    }
+
+    const currentBrowserPermission = Notification.permission;
+    console.log(`[AppProvider] Current browser notification permission is: ${currentBrowserPermission}`);
+    // Sync app's state if it's different from browser's actual permission
+    if (systemNotificationPermission !== currentBrowserPermission) {
+        console.log(`[AppProvider] Syncing app's notification permission state. Browser: ${currentBrowserPermission}, App State: ${systemNotificationPermission}`);
+        setSystemNotificationPermission(currentBrowserPermission);
+    }
+
+    if (currentBrowserPermission === 'granted') {
+      console.log("[AppProvider] Permission 'granted'. Showing system notification:", title);
+      new Notification(title, {
+        body: description,
+        icon: '/icons/icon-192x192.png',
+        lang: locale,
+      });
+    } else {
+      console.log(`[AppProvider] System notification for "${title}" was not shown because permission is '${currentBrowserPermission}'. User can enable via settings menu.`);
+    }
+  }, [locale, systemNotificationPermission]);
+
+  const requestSystemNotificationPermission = useCallback(async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      console.warn("[AppProvider] This browser does not support desktop notification.");
+      setSystemNotificationPermission('denied');
+      return;
+    }
+
+    const currentBrowserPermission = Notification.permission;
+    console.log(`[AppProvider] requestSystemNotificationPermission called. Current browser permission is: ${currentBrowserPermission}`);
+
+    if (currentBrowserPermission === 'granted') {
+      console.log("[AppProvider] Notification permission already granted by browser. Syncing app state.");
+      setSystemNotificationPermission('granted');
+      toast({ title: t('systemNotificationsEnabled')});
+      return;
+    }
+
+    if (currentBrowserPermission === 'denied') {
+      console.log("[AppProvider] Notification permission is 'denied' by browser. User needs to change this in browser/OS settings.");
+      setSystemNotificationPermission('denied');
+      toast({ title: t('systemNotificationsBlocked'), description: "Please check your browser's site settings to allow notifications." , duration: 5000});
+      return;
+    }
+
+    if (currentBrowserPermission === 'default') {
+      console.log("[AppProvider] Notification permission is 'default'. Requesting permission from user...");
+      try {
+        const permissionResult = await Notification.requestPermission();
+        console.log(`[AppProvider] Notification.requestPermission() result: ${permissionResult}`);
+        setSystemNotificationPermission(permissionResult); 
+
+        if (permissionResult === 'granted') {
+          console.log("[AppProvider] Notification permission granted by user.");
+          toast({ title: t('systemNotificationsEnabled'), description: "You will now receive system notifications." });
+        } else if (permissionResult === 'denied') {
+          console.log("[AppProvider] Notification permission denied by user via prompt.");
+          toast({ title: t('systemNotificationsBlocked'), description: "You have denied notification permissions." });
+        } else { 
+          console.log("[AppProvider] Notification permission prompt dismissed by user (remains 'default').");
+        }
+      } catch (err) {
+        console.error("[AppProvider] Error requesting notification permission:", err);
+        setSystemNotificationPermission(Notification.permission); 
+      }
+    } else {
+      console.warn(`[AppProvider] Unexpected currentBrowserPermission state: ${currentBrowserPermission}. Syncing app state.`);
+      setSystemNotificationPermission(currentBrowserPermission);
+    }
+  }, [t, toast]); 
+
   const logout = useCallback(() => {
     addHistoryLogEntry('historyLogLogout', undefined, 'account');
     setIsAuthenticatedState(false);
@@ -387,12 +474,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (storedAllCategoriesString) {
         try {
           const parsedCategories = JSON.parse(storedAllCategoriesString) as Array<Omit<Category, 'icon'>>;
-          if (Array.isArray(parsedCategories) && parsedCategories.length > 0) {
+          if (Array.isArray(parsedCategories) && parsedCategories.length > 0) { // Check if it's a non-empty array
             loadedCategories = parsedCategories.map((cat) => ({
               ...cat,
               icon: getIconComponent(cat.iconName || 'Package'),
               mode: cat.mode || 'all'
             }));
+          } else if (parsedCategories === null || (Array.isArray(parsedCategories) && parsedCategories.length === 0)){
+            // If localStorage has an empty array or null, still use INITIAL_CATEGORIES
+            console.log("[AppProvider] localStorage categories empty or null, using defaults.");
           }
         } catch (e) {
           console.error("[AppProvider] Failed to parse categories from localStorage, using defaults.", e);
@@ -449,7 +539,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setIsLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, []); 
 
 
   useEffect(() => {
@@ -527,99 +617,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       sessionStorage.setItem(SESSION_STORAGE_KEY_HISTORY_LOG, JSON.stringify(historyLog));
     }
   }, [historyLog, isLoading, isAuthenticated]);
-
-
-  const addUINotification = useCallback((data: Omit<UINotification, 'id' | 'timestamp' | 'read'>) => {
-    const newNotification: UINotification = {
-      ...data,
-      id: uuidv4(),
-      timestamp: Date.now(),
-      read: false,
-    };
-    setUINotifications(prev => [newNotification, ...prev.slice(0, 49)]);
-  }, []);
-
-
-const requestSystemNotificationPermission = useCallback(async () => {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
-      console.warn("[AppProvider] This browser does not support desktop notification.");
-      setSystemNotificationPermission('denied');
-      return;
-    }
-
-    const currentBrowserPermission = Notification.permission;
-    console.log(`[AppProvider] requestSystemNotificationPermission called. Current browser permission is: ${currentBrowserPermission}`);
-
-    if (currentBrowserPermission === 'granted') {
-      console.log("[AppProvider] Notification permission already granted by browser. Syncing app state.");
-      setSystemNotificationPermission('granted');
-      // toast({ title: t('systemNotificationsEnabled') }); // Optional: notify user
-      return;
-    }
-
-    if (currentBrowserPermission === 'denied') {
-      console.log("[AppProvider] Notification permission is 'denied' by browser. User needs to change this in browser/OS settings.");
-      setSystemNotificationPermission('denied');
-      toast({ title: t('systemNotificationsBlocked'), description: "Please check your browser's site settings to allow notifications." , duration: 5000});
-      return;
-    }
-
-    // currentBrowserPermission should be 'default' here
-    if (currentBrowserPermission === 'default') {
-      console.log("[AppProvider] Notification permission is 'default'. Requesting permission from user...");
-      try {
-        const permissionResult = await Notification.requestPermission();
-        // permissionResult will be 'granted', 'denied', or 'default' (if prompt dismissed)
-        console.log(`[AppProvider] Notification.requestPermission() result: ${permissionResult}`);
-        setSystemNotificationPermission(permissionResult); // Update app state with the result
-
-        if (permissionResult === 'granted') {
-          console.log("[AppProvider] Notification permission granted by user.");
-          toast({ title: t('systemNotificationsEnabled'), description: "You will now receive system notifications." });
-        } else if (permissionResult === 'denied') {
-          console.log("[AppProvider] Notification permission denied by user via prompt.");
-          toast({ title: t('systemNotificationsBlocked'), description: "You have denied notification permissions." });
-        } else { // 'default' - prompt was dismissed
-          console.log("[AppProvider] Notification permission prompt dismissed by user (remains 'default').");
-        }
-      } catch (err) {
-        console.error("[AppProvider] Error requesting notification permission:", err);
-        setSystemNotificationPermission(Notification.permission); // Re-sync with actual browser state on error
-      }
-    } else {
-      // Should not be reached if logic is correct, but as a fallback:
-      console.warn(`[AppProvider] Unexpected currentBrowserPermission state: ${currentBrowserPermission}. Syncing app state.`);
-      setSystemNotificationPermission(currentBrowserPermission);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t, toast]); // Added t and toast as dependencies because they are used now
-
-
-  const showSystemNotification = useCallback((title: string, description: string) => {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
-      console.warn("[AppProvider] This browser does not support desktop notification. Unable to show: ", title);
-      return;
-    }
-
-    const currentBrowserPermission = Notification.permission;
-    // Sync app's state if it's different from browser's actual permission
-    if (systemNotificationPermission !== currentBrowserPermission) {
-        console.log(`[AppProvider] Syncing app's notification permission state. Browser: ${currentBrowserPermission}, App State: ${systemNotificationPermission}`);
-        setSystemNotificationPermission(currentBrowserPermission);
-    }
-
-    if (currentBrowserPermission === 'granted') {
-      console.log("[AppProvider] Permission 'granted'. Showing system notification:", title);
-      new Notification(title, {
-        body: description,
-        icon: '/icons/icon-192x192.png', // Ensure this icon exists in public/icons
-        lang: locale,
-      });
-    } else {
-      console.log(`[AppProvider] System notification for "${title}" was not shown because permission is '${currentBrowserPermission}'. User can enable via settings menu.`);
-    }
-  }, [locale, systemNotificationPermission]);
-
 
   useEffect(() => {
     if (isLoading || !isAuthenticated) return;
@@ -744,23 +741,32 @@ const requestSystemNotificationPermission = useCallback(async () => {
   }, [appModeState, addHistoryLogEntry]);
 
   const setIsAuthenticated = useCallback((value: boolean, rememberMe: boolean = false) => {
-    if (value && !isAuthenticated) {
+    const wasAuthenticated = isAuthenticated; // Capture previous state
+    setIsAuthenticatedState(value);
+
+    if (value && !wasAuthenticated) { // If logging in (value is true and was previously false)
         addHistoryLogEntry('historyLogLogin', undefined, 'account');
         if (typeof window !== 'undefined') {
           sessionStorage.removeItem(SESSION_STORAGE_KEY_HISTORY_LOG);
         }
-        setHistoryLog([]);
+        setHistoryLog([]); // Clear history log for new session
+        
+        // Trigger login success notifications
+        const title = t('loginSuccessNotificationTitle');
+        const description = t('loginSuccessNotificationDescription');
+        addUINotification({ title, description });
+        showSystemNotification(title, description); // Attempt system notification
     }
-    setIsAuthenticatedState(value);
+
     if (value) {
       const nowTime = Date.now();
       const expiryDuration = rememberMe ? SESSION_DURATION_30_DAYS_MS : SESSION_DURATION_24_HOURS_MS;
       const newExpiryTimestamp = nowTime + expiryDuration;
       setSessionExpiryTimestampState(newExpiryTimestamp);
-    } else {
+    } else { // Logging out or session expired
       setSessionExpiryTimestampState(null);
     }
-  }, [isAuthenticated, addHistoryLogEntry]);
+  }, [isAuthenticated, addHistoryLogEntry, t, addUINotification, showSystemNotification]);
 
   const logPasswordChange = useCallback(() => {
     addHistoryLogEntry('historyLogPasswordChange', undefined, 'account');
