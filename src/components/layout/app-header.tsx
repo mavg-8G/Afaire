@@ -43,17 +43,8 @@ export default function AppHeader() {
     requestSystemNotificationPermission,
   } = useAppStore();
   const router = useRouter();
-  const [currentPhrase, setCurrentPhrase] = useState('');
+  // currentPhrase state and useEffect for motivational phrases removed from here
 
-  useEffect(() => {
-    const phrasesForLocale = translations[locale]?.motivationalPhrases || translations['en'].motivationalPhrases;
-    if (phrasesForLocale && phrasesForLocale.length > 0) {
-      setCurrentPhrase(phrasesForLocale[Math.floor(Math.random() * phrasesForLocale.length)]);
-    } else {
-      setCurrentPhrase("Keep up the great work!");
-    }
-  }, [locale]);
-  
   const dateLocale = useMemo(() => {
     if (locale === 'es') return es;
     if (locale === 'fr') return fr;
