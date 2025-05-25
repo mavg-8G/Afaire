@@ -45,7 +45,9 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
       if (completedValue && activity.todos.length > 0) {
         updatedTodos = activity.todos.map(todo => ({ ...todo, completed: true }));
       }
-      updateActivity(activity.id, { completed: completedValue, todos: updatedTodos as Todo[] });
+      // For non-recurring, set completedAt timestamp
+      const completedAt = completedValue ? Date.now() : null;
+      updateActivity(activity.id, { completed: completedValue, todos: updatedTodos as Todo[], completedAt });
     }
   };
 

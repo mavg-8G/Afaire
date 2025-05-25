@@ -228,6 +228,7 @@ export type Translations = {
   dashboardMainDescription: string;
   dashboardChartView: string;
   dashboardListView: string;
+  dashboardProductivityView: string;
   dashboardViewWeekly: string;
   dashboardViewMonthly: string;
   dashboardChartTotalActivities: string;
@@ -238,7 +239,6 @@ export type Translations = {
   dashboardListCurrentMonth: string;
   dashboardNoActivitiesForList: string;
   dashboardNotesLabel: string;
-  dashboardProductivityView: string;
   dashboardCategoryBreakdown: string;
   dashboardCompletionStats: string;
   dashboardActivityCountLabel: string; // For BarChart legend
@@ -246,6 +246,14 @@ export type Translations = {
   dashboardTotalActivitiesLabel: string;
   dashboardTotalCompletedLabel: string;
   dashboardNoDataForAnalysis: string;
+  dashboardProductivityPatterns: string;
+  dashboardCompletionsByDay: string;
+  dashboardCompletionsChartLabel: string;
+  dashboardPeakDaySingle: (params: { day: string }) => string;
+  dashboardPeakDayMultiple: (params: { days: string }) => string;
+  dashboardNoPeakDay: string;
+  dashboardProductivityTimeRange: string;
+
 
   // History Page
   historyPageTitle: string;
@@ -531,6 +539,13 @@ export const translations: Record<Locale, Translations> = {
     dashboardTotalActivitiesLabel: "Total Activities:",
     dashboardTotalCompletedLabel: "Total Completed:",
     dashboardNoDataForAnalysis: "Not enough data for analysis in this period.",
+    dashboardProductivityPatterns: "Productivity Patterns",
+    dashboardCompletionsByDay: "Completions by Day of Week",
+    dashboardCompletionsChartLabel: "Completions",
+    dashboardPeakDaySingle: (params) => `Your most productive day is ${params.day}. Keep it up!`,
+    dashboardPeakDayMultiple: (params) => `Your most productive days are ${params.days}. Great work!`,
+    dashboardNoPeakDay: "No specific peak productivity day identified in this period.",
+    dashboardProductivityTimeRange: "Productivity insights for",
     historyPageTitle: "Activity History",
     historyPageDescription: "Recent actions performed during this session.",
     noHistoryYet: "No activity recorded in this session yet.",
@@ -606,7 +621,7 @@ export const translations: Record<Locale, Translations> = {
     language: "Idioma",
     english: "Inglés",
     spanish: "Español",
-    french: "Français",
+    french: "Francés",
     theme: "Tema",
     lightTheme: "Claro",
     darkTheme: "Oscuro",
@@ -819,6 +834,13 @@ export const translations: Record<Locale, Translations> = {
     dashboardTotalActivitiesLabel: "Actividades Totales:",
     dashboardTotalCompletedLabel: "Total Completadas:",
     dashboardNoDataForAnalysis: "No hay suficientes datos para el análisis en este período.",
+    dashboardProductivityPatterns: "Patrones de Productividad",
+    dashboardCompletionsByDay: "Finalizaciones por Día de la Semana",
+    dashboardCompletionsChartLabel: "Finalizaciones",
+    dashboardPeakDaySingle: (params) => `Tu día más productivo es el ${params.day}. ¡Sigue así!`,
+    dashboardPeakDayMultiple: (params) => `Tus días más productivos son los ${params.days}. ¡Buen trabajo!`,
+    dashboardNoPeakDay: "No se identificó un día pico de productividad en este período.",
+    dashboardProductivityTimeRange: "Perspectivas de productividad para",
     historyPageTitle: "Historial de Actividad",
     historyPageDescription: "Acciones recientes realizadas durante esta sesión.",
     noHistoryYet: "Aún no se ha registrado actividad en esta sesión.",
@@ -1107,6 +1129,13 @@ export const translations: Record<Locale, Translations> = {
     dashboardTotalActivitiesLabel: "Activités totales:",
     dashboardTotalCompletedLabel: "Total terminées:",
     dashboardNoDataForAnalysis: "Pas assez de données pour l'analyse sur cette période.",
+    dashboardProductivityPatterns: "Patrons de productivité",
+    dashboardCompletionsByDay: "Achèvements par jour de la semaine",
+    dashboardCompletionsChartLabel: "Achèvements",
+    dashboardPeakDaySingle: (params) => `Votre jour le plus productif est le ${params.day}. Continuez comme ça !`,
+    dashboardPeakDayMultiple: (params) => `Vos jours les plus productifs sont les ${params.days}. Excellent travail !`,
+    dashboardNoPeakDay: "Aucun pic de productivité identifié pour cette période.",
+    dashboardProductivityTimeRange: "Aperçus de productivité pour",
     historyPageTitle: "Historique des activités",
     historyPageDescription: "Actions récentes effectuées pendant cette session.",
     noHistoryYet: "Aucune activité enregistrée dans cette session pour le moment.",
@@ -1189,4 +1218,3 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
-

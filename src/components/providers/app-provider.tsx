@@ -33,7 +33,7 @@ export interface AppContextType {
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
   addActivity: (
-    activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonId'> & {
+    activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonId'> & {
       todos?: Omit<Todo, 'id' | 'completed'>[];
       time?: string;
       notes?: string;
@@ -53,7 +53,7 @@ export interface AppContextType {
   updateCategory: (categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => void;
   deleteCategory: (categoryId: string) => void;
   addAssignee: (name: string) => void;
-  updateAssignee: (assigneeId: string, updates: Partial<Omit<Assignee, 'id' | 'mode'>>) => void;
+  updateAssignee: (assigneeId: string, updates: Partial<Omit<Assignee, 'id'>>) => void;
   deleteAssignee: (assigneeId: string) => void;
   getAssigneeById: (assigneeId: string) => Assignee | undefined;
   isLoading: boolean;
@@ -365,7 +365,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [appModeState]);
 
  const filteredCategories = useMemo(() => {
-    if (isLoading) return [];
+    if (isLoading) return []; // Return empty array if still loading
     return allCategories.filter(cat =>
       !cat.mode || cat.mode === 'all' || cat.mode === appModeState
     );
@@ -397,21 +397,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       read: false,
     };
     setUINotifications(prev => {
+        // Prevent duplicate notifications if same activityId and instanceDate (for example)
+        const existingNotification = prev.find(n => n.activityId === newNotification.activityId && n.instanceDate === newNotification.instanceDate && n.title === newNotification.title);
+        if (existingNotification) return prev;
         return [newNotification, ...prev.slice(0, 49)];
     });
   }, []);
 
 
   const showSystemNotification = useCallback((title: string, description: string) => {
-    console.log(`[AppProvider] Attempting to show system notification. Title: "${title}", Current Permission: ${Notification.permission}`);
+    console.log(`[AppProvider] Attempting to show system notification. Title: "${title}"`);
     if (typeof window === 'undefined' || !('Notification' in window)) {
       console.warn("[AppProvider] System notifications not supported by this browser.");
       return;
     }
 
-    const currentPermission = Notification.permission;
+    // Always check the latest permission status directly from the browser API
+    const currentBrowserPermission = Notification.permission;
+    console.log(`[AppProvider] Current browser permission at time of call: ${currentBrowserPermission}`);
 
-    if (currentPermission === 'granted') {
+
+    if (currentBrowserPermission === 'granted') {
       try {
         new Notification(title, {
           body: description,
@@ -422,8 +428,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } catch (error) {
         console.error("[AppProvider] Error creating system notification:", error);
       }
-    } else if (currentPermission === 'default') {
-      console.log(`[AppProvider] System notification for "${title}" not shown because permission is 'default'. User must enable via UI.`);
+    } else if (currentBrowserPermission === 'default') {
+      console.log(`[AppProvider] System notification for "${title}" not shown because permission is 'default'. User must enable via UI first.`);
     } else { // 'denied'
       console.log(`[AppProvider] System notification for "${title}" not shown because permission is 'denied'.`);
     }
@@ -442,11 +448,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     console.log(`[AppProvider] At permission request time, browser permission is: ${currentBrowserPermission}`);
 
     if (currentBrowserPermission === 'granted') {
-      setSystemNotificationPermission('granted');
+      setSystemNotificationPermission('granted'); // Sync state if already granted
+      toast({ title: t('systemNotificationsEnabled'), description: t('systemNotificationsNowActive') as string });
       return;
     }
     if (currentBrowserPermission === 'denied') {
-      setSystemNotificationPermission('denied');
+      setSystemNotificationPermission('denied'); // Sync state if already denied
       toast({ title: t('systemNotificationsBlocked'), description: t('enableSystemNotificationsDescription') as string, duration: 7000 });
       return;
     }
@@ -456,10 +463,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const permissionResult = await Notification.requestPermission();
       console.log(`[AppProvider] Notification.requestPermission() result: ${permissionResult}`);
-      setSystemNotificationPermission(permissionResult);
+      setSystemNotificationPermission(permissionResult); // Update state with the new permission
 
       if (permissionResult === 'granted') {
         toast({ title: t('systemNotificationsEnabled'), description: t('systemNotificationsNowActive') as string });
+        showSystemNotification(t('systemNotificationsEnabled') as string, t('systemNotificationsNowActive') as string);
       } else if (permissionResult === 'denied') {
         toast({ title: t('systemNotificationsBlocked'), description: t('systemNotificationsUserDenied') as string });
       } else {
@@ -467,9 +475,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     } catch (err) {
       console.error("[AppProvider] Error requesting notification permission:", err);
-      setSystemNotificationPermission(Notification.permission);
+      setSystemNotificationPermission(Notification.permission); // Fallback to current browser permission on error
     }
-  }, [t, toast]);
+  }, [t, toast, showSystemNotification]);
 
 
   const logout = useCallback(() => {
@@ -508,22 +516,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const storedWorkActivities = localStorage.getItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES);
       if (storedWorkActivities) setWorkActivities(JSON.parse(storedWorkActivities));
 
-      let loadedCategories: Category[] = INITIAL_CATEGORIES.map(cat => ({ ...cat, icon: getIconComponent(cat.iconName) }));
+      let loadedCategories: Category[] = [];
       const storedAllCategoriesString = localStorage.getItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES);
 
       if (storedAllCategoriesString) {
         try {
           const parsedCategories = JSON.parse(storedAllCategoriesString) as Array<Omit<Category, 'icon'>>;
-           if (Array.isArray(parsedCategories) && parsedCategories.length > 0) {
+           if (Array.isArray(parsedCategories) && parsedCategories.length > 0) { // Check if parsedCategories is an array and not empty
             loadedCategories = parsedCategories.map((cat) => ({
               ...cat,
               icon: getIconComponent(cat.iconName || 'Package'),
               mode: cat.mode || 'all'
             }));
+          } else { // If localStorage has an empty array or invalid data, use initials
+            loadedCategories = INITIAL_CATEGORIES.map(cat => ({ ...cat, icon: getIconComponent(cat.iconName) }));
           }
         } catch (e) {
           console.error("[AppProvider] Failed to parse categories from localStorage, using INITIAL_CATEGORIES.", e);
+          loadedCategories = INITIAL_CATEGORIES.map(cat => ({ ...cat, icon: getIconComponent(cat.iconName) }));
         }
+      } else { // If no key in localStorage, use initials
+        loadedCategories = INITIAL_CATEGORIES.map(cat => ({ ...cat, icon: getIconComponent(cat.iconName) }));
       }
       setAllCategories(loadedCategories);
 
@@ -555,15 +568,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const expiryTime = parseInt(storedExpiry, 10);
         if (Date.now() > expiryTime) {
           initialAuth = false;
-          // Call logout to ensure all cleanup, including SW message
-          logout();
+          logout(); // Call logout which handles cleanup
         } else {
           initialAuth = true;
           setSessionExpiryTimestampState(expiryTime);
         }
       }
-      setIsAuthenticatedState(initialAuth); // Set auth state after potential logout
-      if (initialAuth) { // Only load history if still authenticated
+      setIsAuthenticatedState(initialAuth);
+      if (initialAuth) {
         const storedHistoryLog = sessionStorage.getItem(SESSION_STORAGE_KEY_HISTORY_LOG);
         if (storedHistoryLog) setHistoryLog(JSON.parse(storedHistoryLog));
       }
@@ -591,7 +603,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } finally {
       setIsLoading(false);
     }
-  }, [logout]); // Added logout to dependency array due to its usage in session expiry
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array to run only once on mount
 
 
   useEffect(() => {
@@ -799,7 +812,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       console.log('[AppProvider] Message posted to SW controller:', message);
     } else {
       console.warn('[AppProvider] Service Worker controller not active. Pomodoro command ignored:', message);
-      if (message.type !== 'GET_INITIAL_STATE' && !isPomodoroReady) { // Avoid toast for initial silent check
+      if (message.type !== 'GET_INITIAL_STATE' && !isPomodoroReady) {
         toast({
             variant: 'destructive',
             title: t('pomodoroErrorTitle') as string,
@@ -807,13 +820,39 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
       }
     }
-  }, [locale, t, toast, isPomodoroReady]); // Added isPomodoroReady to dependencies
+  }, [locale, t, toast, isPomodoroReady]);
 
 
  useEffect(() => {
     console.log('[AppProvider] SW Effect RUNNING. Current locale:', locale);
     let swMessageListener: ((event: MessageEvent) => void) | null = null;
     let swControllerChangeListener: (() => void) | null = null;
+
+    const handleSWMessage = (event: MessageEvent) => {
+        console.log('[AppProvider] Message received from SW:', event.data);
+        if (event.data && event.data.type) {
+            if (event.data.type === 'TIMER_STATE') {
+                const { phase, timeRemaining, isRunning, cyclesCompleted } = event.data.payload;
+                setPomodoroPhase(phase);
+                setPomodoroTimeRemaining(timeRemaining);
+                setPomodoroIsRunning(isRunning);
+                setPomodoroCyclesCompleted(cyclesCompleted);
+
+                // Set ready only on the first valid TIMER_STATE
+                if (!isPomodoroReady) {
+                    setIsPomodoroReady(true);
+                    console.log('[AppProvider] Pomodoro is now READY after first TIMER_STATE from SW.');
+                }
+            } else if (event.data.type === 'SW_ERROR') {
+                console.error('[AppProvider] Error message from SW:', event.data.payload);
+                toast({
+                    variant: 'destructive',
+                    title: t('pomodoroErrorTitle') as string,
+                    description: `Service Worker: ${event.data.payload.message || 'Unknown SW Error'}`
+                });
+            }
+        }
+    };
 
     const registerAndInitializeSW = async () => {
         try {
@@ -825,10 +864,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             console.log('[AppProvider] navigator.serviceWorker.ready resolved.');
 
             if (navigator.serviceWorker.controller) {
-                console.log('[AppProvider] SW controller active after registration. Sending GET_INITIAL_STATE.');
+                console.log('[AppProvider] SW controller active. Sending GET_INITIAL_STATE.');
                 setTimeout(() => postToServiceWorker({ type: 'GET_INITIAL_STATE' }), 200);
             } else {
-                 console.warn('[AppProvider] SW controller not active immediately after .ready. Will wait for controllerchange or next load.');
+                 console.warn('[AppProvider] SW controller not active immediately after .ready. Will wait for controllerchange.');
             }
         } catch (error) {
             console.error('[AppProvider] Service Worker registration failed:', error);
@@ -842,30 +881,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-        swMessageListener = (event: MessageEvent) => {
-            console.log('[AppProvider] Message received from SW:', event.data);
-            if (event.data && event.data.type) {
-                if (event.data.type === 'TIMER_STATE') {
-                    const { phase, timeRemaining, isRunning, cyclesCompleted } = event.data.payload;
-                    setPomodoroPhase(phase);
-                    setPomodoroTimeRemaining(timeRemaining);
-                    setPomodoroIsRunning(isRunning);
-                    setPomodoroCyclesCompleted(cyclesCompleted);
-
-                    if (!isPomodoroReady) { // Check internal state, not the one from closure
-                        setIsPomodoroReady(true);
-                        console.log('[AppProvider] Pomodoro is now READY after first TIMER_STATE from SW.');
-                    }
-                } else if (event.data.type === 'SW_ERROR') {
-                    console.error('[AppProvider] Error message from SW:', event.data.payload);
-                    toast({
-                        variant: 'destructive',
-                        title: t('pomodoroErrorTitle') as string,
-                        description: `Service Worker: ${event.data.payload.message || 'Unknown SW Error'}`
-                    });
-                }
-            }
-        };
+        swMessageListener = handleSWMessage; // Assign the handler
+        navigator.serviceWorker.addEventListener('message', swMessageListener);
 
         swControllerChangeListener = () => {
             console.log('[AppProvider] SW controllerchange event fired.');
@@ -877,15 +894,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 setIsPomodoroReady(false);
             }
         };
-
-        navigator.serviceWorker.addEventListener('message', swMessageListener);
         navigator.serviceWorker.addEventListener('controllerchange', swControllerChangeListener);
 
+        // Register SW either on load or immediately if already loaded
         if (document.readyState === 'complete') {
             registerAndInitializeSW();
         } else {
             window.addEventListener('load', registerAndInitializeSW, { once: true });
         }
+
     } else {
         console.warn("[AppProvider] Service Worker API not available.");
         setIsPomodoroReady(false);
@@ -896,18 +913,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (swMessageListener) navigator.serviceWorker.removeEventListener('message', swMessageListener);
         if (swControllerChangeListener) navigator.serviceWorker.removeEventListener('controllerchange', swControllerChangeListener);
     };
-  }, [locale, postToServiceWorker, t, toast, isPomodoroReady]); // Added isPomodoroReady to deps of this effect
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locale, postToServiceWorker]); // Dependencies: locale (for SW messages), postToServiceWorker (stable)
 
 
   // Effect for handling UI notifications on Pomodoro phase changes
   useEffect(() => {
-    // Only run if pomodoro is ready and the phase has actually changed from a non-'off' state
     if (isPomodoroReady && prevPomodoroPhaseRef.current !== pomodoroPhase && prevPomodoroPhaseRef.current !== 'off') {
         const phaseThatEnded = prevPomodoroPhaseRef.current;
-        // const currentNewPhase = pomodoroPhase; // Not strictly needed for this notification logic
 
         let titleKey: keyof Translations = 'pomodoroWorkSessionEnded';
-        let descriptionKey: keyof Translations = 'pomodoroFocusOnTask';
+        let descriptionKey: keyof Translations = 'pomodoroFocusOnTask'; // Default fallback
 
         if (phaseThatEnded === 'work') {
             titleKey = 'pomodoroWorkSessionEnded';
@@ -931,8 +947,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             toast({ title, description });
         }
     }
-
-    // Update the ref to the current phase AFTER processing, for the next render
     prevPomodoroPhaseRef.current = pomodoroPhase;
 
   }, [pomodoroPhase, pomodoroCyclesCompleted, isPomodoroReady, stableAddUINotification, t, toast]);
@@ -1017,7 +1031,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   const addActivity = useCallback((
-      activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'notes' | 'recurrence' | 'completedOccurrences'| 'responsiblePersonId'> & {
+      activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences'| 'responsiblePersonId'> & {
         todos?: Omit<Todo, 'id' | 'completed'>[];
         time?: string;
         notes?: string;
@@ -1032,9 +1046,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       categoryId: activityData.categoryId,
       todos: (activityData.todos || []).map(todo => ({ ...todo, id: uuidv4(), completed: false })),
       createdAt: customCreatedAt !== undefined ? customCreatedAt : Date.now(),
+      completed: false,
+      completedAt: null,
       time: activityData.time === "" ? undefined : activityData.time,
       notes: activityData.notes || undefined,
-      completed: false,
       recurrence: activityData.recurrence || { type: 'none' },
       completedOccurrences: {},
       responsiblePersonId: appModeState === 'personal' ? activityData.responsiblePersonId : undefined,
@@ -1070,12 +1085,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                       )) {
             updatedCompletedOccurrences = {};
           }
+
+          let newCompletedAt = act.completedAt;
+          if (updates.completed === true && !act.completed) {
+            newCompletedAt = Date.now();
+          } else if (updates.completed === false && act.completed) {
+            newCompletedAt = null;
+          }
          
           const updatedResponsiblePersonId = appModeState === 'personal'
             ? (updates.responsiblePersonId !== undefined ? updates.responsiblePersonId : act.responsiblePersonId)
             : undefined;
 
-          return { ...act, ...updates, recurrence: updatedRecurrence as RecurrenceRule | undefined, completedOccurrences: updatedCompletedOccurrences, responsiblePersonId: updatedResponsiblePersonId };
+          return { ...act, ...updates, recurrence: updatedRecurrence as RecurrenceRule | undefined, completedOccurrences: updatedCompletedOccurrences, responsiblePersonId: updatedResponsiblePersonId, completedAt: newCompletedAt };
         }
         return act;
       })

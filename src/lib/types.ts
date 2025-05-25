@@ -22,6 +22,7 @@ export interface Activity {
   createdAt: number;
   time?: string;
   completed?: boolean;
+  completedAt?: number | null; // Timestamp for when a non-recurring activity was completed
   notes?: string;
   recurrence?: RecurrenceRule | null;
   completedOccurrences?: Record<string, boolean>;
@@ -44,7 +45,6 @@ export interface Category {
 export interface Assignee {
   id: string;
   name: string;
-  // mode is no longer part of Assignee, they are implicitly personal
 }
 
 export interface UINotification {

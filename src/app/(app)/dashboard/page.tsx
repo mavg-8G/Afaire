@@ -22,9 +22,10 @@ import {
   eachWeekOfInterval,
   isWithinInterval,
   parseISO,
+  getDay as getDayOfWeekFn, // Renamed to avoid conflict
 } from 'date-fns';
 import { enUS, es, fr } from 'date-fns/locale';
-import { ArrowLeft, LayoutDashboard, ListChecks, BarChart3, CheckCircle, Circle, TrendingUp } from 'lucide-react';
+import { ArrowLeft, LayoutDashboard, ListChecks, BarChart3, CheckCircle, Circle, TrendingUp, LineChart, ActivityIcon } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -39,14 +40,13 @@ type DashboardMainView = 'chart' | 'list' | 'productivity';
 const isActivityChartCompleted = (activity: Activity): boolean => {
   if (activity.todos && activity.todos.length > 0) {
     return activity.todos.every(todo => todo.completed);
-  } else {
-    // If no todos, check the activity's own completed status
-    return !!activity.completed;
   }
+  // For activities without todos, check their own completed status
+  return !!activity.completed;
 };
 
 export default function DashboardPage() {
-  const { activities, getCategoryById, categories } = useAppStore();
+  const { activities: rawActivities, getRawActivities, getCategoryById, categories } = useAppStore();
   const { t, locale } = useTranslations();
   const [chartViewMode, setChartViewMode] = useState<ChartViewMode>('weekly');
   const [listViewTimeRange, setListViewTimeRange] = useState<ListViewTimeRange>('last7days');
@@ -55,6 +55,7 @@ export default function DashboardPage() {
   const [hasMounted, setHasMounted] = useState(false);
 
   const dateLocale = locale === 'es' ? es : locale === 'fr' ? fr : enUS;
+  const activities = useMemo(() => getRawActivities(), [getRawActivities]);
 
   useEffect(() => {
     setHasMounted(true);
@@ -62,13 +63,14 @@ export default function DashboardPage() {
 
   const chartData = useMemo((): BarChartDataItem[] => {
     if (!hasMounted) return [];
+    const allActivities = getRawActivities(); // Use raw activities for chart generation
 
     if (chartViewMode === 'weekly') {
       const today = new Date();
       return Array.from({ length: 7 }).map((_, i) => {
         const date = subDays(today, 6 - i);
-        const dailyActivities = activities.filter(activity =>
-          isSameDay(new Date(activity.createdAt), date)
+        const dailyActivities = allActivities.filter(activity =>
+          activity.createdAt && isSameDay(new Date(activity.createdAt), date)
         );
         const completedCount = dailyActivities.filter(isActivityChartCompleted).length;
         return {
@@ -92,8 +94,8 @@ export default function DashboardPage() {
         const actualWeekStart = startOfWeek(weekStartDate, { locale: dateLocale, weekStartsOn: weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6 });
         const actualWeekEnd = endOfWeek(weekStartDate, { locale: dateLocale, weekStartsOn: weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6 });
 
-        const weekActivities = activities.filter(activity => {
-          const activityDate = new Date(activity.createdAt);
+        const weekActivities = allActivities.filter(activity => {
+          const activityDate = activity.createdAt ? new Date(activity.createdAt) : new Date();
           return isWithinInterval(activityDate, { start: actualWeekStart, end: actualWeekEnd });
         });
         const completedCount = weekActivities.filter(isActivityChartCompleted).length;
@@ -104,7 +106,7 @@ export default function DashboardPage() {
         };
       });
     }
-  }, [activities, chartViewMode, dateLocale, t, hasMounted]);
+  }, [getRawActivities, chartViewMode, dateLocale, t, hasMounted]);
 
   const chartBars: ChartBarProps[] = [
     {
@@ -123,6 +125,7 @@ export default function DashboardPage() {
 
   const listedActivities = useMemo(() => {
     if (!hasMounted) return [];
+    const allActivities = getRawActivities();
     const now = new Date();
     let startDate: Date;
     let endDate: Date = now;
@@ -134,18 +137,18 @@ export default function DashboardPage() {
       endDate = endOfMonth(now);
     }
 
-    return activities
+    return allActivities
       .filter(activity => {
-        const activityDate = new Date(activity.createdAt);
+        const activityDate = activity.createdAt ? new Date(activity.createdAt) : new Date();
         return isWithinInterval(activityDate, { start: startDate, end: endDate });
       })
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [activities, listViewTimeRange, hasMounted]);
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  }, [getRawActivities, listViewTimeRange, hasMounted]);
 
 
   const productivityData = useMemo(() => {
-    if (!hasMounted) return { categoryChartData: [], overallCompletionRate: 0, totalActivitiesInPeriod: 0, totalCompletedInPeriod: 0 };
-
+    if (!hasMounted) return { categoryChartData: [], overallCompletionRate: 0, totalActivitiesInPeriod: 0, totalCompletedInPeriod: 0, dayOfWeekCompletions: [] as BarChartDataItem[], peakProductivityDays: [] as string[] };
+    const allActivities = getRawActivities();
     const now = new Date();
     let startDate: Date;
     let endDate: Date = now;
@@ -157,8 +160,8 @@ export default function DashboardPage() {
       endDate = endOfMonth(now);
     }
 
-    const relevantActivities = activities.filter(activity => {
-      const activityDate = new Date(activity.createdAt);
+    const relevantActivities = allActivities.filter(activity => {
+      const activityDate = activity.createdAt ? new Date(activity.createdAt) : new Date();
       return isWithinInterval(activityDate, { start: startDate, end: endDate });
     });
 
@@ -171,34 +174,85 @@ export default function DashboardPage() {
       : 0;
 
     const categoryCounts: Record<string, number> = {};
+    const dayOfWeekCounts: Record<string, number> = {
+      [t('daySun')]: 0, [t('dayMon')]: 0, [t('dayTue')]: 0, [t('dayWed')]: 0,
+      [t('dayThu')]: 0, [t('dayFri')]: 0, [t('daySat')]: 0,
+    };
+    const dayIndexToName = (dayIndex: number) => [t('daySun'), t('dayMon'), t('dayTue'), t('dayWed'), t('dayThu'), t('dayFri'), t('daySat')][dayIndex];
+
+
     completedActivitiesInPeriod.forEach(activity => {
+      // Category counts
       const category = getCategoryById(activity.categoryId);
       const categoryName = category ? category.name : "Uncategorized";
       categoryCounts[categoryName] = (categoryCounts[categoryName] || 0) + 1;
+
+      // Day of week counts
+      let completionDate: Date | null = null;
+      if (activity.isRecurringInstance && activity.originalInstanceDate) {
+        completionDate = new Date(activity.originalInstanceDate);
+      } else if (!activity.isRecurringInstance && activity.completedAt) {
+        completionDate = new Date(activity.completedAt);
+      }
+
+      if (completionDate && isWithinInterval(completionDate, { start: startDate, end: endDate })) {
+        const dayName = dayIndexToName(getDayOfWeekFn(completionDate));
+        if (dayName) {
+            dayOfWeekCounts[dayName] = (dayOfWeekCounts[dayName] || 0) + 1;
+        }
+      }
     });
 
     const categoryChartData: BarChartDataItem[] = Object.entries(categoryCounts).map(([name, count]) => ({
       name,
-      count, // Use 'count' as dataKey for this chart
+      count,
     }));
+
+    const dayOfWeekCompletions: BarChartDataItem[] = Object.entries(dayOfWeekCounts).map(([name, count]) => ({
+      name,
+      count,
+    }));
+
+    // Determine peak productivity days
+    let peakDays: string[] = [];
+    let maxCompletions = 0;
+    dayOfWeekCompletions.forEach(item => {
+        const count = Number(item.count);
+        if (count > maxCompletions) {
+            maxCompletions = count;
+            peakDays = [item.name as string];
+        } else if (count === maxCompletions && maxCompletions > 0) {
+            peakDays.push(item.name as string);
+        }
+    });
+
 
     return {
       categoryChartData,
       overallCompletionRate,
       totalActivitiesInPeriod,
       totalCompletedInPeriod,
+      dayOfWeekCompletions,
+      peakProductivityDays: peakDays,
     };
-  }, [activities, productivityViewTimeRange, hasMounted, getCategoryById]);
+  }, [getRawActivities, productivityViewTimeRange, hasMounted, getCategoryById, t, dateLocale]);
 
   const categoryChartBars: ChartBarProps[] = [
     {
-      dataKey: 'count', // Match dataKey with what's produced in productivityData
+      dataKey: 'count',
       fillVariable: '--chart-3',
-      nameKey: 'dashboardActivityCountLabel', // "Completed Activities"
+      nameKey: 'dashboardActivityCountLabel',
       radius: [4,4,0,0]
     }
   ];
-
+  const dayOfWeekChartBars: ChartBarProps[] = [
+    {
+      dataKey: 'count',
+      fillVariable: '--chart-4',
+      nameKey: 'dashboardCompletionsChartLabel',
+      radius: [4,4,0,0]
+    }
+  ];
 
   if (!hasMounted) {
     return (
@@ -303,7 +357,7 @@ export default function DashboardPage() {
                               {isCompleted ? <CheckCircle className="h-5 w-5 text-green-500" /> : <Circle className="h-5 w-5 text-muted-foreground" />}
                             </div>
                             <CardDescription className="text-xs">
-                              {format(new Date(activity.createdAt), 'PPp', { locale: dateLocale })}
+                              {activity.createdAt ? format(new Date(activity.createdAt), 'PPp', { locale: dateLocale }) : 'N/A'}
                               {activity.time && ` - ${activity.time}`}
                             </CardDescription>
                           </CardHeader>
@@ -348,10 +402,35 @@ export default function DashboardPage() {
                   <TabsTrigger value="currentMonth">{t('dashboardListCurrentMonth')}</TabsTrigger>
                 </TabsList>
               </Tabs>
+              <CardDescription className="text-center text-sm">
+                  {t('dashboardProductivityTimeRange')} {productivityViewTimeRange === 'last7days' ? t('dashboardListLast7Days') : t('dashboardListCurrentMonth')}
+              </CardDescription>
+
 
               <Card>
                 <CardHeader>
-                  <CardTitle>{t('dashboardCategoryBreakdown')}</CardTitle>
+                  <CardTitle className="flex items-center gap-2"><LineChart className="h-5 w-5" /> {t('dashboardProductivityPatterns')}</CardTitle>
+                  <CardDescription>{t('dashboardCompletionsByDay')}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {productivityData.dayOfWeekCompletions.some(d => d.count > 0) ? (
+                    <>
+                      <BarChart data={productivityData.dayOfWeekCompletions} bars={dayOfWeekChartBars} xAxisDataKey="name" height={250} />
+                      <p className="text-sm text-center mt-4 font-medium">
+                        {productivityData.peakProductivityDays.length === 0 && t('dashboardNoPeakDay')}
+                        {productivityData.peakProductivityDays.length === 1 && t('dashboardPeakDaySingle', { day: productivityData.peakProductivityDays[0] })}
+                        {productivityData.peakProductivityDays.length > 1 && t('dashboardPeakDayMultiple', { days: productivityData.peakProductivityDays.join(', ') })}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">{t('dashboardNoDataForAnalysis')}</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><ActivityIcon className="h-5 w-5" /> {t('dashboardCategoryBreakdown')}</CardTitle>
                   <CardDescription>{t('dashboardActivityCountLabel')}</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -365,7 +444,7 @@ export default function DashboardPage() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>{t('dashboardCompletionStats')}</CardTitle>
+                  <CardTitle className="flex items-center gap-2"><CheckCircle className="h-5 w-5" /> {t('dashboardCompletionStats')}</CardTitle>
                   <CardDescription>
                      {productivityViewTimeRange === 'last7days' ? t('dashboardListLast7Days') : t('dashboardListCurrentMonth')}
                   </CardDescription>
@@ -395,4 +474,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
