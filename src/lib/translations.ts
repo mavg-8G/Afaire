@@ -91,7 +91,7 @@ export type Translations = {
   activityDateLabel: string;
   pickADate: string;
   activityTimeLabel: string;
-  activityTimeDescription24Hour: string;
+  activityTimeDescription24Hour: string; // This was requested to be removed, but keeping the key in case.
   activityNotesLabel: string;
   activityNotesPlaceholder: string;
   todosLabel: string;
@@ -149,6 +149,7 @@ export type Translations = {
   // ActivityListItem
   editActivitySr: string;
   deleteActivitySr: string;
+  addToCalendarSr: string; // New translation
   todosCompleted: (params: { completed: number, total: number }) => string;
   noDetailsAvailable: string;
   noTodosForThisActivity: string;
@@ -255,10 +256,10 @@ export type Translations = {
   historyLogAddCategoryPersonal: (params: { name: string }) => string;
   historyLogAddCategoryWork: (params: { name: string }) => string;
   historyLogAddCategoryAll: (params: { name: string }) => string;
-  historyLogUpdateCategoryPersonal: (params: { name: string }) => string;
-  historyLogUpdateCategoryWork: (params: { name: string }) => string;
-  historyLogUpdateCategoryAll: (params: { name: string }) => string;
-  historyLogDeleteCategory: (params: { name: string }) => string;
+  historyLogUpdateCategoryPersonal: (params: { name: string, oldName?: string, oldMode?: string }) => string;
+  historyLogUpdateCategoryWork: (params: { name: string, oldName?: string, oldMode?: string }) => string;
+  historyLogUpdateCategoryAll: (params: { name: string, oldName?: string, oldMode?: string }) => string;
+  historyLogDeleteCategory: (params: { name: string, mode: string }) => string;
   historyLogSwitchToPersonalMode: string;
   historyLogSwitchToWorkMode: string;
   historyLogPasswordChange: string;
@@ -299,12 +300,11 @@ export type Translations = {
   pomodoroBackToWork: string;
   pomodoroErrorTitle: string;
   pomodoroSWNotReady: string;
-  pomodoroInitializing: string; // New translation
+  pomodoroInitializing: string;
 };
 
 export const translations: Record<Locale, Translations> = {
   en: {
-    // ... (all existing English translations)
     addActivity: "Add Activity",
     manageCategories: "Categories",
     language: "Language",
@@ -437,6 +437,7 @@ export const translations: Record<Locale, Translations> = {
     allActivitiesCompleted: "Well done! All activities for this period are complete.",
     editActivitySr: "Edit Activity",
     deleteActivitySr: "Delete Activity",
+    addToCalendarSr: "Add to Calendar",
     todosCompleted: (params) => `${params.completed} / ${params.total} todos completed`,
     noDetailsAvailable: "No details available.",
     noTodosForThisActivity: "No todos for this activity.",
@@ -530,10 +531,10 @@ export const translations: Record<Locale, Translations> = {
     historyLogAddCategoryPersonal: (params) => `Added Personal Category: "${params.name}".`,
     historyLogAddCategoryWork: (params) => `Added Work Category: "${params.name}".`,
     historyLogAddCategoryAll: (params) => `Added Category (All Modes): "${params.name}".`,
-    historyLogUpdateCategoryPersonal: (params) => `Updated Personal Category: "${params.name}".`,
-    historyLogUpdateCategoryWork: (params) => `Updated Work Category: "${params.name}".`,
-    historyLogUpdateCategoryAll: (params) => `Updated Category (All Modes): "${params.name}".`,
-    historyLogDeleteCategory: (params) => `Deleted Category: "${params.name}".`,
+    historyLogUpdateCategoryPersonal: (params) => `Updated Personal Category: "${params.oldName ? params.oldName + ' to ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'personal' ? ` (mode changed from ${params.oldMode})` : ''}.`,
+    historyLogUpdateCategoryWork: (params) => `Updated Work Category: "${params.oldName ? params.oldName + ' to ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'work' ? ` (mode changed from ${params.oldMode})` : ''}.`,
+    historyLogUpdateCategoryAll: (params) => `Updated Category (All Modes): "${params.oldName ? params.oldName + ' to ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'all' ? ` (mode changed from ${params.oldMode})` : ''}.`,
+    historyLogDeleteCategory: (params) => `Deleted Category: "${params.name}" (Mode: ${params.mode}).`,
     historyLogSwitchToPersonalMode: "Switched to Personal Mode.",
     historyLogSwitchToWorkMode: "Switched to Work Mode.",
     historyLogPasswordChange: "Password changed.",
@@ -584,7 +585,6 @@ export const translations: Record<Locale, Translations> = {
     pomodoroInitializing: "Initializing...",
   },
   es: {
-    // ... (all existing Spanish translations)
     addActivity: "Añadir Actividad",
     manageCategories: "Categorías",
     language: "Idioma",
@@ -717,6 +717,7 @@ export const translations: Record<Locale, Translations> = {
     allActivitiesCompleted: "¡Bien hecho! Todas las actividades de este periodo están completas.",
     editActivitySr: "Editar Actividad",
     deleteActivitySr: "Eliminar Actividad",
+    addToCalendarSr: "Añadir al Calendario",
     todosCompleted: (params) => `${params.completed} / ${params.total} tareas completadas`,
     noDetailsAvailable: "No hay detalles disponibles.",
     noTodosForThisActivity: "No hay tareas para esta actividad.",
@@ -810,10 +811,10 @@ export const translations: Record<Locale, Translations> = {
     historyLogAddCategoryPersonal: (params) => `Categoría Personal añadida: "${params.name}".`,
     historyLogAddCategoryWork: (params) => `Categoría de Trabajo añadida: "${params.name}".`,
     historyLogAddCategoryAll: (params) => `Categoría (Todos los Modos) añadida: "${params.name}".`,
-    historyLogUpdateCategoryPersonal: (params) => `Categoría Personal actualizada: "${params.name}".`,
-    historyLogUpdateCategoryWork: (params) => `Categoría de Trabajo actualizada: "${params.name}".`,
-    historyLogUpdateCategoryAll: (params) => `Categoría (Todos los Modos) actualizada: "${params.name}".`,
-    historyLogDeleteCategory: (params) => `Categoría eliminada: "${params.name}".`,
+    historyLogUpdateCategoryPersonal: (params) => `Categoría Personal actualizada: "${params.oldName ? params.oldName + ' a ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'personal' ? ` (modo cambiado de ${params.oldMode})` : ''}.`,
+    historyLogUpdateCategoryWork: (params) => `Categoría de Trabajo actualizada: "${params.oldName ? params.oldName + ' a ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'work' ? ` (modo cambiado de ${params.oldMode})` : ''}.`,
+    historyLogUpdateCategoryAll: (params) => `Categoría (Todos los Modos) actualizada: "${params.oldName ? params.oldName + ' a ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'all' ? ` (modo cambiado de ${params.oldMode})` : ''}.`,
+    historyLogDeleteCategory: (params) => `Categoría eliminada: "${params.name}" (Modo: ${params.mode}).`,
     historyLogSwitchToPersonalMode: "Cambiado a Modo Personal.",
     historyLogSwitchToWorkMode: "Cambiado a Modo Trabajo.",
     historyLogPasswordChange: "Contraseña cambiada.",
@@ -864,7 +865,6 @@ export const translations: Record<Locale, Translations> = {
     pomodoroInitializing: "Inicializando...",
   },
   fr: {
-    // ... (all existing French translations)
     addActivity: "Ajouter une activité",
     manageCategories: "Catégories",
     language: "Langue",
@@ -997,6 +997,7 @@ export const translations: Record<Locale, Translations> = {
     allActivitiesCompleted: "Bien joué ! Toutes les activités pour cette période sont terminées.",
     editActivitySr: "Modifier l'activité",
     deleteActivitySr: "Supprimer l'activité",
+    addToCalendarSr: "Ajouter au calendrier",
     todosCompleted: (params) => `${params.completed} / ${params.total} tâches terminées`,
     noDetailsAvailable: "Aucun détail disponible.",
     noTodosForThisActivity: "Aucune tâche pour cette activité.",
@@ -1090,10 +1091,10 @@ export const translations: Record<Locale, Translations> = {
     historyLogAddCategoryPersonal: (params) => `Catégorie personnelle ajoutée : "${params.name}".`,
     historyLogAddCategoryWork: (params) => `Catégorie professionnelle ajoutée : "${params.name}".`,
     historyLogAddCategoryAll: (params) => `Catégorie (Tous modes) ajoutée : "${params.name}".`,
-    historyLogUpdateCategoryPersonal: (params) => `Catégorie personnelle mise à jour : "${params.name}".`,
-    historyLogUpdateCategoryWork: (params) => `Catégorie professionnelle mise à jour : "${params.name}".`,
-    historyLogUpdateCategoryAll: (params) => `Catégorie (Tous modes) mise à jour : "${params.name}".`,
-    historyLogDeleteCategory: (params) => `Catégorie supprimée : "${params.name}".`,
+    historyLogUpdateCategoryPersonal: (params) => `Catégorie personnelle mise à jour : "${params.oldName ? params.oldName + ' à ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'personal' ? ` (mode changé de ${params.oldMode})` : ''}.`,
+    historyLogUpdateCategoryWork: (params) => `Catégorie professionnelle mise à jour : "${params.oldName ? params.oldName + ' à ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'work' ? ` (mode changé de ${params.oldMode})` : ''}.`,
+    historyLogUpdateCategoryAll: (params) => `Catégorie (Tous modes) mise à jour : "${params.oldName ? params.oldName + ' à ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'all' ? ` (mode changé de ${params.oldMode})` : ''}.`,
+    historyLogDeleteCategory: (params) => `Catégorie supprimée : "${params.name}" (Mode : ${params.mode}).`,
     historyLogSwitchToPersonalMode: "Passé en mode Personnel.",
     historyLogSwitchToWorkMode: "Passé en mode Travail.",
     historyLogPasswordChange: "Mot de passe changé.",
@@ -1156,3 +1157,4 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
+
