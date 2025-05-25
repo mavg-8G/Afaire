@@ -92,7 +92,7 @@ export interface AppContextType {
   pausePomodoro: () => void;
   resumePomodoro: () => void;
   resetPomodoro: () => void;
-  isPomodoroReady: boolean; 
+  isPomodoroReady: boolean;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -100,7 +100,7 @@ export const AppContext = createContext<AppContextType | undefined>(undefined);
 const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities_v2';
 const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities_v2';
 const LOCAL_STORAGE_KEY_ALL_CATEGORIES = 'todoFlowAllCategories_v1';
-const LOCAL_STORAGE_KEY_ASSIGNEES = 'todoFlowAssignees_v2';
+const LOCAL_STORAGE_KEY_ASSIGNEES = 'todoFlowAssignees_v2'; // Changed from v1 to v2 for mode addition, then back to simple
 const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode';
 const LOCAL_STORAGE_KEY_IS_AUTHENTICATED = 'todoFlowIsAuthenticated';
 const LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS = 'todoFlowLoginAttempts';
@@ -283,13 +283,16 @@ function hslToHex(h: number, s: number, l: number): string {
 }
 
 const POMODORO_WORK_DURATION_SECONDS = 25 * 60;
+const POMODORO_SHORT_BREAK_DURATION_SECONDS = 5 * 60;
+const POMODORO_LONG_BREAK_DURATION_SECONDS = 15 * 60;
+const POMODORO_CYCLES_BEFORE_LONG_BREAK = 4;
 
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [personalActivities, setPersonalActivities] = useState<Activity[]>([]);
   const [workActivities, setWorkActivities] = useState<Activity[]>([]);
   const [allCategories, setAllCategories] = useState<Category[]>([]);
-  const [allAssignees, setAllAssignees] = useState<Assignee[]>([]);
+  const [assignees, setAllAssignees] = useState<Assignee[]>([]); // Renamed from allAssignees to assignees
   const [appModeState, setAppModeState] = useState<AppMode>('personal');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -319,7 +322,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [pomodoroTimeRemaining, setPomodoroTimeRemaining] = useState(POMODORO_WORK_DURATION_SECONDS);
   const [pomodoroIsRunning, setPomodoroIsRunning] = useState(false);
   const [pomodoroCyclesCompleted, setPomodoroCyclesCompleted] = useState(0);
-  const [isPomodoroReady, setIsPomodoroReady] = useState(false); 
+  const [isPomodoroReady, setIsPomodoroReady] = useState(false);
 
 
   useEffect(() => {
@@ -361,7 +364,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [appModeState]);
 
  const filteredCategories = useMemo(() => {
-    if (isLoading) return []; 
+    if (isLoading) return [];
     return allCategories.filter(cat =>
       !cat.mode || cat.mode === 'all' || cat.mode === appModeState
     );
@@ -369,11 +372,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
   const assigneesForContext = useMemo(() => {
-    if (isLoading) {
-      return [];
-    }
-    return allAssignees;
-  }, [allAssignees, isLoading]);
+    if (isLoading) return [];
+    // Assignees are now always the full list, no longer filtered by mode
+    return assignees;
+  }, [assignees, isLoading]);
 
 
   const addHistoryLogEntry = useCallback((actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope: HistoryLogEntry['scope'] = 'account') => {
@@ -395,83 +397,76 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       read: false,
     };
     setUINotifications(prev => {
-        console.log('[AppProvider] Adding UI Notification:', newNotification);
         return [newNotification, ...prev.slice(0, 49)];
     });
   }, []); // Empty dependency array as setUINotifications from useState is stable
 
+
   const showSystemNotification = useCallback((title: string, description: string) => {
-    console.log(`[AppProvider] Attempting to show system notification. Title: "${title}"`);
     if (typeof window === 'undefined' || !('Notification' in window)) {
-      console.warn("[AppProvider] This browser does not support desktop notification. Unable to show: ", title);
+      console.warn("[AppProvider] System notifications not supported by this browser.");
       return;
     }
-    
-    const currentPermission = Notification.permission; 
-    console.log(`[AppProvider] showSystemNotification - Current browser notification permission is: ${currentPermission}`);
+
+    const currentPermission = Notification.permission;
+    console.log(`[AppProvider] showSystemNotification - Current permission: ${currentPermission}. Title: "${title}"`);
 
     if (currentPermission === 'granted') {
-      console.log("[AppProvider] Permission 'granted'. Showing system notification:", title);
       try {
         new Notification(title, {
-            body: description,
-            icon: '/icons/icon-192x192.png', 
-            lang: locale,
+          body: description,
+          icon: '/icons/icon-192x192.png',
+          lang: locale,
         });
+        console.log(`[AppProvider] System notification shown: "${title}"`);
       } catch (error) {
         console.error("[AppProvider] Error creating system notification:", error);
       }
     } else if (currentPermission === 'default') {
-        console.log(`[AppProvider] System notification for "${title}" not shown because permission is 'default'. User must enable via UI.`);
-    } else {
-      console.log(`[AppProvider] System notification for "${title}" was not shown because permission is '${currentPermission}'. User can enable via settings menu or explicit button.`);
+      console.log(`[AppProvider] System notification for "${title}" not shown because permission is 'default'. User must enable via UI.`);
+    } else { // 'denied'
+      console.log(`[AppProvider] System notification for "${title}" not shown because permission is 'denied'.`);
     }
   }, [locale]);
 
   const requestSystemNotificationPermission = useCallback(async () => {
     console.log("[AppProvider] requestSystemNotificationPermission called.");
     if (typeof window === 'undefined' || !('Notification' in window)) {
-      console.warn("[AppProvider] This browser does not support desktop notification.");
-      setSystemNotificationPermission('denied');
+      setSystemNotificationPermission('denied'); // Treat as denied if not supported
       toast({ title: t('systemNotificationsBlocked'), description: t('enableSystemNotificationsDescription') as string });
       return;
     }
 
     let currentPermission = Notification.permission;
-    console.log(`[AppProvider] Current browser notification permission (at request time) is: ${currentPermission}`);
+    console.log(`[AppProvider] At permission request time, browser permission is: ${currentPermission}`);
 
     if (currentPermission === 'granted') {
-      console.log("[AppProvider] Notification permission already granted by browser.");
       setSystemNotificationPermission('granted');
       return;
     }
-
     if (currentPermission === 'denied') {
-      console.log("[AppProvider] Notification permission is 'denied' by browser. User needs to change this in browser/OS settings.");
       setSystemNotificationPermission('denied');
       toast({ title: t('systemNotificationsBlocked'), description: t('enableSystemNotificationsDescription') as string, duration: 7000 });
       return;
     }
 
-    console.log("[AppProvider] Notification permission is 'default'. Requesting permission from user via button click...");
+    // Permission is 'default'
+    console.log("[AppProvider] Notification permission is 'default'. Requesting from user...");
     try {
       const permissionResult = await Notification.requestPermission();
       console.log(`[AppProvider] Notification.requestPermission() result: ${permissionResult}`);
       setSystemNotificationPermission(permissionResult);
 
       if (permissionResult === 'granted') {
-        console.log("[AppProvider] Notification permission granted by user.");
         toast({ title: t('systemNotificationsEnabled'), description: t('systemNotificationsNowActive') as string });
       } else if (permissionResult === 'denied') {
-        console.log("[AppProvider] Notification permission denied by user via prompt.");
         toast({ title: t('systemNotificationsBlocked'), description: t('systemNotificationsUserDenied') as string });
       } else {
-        console.log("[AppProvider] Notification permission prompt dismissed by user (remains 'default').");
          toast({ title: t('systemNotificationsNotYetEnabled') as string, description: t('systemNotificationsDismissed') as string });
       }
     } catch (err) {
       console.error("[AppProvider] Error requesting notification permission:", err);
-      setSystemNotificationPermission(Notification.permission); 
+      setSystemNotificationPermission(Notification.permission); // Re-fetch permission if error
     }
   }, [t, toast]);
 
@@ -483,19 +478,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setLockoutEndTimeState(null);
     setSessionExpiryTimestampState(null);
     setHistoryLog([]);
-    
-    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-      console.log('[AppProvider] Sending RESET_TIMER to SW on logout.');
-      navigator.serviceWorker.controller.postMessage({ type: 'RESET_TIMER', payload: { locale }});
-    } else {
-        console.warn('[AppProvider] SW controller not available on logout for RESET_TIMER.');
-        setPomodoroPhase('off');
-        setPomodoroTimeRemaining(POMODORO_WORK_DURATION_SECONDS);
-        setPomodoroIsRunning(false);
-        setPomodoroCyclesCompleted(0);
-        setIsPomodoroReady(false); 
-    }
 
+    postToServiceWorker({ type: 'RESET_TIMER' }); // Ask SW to reset its timer state
 
     if (typeof window !== 'undefined') {
         localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
@@ -508,7 +492,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (logoutChannel) {
       logoutChannel.postMessage('logout_event');
     }
-  }, [addHistoryLogEntry, locale]);
+  }, [addHistoryLogEntry]); // Removed postToServiceWorker from deps temporarily
 
  useEffect(() => { // Main data loading effect
     setIsLoading(true);
@@ -526,14 +510,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (storedAllCategoriesString) {
         try {
           const parsedCategories = JSON.parse(storedAllCategoriesString) as Array<Omit<Category, 'icon'>>;
-          if (Array.isArray(parsedCategories) && parsedCategories.length > 0) { 
+           if (Array.isArray(parsedCategories) && parsedCategories.length > 0) {
             loadedCategories = parsedCategories.map((cat) => ({
               ...cat,
               icon: getIconComponent(cat.iconName || 'Package'),
               mode: cat.mode || 'all'
             }));
-          } else {
-            console.log("[AppProvider] localStorage categories empty or invalid, using INITIAL_CATEGORIES.");
           }
         } catch (e) {
           console.error("[AppProvider] Failed to parse categories from localStorage, using INITIAL_CATEGORIES.", e);
@@ -548,13 +530,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           try {
               const parsedAssignees = JSON.parse(storedAssigneesString) as Assignee[];
               if (Array.isArray(parsedAssignees)) {
+                  // Assignees no longer have a mode property
                   loadedAssignees = parsedAssignees.map(asg => ({id: asg.id, name: asg.name}));
               }
           } catch (e) {
               console.error("[AppProvider] Failed to parse assignees from localStorage, using empty list.", e);
           }
       }
-      setAllAssignees(loadedAssignees);
+      setAllAssignees(loadedAssignees); // Use setAllAssignees
 
 
       const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
@@ -569,8 +552,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const expiryTime = parseInt(storedExpiry, 10);
         if (Date.now() > expiryTime) {
           initialAuth = false;
-          // logout(); // logout() itself calls addHistoryLogEntry, which might not be desired here during initial load.
-                      // Instead, just clear auth-related states and localStorage.
           setIsAuthenticatedState(false);
           setLoginAttemptsState(0);
           setLockoutEndTimeState(null);
@@ -613,7 +594,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } finally {
       setIsLoading(false);
     }
-  }, []); // Removed logout from dep array, it should be stable or handled by its own useCallback.
+  }, []);
 
 
   useEffect(() => {
@@ -637,9 +618,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     if (!isLoading) {
-      localStorage.setItem(LOCAL_STORAGE_KEY_ASSIGNEES, JSON.stringify(allAssignees.map(asg => ({id: asg.id, name: asg.name}))));
+      // Assignees no longer have a mode property
+      localStorage.setItem(LOCAL_STORAGE_KEY_ASSIGNEES, JSON.stringify(assignees.map(asg => ({id: asg.id, name: asg.name}))));
     }
-  }, [allAssignees, isLoading]);
+  }, [assignees, isLoading]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -749,7 +731,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
           const recurrenceType = masterActivity.recurrence.type;
-          const futureCheckEndDate = addDays(today, 8); 
+          const futureCheckEndDate = addDays(today, 8);
           const upcomingInstances = generateFutureInstancesForNotifications(masterActivity, addDays(today,1), futureCheckEndDate);
 
           upcomingInstances.forEach(instance => {
@@ -792,7 +774,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           });
         }
       });
-    }, 60000); 
+    }, 60000);
 
     return () => clearInterval(intervalId);
   }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, stableAddUINotification, dateFnsLocale, showSystemNotification, locale]);
@@ -813,6 +795,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
   }, [isAuthenticated, logout]);
 
+
   const postToServiceWorker = useCallback((message: any) => {
     console.log('[AppProvider] Attempting to post message to SW:', message);
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
@@ -820,7 +803,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       console.log('[AppProvider] Message posted to SW controller:', message);
     } else {
       console.warn('[AppProvider] Service Worker controller not active. Pomodoro command ignored:', message);
-      if (message.type !== 'GET_INITIAL_STATE') { // Avoid toast for initial silent check
+      // Avoid toast for initial silent check, but show for user actions if SW not ready
+      if (message.type !== 'GET_INITIAL_STATE' && !isPomodoroReady) {
         toast({
             variant: 'destructive',
             title: t('pomodoroErrorTitle') as string,
@@ -828,146 +812,120 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
       }
     }
-  }, [locale, t, toast]);
+  }, [locale, t, toast, isPomodoroReady]);
 
 
- useEffect(() => { // Service Worker Registration and Message Handling Effect
+ useEffect(() => {
     console.log('[AppProvider] SW Effect RUNNING. Current locale:', locale);
-    setIsPomodoroReady(false); 
-
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
-      console.warn("[AppProvider] Service Worker API not available in this browser.");
-      return;
+        console.warn("[AppProvider] Service Worker API not available.");
+        setIsPomodoroReady(false); // Can't be ready if SW not supported
+        return;
     }
 
-    let swRegistrationAttempted = false; 
-
-    const handleControllerChange = () => {
-      console.log('[AppProvider] controllerchange event fired.');
-      if (navigator.serviceWorker.controller) {
-        console.log('[AppProvider] New SW controller active via controllerchange. Sending GET_INITIAL_STATE.');
-        postToServiceWorker({ type: 'GET_INITIAL_STATE' });
-      } else {
-        console.warn('[AppProvider] SW controllerchange event fired, but controller is null.');
-      }
-    };
-
     const handleSWMessage = (event: MessageEvent) => {
-      console.log('[AppProvider] Message received from SW:', event.data);
-      if (event.data && event.data.type) {
-        if (event.data.type === 'TIMER_STATE') {
-          const { phase, timeRemaining, isRunning, cyclesCompleted, phaseJustChanged, previousPhase } = event.data.payload;
-          setPomodoroPhase(phase);
-          setPomodoroTimeRemaining(timeRemaining);
-          setPomodoroIsRunning(isRunning);
-          setPomodoroCyclesCompleted(cyclesCompleted);
-          
-          if (!isPomodoroReady) {
-             setIsPomodoroReady(true);
-             console.log('[AppProvider] Pomodoro is now READY after first TIMER_STATE from SW.');
-          }
+        console.log('[AppProvider] Message received from SW:', event.data);
+        if (event.data && event.data.type) {
+            if (event.data.type === 'TIMER_STATE') {
+                const { phase, timeRemaining, isRunning, cyclesCompleted, phaseJustChanged, previousPhase } = event.data.payload;
+                setPomodoroPhase(phase);
+                setPomodoroTimeRemaining(timeRemaining);
+                setPomodoroIsRunning(isRunning);
+                setPomodoroCyclesCompleted(cyclesCompleted);
 
-          if (phaseJustChanged && previousPhase !== 'off' && previousPhase !== undefined) {
-            let titleKey: keyof Translations = 'pomodoroWorkSessionEnded';
-            let descriptionKey: keyof Translations = 'pomodoroFocusOnTask';
+                if (!isPomodoroReady) {
+                    setIsPomodoroReady(true);
+                    console.log('[AppProvider] Pomodoro is now READY after first TIMER_STATE from SW.');
+                }
 
-            if (previousPhase === 'work') {
-              titleKey = 'pomodoroWorkSessionEnded';
-              descriptionKey = (cyclesCompleted > 0 && cyclesCompleted % 4 === 0) 
-                ? 'pomodoroTakeALongBreak' 
-                : 'pomodoroTakeAShortBreak';
-            } else if (previousPhase === 'shortBreak') {
-              titleKey = 'pomodoroShortBreakEnded';
-              descriptionKey = 'pomodoroBackToWork';
-            } else if (previousPhase === 'longBreak') {
-              titleKey = 'pomodoroLongBreakEnded';
-              descriptionKey = 'pomodoroBackToWork';
-            }
-            const title = t(titleKey);
-            const description = t(descriptionKey);
-            stableAddUINotification({ title, description, activityId: `pomodoro_cycle_${cyclesCompleted}_${previousPhase}` });
-            toast({ title, description });
-          }
-        } else if (event.data.type === 'SW_ERROR') {
-          console.error('[AppProvider] Error message from SW:', event.data.payload);
-          toast({
-            variant: 'destructive',
-            title: t('pomodoroErrorTitle'),
-            description: `Service Worker: ${event.data.payload.message || 'Unknown SW Error'}`
-          });
-        }
-      }
-    };
-    
-    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
-    navigator.serviceWorker.addEventListener('message', handleSWMessage);
+                if (phaseJustChanged && previousPhase !== 'off' && previousPhase !== undefined) {
+                    let titleKey: keyof Translations = 'pomodoroWorkSessionEnded';
+                    let descriptionKey: keyof Translations = 'pomodoroFocusOnTask';
 
-    const registerServiceWorker = async () => {
-      if (swRegistrationAttempted) {
-        console.log('[AppProvider] SW registration already attempted in this effect run.');
-        return;
-      }
-      swRegistrationAttempted = true;
-      console.log('[AppProvider] registerServiceWorker function called.');
-
-      try {
-        console.log('[AppProvider] Attempting to register Service Worker /sw.js');
-        const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-        console.log('[AppProvider] Service Worker registered with scope:', registration.scope);
-        
-        registration.addEventListener('updatefound', () => {
-            console.log('[AppProvider] SW update found. New worker is installing.');
-            const newWorker = registration.installing;
-            if (newWorker) {
-                newWorker.addEventListener('statechange', () => {
-                    console.log('[AppProvider] New SW state changed to:', newWorker.state);
+                    if (previousPhase === 'work') {
+                        titleKey = 'pomodoroWorkSessionEnded';
+                        descriptionKey = (cyclesCompleted > 0 && cyclesCompleted % POMODORO_CYCLES_BEFORE_LONG_BREAK === 0)
+                            ? 'pomodoroTakeALongBreak'
+                            : 'pomodoroTakeAShortBreak';
+                    } else if (previousPhase === 'shortBreak') {
+                        titleKey = 'pomodoroShortBreakEnded';
+                        descriptionKey = 'pomodoroBackToWork';
+                    } else if (previousPhase === 'longBreak') {
+                        titleKey = 'pomodoroLongBreakEnded';
+                        descriptionKey = 'pomodoroBackToWork';
+                    }
+                    const title = t(titleKey);
+                    const description = t(descriptionKey);
+                    stableAddUINotification({ title, description, activityId: `pomodoro_cycle_${cyclesCompleted}_${previousPhase}` });
+                    toast({ title, description });
+                }
+            } else if (event.data.type === 'SW_ERROR') {
+                console.error('[AppProvider] Error message from SW:', event.data.payload);
+                toast({
+                    variant: 'destructive',
+                    title: t('pomodoroErrorTitle'),
+                    description: `Service Worker: ${event.data.payload.message || 'Unknown SW Error'}`
                 });
             }
-        });
-        
-        await navigator.serviceWorker.ready;
-        console.log('[AppProvider] navigator.serviceWorker.ready has resolved.');
-        if (navigator.serviceWorker.controller) {
-          console.log('[AppProvider] SW controller active after serviceWorker.ready. Sending GET_INITIAL_STATE after short delay.');
-          setTimeout(() => { // Add small delay for mobile
-             postToServiceWorker({ type: 'GET_INITIAL_STATE' });
-          }, 200);
-        } else {
-          console.warn('[AppProvider] SW controller still not active after serviceWorker.ready.');
         }
-
-      } catch (error) {
-        console.error('[AppProvider] Service Worker registration failed:', error);
-        toast({
-          variant: 'destructive',
-          title: t('pomodoroErrorTitle'),
-          description: `SW Reg Error: ${error instanceof Error ? error.message : String(error)}`
-        });
-      }
     };
 
+    const handleControllerChange = () => {
+        console.log('[AppProvider] SW controllerchange event fired.');
+        if (navigator.serviceWorker.controller) {
+            console.log('[AppProvider] New SW controller active. Sending GET_INITIAL_STATE.');
+            // Adding a small delay as sometimes controller is not immediately ready for postMessage
+            setTimeout(() => postToServiceWorker({ type: 'GET_INITIAL_STATE' }), 200);
+        } else {
+            console.warn('[AppProvider] SW controllerchange event, but controller is null.');
+            setIsPomodoroReady(false);
+        }
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleSWMessage);
+    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
+
+    const registerAndInitializeSW = async () => {
+        try {
+            console.log('[AppProvider] Attempting to register Service Worker /sw.js');
+            const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+            console.log('[AppProvider] Service Worker registered with scope:', registration.scope);
+
+            await navigator.serviceWorker.ready; // Wait for SW to be ready (installed/activated)
+            console.log('[AppProvider] navigator.serviceWorker.ready resolved.');
+
+            if (navigator.serviceWorker.controller) {
+                console.log('[AppProvider] SW controller active after registration. Sending GET_INITIAL_STATE.');
+                setTimeout(() => postToServiceWorker({ type: 'GET_INITIAL_STATE' }), 200);
+            } else {
+                 console.warn('[AppProvider] SW controller not active immediately after .ready. Waiting for controllerchange.');
+                 // The controllerchange listener should handle this if it becomes active later.
+            }
+        } catch (error) {
+            console.error('[AppProvider] Service Worker registration failed:', error);
+            setIsPomodoroReady(false);
+            toast({
+                variant: 'destructive',
+                title: t('pomodoroErrorTitle'),
+                description: `SW Reg Error: ${error instanceof Error ? error.message : String(error)}`
+            });
+        }
+    };
+    
+    // Delay SW registration until after window load to avoid impacting initial page load performance
+    // and to ensure navigator.serviceWorker is more reliably available.
     if (document.readyState === 'complete') {
-      console.log('[AppProvider] Document already complete, registering SW.');
-      registerServiceWorker();
+        registerAndInitializeSW();
     } else {
-      window.addEventListener('load', () => {
-        console.log('[AppProvider] Window loaded, attempting to register Service Worker.');
-        registerServiceWorker();
-      }, { once: true });
+        window.addEventListener('load', registerAndInitializeSW, { once: true });
     }
 
     return () => {
-      console.log('[AppProvider] Cleaning up SW listeners from SW Effect.');
-      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
-      navigator.serviceWorker.removeEventListener('message', handleSWMessage);
+        console.log('[AppProvider] Cleaning up SW listeners.');
+        navigator.serviceWorker.removeEventListener('message', handleSWMessage);
+        navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
     };
-  // Dependencies need to be stable or carefully managed if effect should run once.
-  // postToServiceWorker depends on locale, t, toast.
-  // handleSWMessage depends on t, stableAddUINotification, toast, isPomodoroReady.
-  // If this effect re-runs due to these dependencies, it re-attaches listeners.
-  // For SW registration, it's best to run once. Message handling might need to update if t changes.
-  // For now, keeping it simple. If locale changes, the effect re-runs, postToServiceWorker gets new locale for subsequent calls.
-  }, [postToServiceWorker, t, toast, stableAddUINotification, isPomodoroReady, locale]); 
+  }, [locale, postToServiceWorker, stableAddUINotification, t, toast]); // Added dependencies based on usage in handlers
 
 
   const startPomodoroWork = useCallback(() => {
@@ -998,7 +956,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const resetPomodoro = useCallback(() => {
     console.log('[AppProvider] resetPomodoro called.');
     postToServiceWorker({ type: 'RESET_TIMER' });
-    setIsPomodoroReady(false); 
+    setIsPomodoroReady(false);
   }, [postToServiceWorker]);
 
 
@@ -1102,10 +1060,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                       )) {
             updatedCompletedOccurrences = {};
           }
-          
+         
           const updatedResponsiblePersonId = appModeState === 'personal'
             ? (updates.responsiblePersonId !== undefined ? updates.responsiblePersonId : act.responsiblePersonId)
-            : undefined; 
+            : undefined;
 
           return { ...act, ...updates, recurrence: updatedRecurrence as RecurrenceRule | undefined, completedOccurrences: updatedCompletedOccurrences, responsiblePersonId: updatedResponsiblePersonId };
         }
@@ -1280,7 +1238,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const categoryToDelete = allCategories.find(cat => cat.id === categoryId);
     if (!categoryToDelete) return;
 
-    addHistoryLogEntry('historyLogDeleteCategory', { name: categoryToDelete.name, mode: categoryToDelete.mode }, 'category');
+    addHistoryLogEntry('historyLogDeleteCategory', { name: categoryToDelete.name, mode: categoryToDelete.mode as string }, 'category');
+
 
     setAllCategories(prev => prev.filter(cat => cat.id !== categoryId));
 
@@ -1328,7 +1287,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [t, toast, addHistoryLogEntry]);
 
   const deleteAssignee = useCallback((assigneeId: string) => {
-    const assigneeToDelete = allAssignees.find(asg => asg.id === assigneeId);
+    const assigneeToDelete = assignees.find(asg => asg.id === assigneeId);
     if (!assigneeToDelete) return;
 
     setAllAssignees(prev => prev.filter(asg => asg.id !== assigneeId));
@@ -1341,11 +1300,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     toast({ title: t('toastAssigneeDeletedTitle'), description: t('toastAssigneeDeletedDescription', { assigneeName: assigneeToDelete.name }) });
     addHistoryLogEntry('historyLogDeleteAssignee', { name: assigneeToDelete.name }, 'assignee');
-  }, [allAssignees, t, toast, addHistoryLogEntry]);
+  }, [assignees, t, toast, addHistoryLogEntry]);
 
   const getAssigneeById = useCallback((assigneeId: string) => {
-    return allAssignees.find(asg => asg.id === assigneeId);
-  }, [allAssignees]);
+    return assignees.find(asg => asg.id === assigneeId);
+  }, [assignees]);
 
 
   const markUINotificationAsRead = useCallback((notificationId: string) => {
@@ -1399,7 +1358,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         logout,
         logPasswordChange,
         uiNotifications,
-        addUINotification: stableAddUINotification, // Use stable version
+        addUINotification: stableAddUINotification,
         markUINotificationAsRead,
         markAllUINotificationsAsRead,
         clearAllUINotifications,
