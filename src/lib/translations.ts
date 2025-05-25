@@ -91,7 +91,8 @@ export type Translations = {
   activityDateLabel: string;
   pickADate: string;
   activityTimeLabel: string;
-  activityTimeDescription24Hour: string; // This was removed from UI, but key kept for now
+  activityTimeDescription24Hour: string;
+  invalidTimeFormat24Hour: string;
   activityNotesLabel: string;
   activityNotesPlaceholder: string;
   todosLabel: string;
@@ -101,7 +102,7 @@ export type Translations = {
   toastActivityUpdatedDescription: string;
   toastActivityAddedTitle: string;
   toastActivityAddedDescription: string;
-  recurrenceLabel: string;
+  recurrenceLabel: string; // Not used directly as fields are separate
   recurrenceTypeLabel: string;
   recurrenceNone: string;
   recurrenceDaily: string;
@@ -121,10 +122,9 @@ export type Translations = {
   dayThu: string;
   dayFri: string;
   daySat: string;
-  invalidTimeFormat24Hour: string;
-  responsiblePeopleLabel: string; // Changed from responsiblePersonLabel
-  selectResponsiblePersonPlaceholder: string; // May not be used if checkboxes replace select
-  unassigned: string; // Could be a general label or a default choice
+  responsiblePeopleLabel: string;
+  selectResponsiblePersonPlaceholder: string;
+  unassigned: string;
   noAssigneesForSelection: string;
 
 
@@ -254,6 +254,11 @@ export type Translations = {
   dashboardPeakDayMultiple: (params: { days: string }) => string;
   dashboardNoPeakDay: string;
   dashboardProductivityTimeRange: string;
+  dashboardStreaksTitle: string;
+  dashboardCurrentStreak: string;
+  dashboardLongestStreak: string;
+  dashboardStreakDays: (params: { count: number }) => string;
+  dashboardStreakInsight: string;
 
 
   // History Page
@@ -412,6 +417,7 @@ export const translations: Record<Locale, Translations> = {
     pickADate: "Pick a date",
     activityTimeLabel: "Activity Time (HH:MM)",
     activityTimeDescription24Hour: "Use 24-hour format (e.g., 14:30).",
+    invalidTimeFormat24Hour: "Invalid time format. Use HH:MM (24-hour).",
     activityNotesLabel: "Notes",
     activityNotesPlaceholder: "Add any additional details or links here...",
     todosLabel: "Todos",
@@ -441,7 +447,6 @@ export const translations: Record<Locale, Translations> = {
     dayThu: "Thu",
     dayFri: "Fri",
     daySat: "Sat",
-    invalidTimeFormat24Hour: "Invalid time format. Use HH:MM (24-hour).",
     responsiblePeopleLabel: "Responsible People",
     selectResponsiblePersonPlaceholder: "Select assignees",
     unassigned: "Unassigned",
@@ -557,6 +562,11 @@ export const translations: Record<Locale, Translations> = {
     dashboardPeakDayMultiple: (params) => `Your most productive days are ${params.days}. Great work!`,
     dashboardNoPeakDay: "No specific peak productivity day identified in this period.",
     dashboardProductivityTimeRange: "Productivity insights for",
+    dashboardStreaksTitle: "Streaks",
+    dashboardCurrentStreak: "Current Streak",
+    dashboardLongestStreak: "Longest Streak",
+    dashboardStreakDays: (params) => `${params.count} day${params.count === 1 ? '' : 's'}`,
+    dashboardStreakInsight: "Consistency is key! Uncompleted tasks break streaks.",
     historyPageTitle: "Activity History",
     historyPageDescription: "Recent actions performed during this session.",
     noHistoryYet: "No activity recorded in this session yet.",
@@ -715,6 +725,7 @@ export const translations: Record<Locale, Translations> = {
     pickADate: "Elige una fecha",
     activityTimeLabel: "Hora de la Actividad (HH:MM)",
     activityTimeDescription24Hour: "Usa el formato de 24 horas (ej: 14:30).",
+    invalidTimeFormat24Hour: "Formato de hora inválido. Usa HH:MM (24 horas).",
     activityNotesLabel: "Notas",
     activityNotesPlaceholder: "Añade detalles adicionales o enlaces aquí...",
     todosLabel: "Tareas",
@@ -744,7 +755,6 @@ export const translations: Record<Locale, Translations> = {
     dayThu: "Jue",
     dayFri: "Vie",
     daySat: "Sáb",
-    invalidTimeFormat24Hour: "Formato de hora inválido. Usa HH:MM (24 horas).",
     responsiblePeopleLabel: "Personas Responsables",
     selectResponsiblePersonPlaceholder: "Selecciona asignados",
     unassigned: "Sin asignar",
@@ -860,6 +870,11 @@ export const translations: Record<Locale, Translations> = {
     dashboardPeakDayMultiple: (params) => `Tus días más productivos son los ${params.days}. ¡Buen trabajo!`,
     dashboardNoPeakDay: "No se identificó un día pico de productividad en este período.",
     dashboardProductivityTimeRange: "Perspectivas de productividad para",
+    dashboardStreaksTitle: "Rachas",
+    dashboardCurrentStreak: "Racha Actual",
+    dashboardLongestStreak: "Racha Más Larga",
+    dashboardStreakDays: (params) => `${params.count} día${params.count === 1 ? '' : 's'}`,
+    dashboardStreakInsight: "¡La constancia es la clave! Las tareas no completadas rompen las rachas.",
     historyPageTitle: "Historial de Actividad",
     historyPageDescription: "Acciones recientes realizadas durante esta sesión.",
     noHistoryYet: "Aún no se ha registrado actividad en esta sesión.",
@@ -1018,6 +1033,7 @@ export const translations: Record<Locale, Translations> = {
     pickADate: "Choisissez une date",
     activityTimeLabel: "Heure de l'activité (HH:MM)",
     activityTimeDescription24Hour: "Utilisez le format 24 heures (ex: 14:30).",
+    invalidTimeFormat24Hour: "Format d'heure invalide. Utilisez HH:MM (24 heures).",
     activityNotesLabel: "Notes",
     activityNotesPlaceholder: "Ajoutez des détails supplémentaires ou des liens ici...",
     todosLabel: "Tâches",
@@ -1047,7 +1063,6 @@ export const translations: Record<Locale, Translations> = {
     dayThu: "Jeu",
     dayFri: "Ven",
     daySat: "Sam",
-    invalidTimeFormat24Hour: "Format d'heure invalide. Utilisez HH:MM (24 heures).",
     responsiblePeopleLabel: "Personnes Responsables",
     selectResponsiblePersonPlaceholder: "Sélectionnez les personnes assignées",
     unassigned: "Non assigné",
@@ -1163,6 +1178,11 @@ export const translations: Record<Locale, Translations> = {
     dashboardPeakDayMultiple: (params) => `Vos jours les plus productifs sont les ${params.days}. Excellent travail !`,
     dashboardNoPeakDay: "Aucun pic de productivité identifié pour cette période.",
     dashboardProductivityTimeRange: "Aperçus de productivité pour",
+    dashboardStreaksTitle: "Séries",
+    dashboardCurrentStreak: "Série Actuelle",
+    dashboardLongestStreak: "Plus Longue Série",
+    dashboardStreakDays: (params) => `${params.count} jour${params.count === 1 ? '' : 's'}`,
+    dashboardStreakInsight: "La régularité est la clé ! Les tâches non terminées brisent les séries.",
     historyPageTitle: "Historique des activités",
     historyPageDescription: "Actions récentes effectuées pendant cette session.",
     noHistoryYet: "Aucune activité enregistrée dans cette session pour le moment.",
@@ -1252,3 +1272,4 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
+

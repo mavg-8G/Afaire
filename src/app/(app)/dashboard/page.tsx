@@ -22,10 +22,14 @@ import {
   eachWeekOfInterval,
   isWithinInterval,
   parseISO,
-  getDay as getDayOfWeekFn, // Renamed to avoid conflict
+  getDay as getDayOfWeekFn,
+  differenceInCalendarDays,
+  addDays as addDaysFns,
+  startOfDay,
+  formatISO,
 } from 'date-fns';
 import { enUS, es, fr } from 'date-fns/locale';
-import { ArrowLeft, LayoutDashboard, ListChecks, BarChart3, CheckCircle, Circle, TrendingUp, LineChart, ActivityIcon } from 'lucide-react';
+import { ArrowLeft, LayoutDashboard, ListChecks, BarChart3, CheckCircle, Circle, TrendingUp, LineChart, ActivityIcon, Flame } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -41,12 +45,11 @@ const isActivityChartCompleted = (activity: Activity): boolean => {
   if (activity.todos && activity.todos.length > 0) {
     return activity.todos.every(todo => todo.completed);
   }
-  // For activities without todos, check their own completed status
   return !!activity.completed;
 };
 
 export default function DashboardPage() {
-  const { activities: rawActivities, getRawActivities, getCategoryById, categories } = useAppStore();
+  const { getRawActivities, getCategoryById } = useAppStore();
   const { t, locale } = useTranslations();
   const [chartViewMode, setChartViewMode] = useState<ChartViewMode>('weekly');
   const [listViewTimeRange, setListViewTimeRange] = useState<ListViewTimeRange>('last7days');
@@ -55,7 +58,6 @@ export default function DashboardPage() {
   const [hasMounted, setHasMounted] = useState(false);
 
   const dateLocale = locale === 'es' ? es : locale === 'fr' ? fr : enUS;
-  const activities = useMemo(() => getRawActivities(), [getRawActivities]);
 
   useEffect(() => {
     setHasMounted(true);
@@ -63,7 +65,7 @@ export default function DashboardPage() {
 
   const chartData = useMemo((): BarChartDataItem[] => {
     if (!hasMounted) return [];
-    const allActivities = getRawActivities(); // Use raw activities for chart generation
+    const allActivities = getRawActivities();
 
     if (chartViewMode === 'weekly') {
       const today = new Date();
@@ -150,19 +152,19 @@ export default function DashboardPage() {
     if (!hasMounted) return { categoryChartData: [], overallCompletionRate: 0, totalActivitiesInPeriod: 0, totalCompletedInPeriod: 0, dayOfWeekCompletions: [] as BarChartDataItem[], peakProductivityDays: [] as string[] };
     const allActivities = getRawActivities();
     const now = new Date();
-    let startDate: Date;
-    let endDate: Date = now;
+    let startDateFilter: Date;
+    let endDateFilter: Date = now;
 
     if (productivityViewTimeRange === 'last7days') {
-      startDate = subDays(now, 6);
+      startDateFilter = subDays(now, 6);
     } else { // currentMonth
-      startDate = startOfMonth(now);
-      endDate = endOfMonth(now);
+      startDateFilter = startOfMonth(now);
+      endDateFilter = endOfMonth(now);
     }
 
     const relevantActivities = allActivities.filter(activity => {
       const activityDate = activity.createdAt ? new Date(activity.createdAt) : new Date();
-      return isWithinInterval(activityDate, { start: startDate, end: endDate });
+      return isWithinInterval(activityDate, { start: startDateFilter, end: endDateFilter });
     });
 
     const completedActivitiesInPeriod = relevantActivities.filter(isActivityChartCompleted);
@@ -182,20 +184,21 @@ export default function DashboardPage() {
 
 
     completedActivitiesInPeriod.forEach(activity => {
-      // Category counts
       const category = getCategoryById(activity.categoryId);
       const categoryName = category ? category.name : "Uncategorized";
       categoryCounts[categoryName] = (categoryCounts[categoryName] || 0) + 1;
 
-      // Day of week counts
       let completionDate: Date | null = null;
       if (activity.isRecurringInstance && activity.originalInstanceDate) {
-        completionDate = new Date(activity.originalInstanceDate);
+        const occurrenceDateKey = formatISO(new Date(activity.originalInstanceDate), { representation: 'date' });
+        if(activity.completedOccurrences?.[occurrenceDateKey]) {
+            completionDate = new Date(activity.originalInstanceDate);
+        }
       } else if (!activity.isRecurringInstance && activity.completedAt) {
         completionDate = new Date(activity.completedAt);
       }
 
-      if (completionDate && isWithinInterval(completionDate, { start: startDate, end: endDate })) {
+      if (completionDate && isWithinInterval(completionDate, { start: startDateFilter, end: endDateFilter })) {
         const dayName = dayIndexToName(getDayOfWeekFn(completionDate));
         if (dayName) {
             dayOfWeekCounts[dayName] = (dayOfWeekCounts[dayName] || 0) + 1;
@@ -213,7 +216,6 @@ export default function DashboardPage() {
       count,
     }));
 
-    // Determine peak productivity days
     let peakDays: string[] = [];
     let maxCompletions = 0;
     dayOfWeekCompletions.forEach(item => {
@@ -236,6 +238,65 @@ export default function DashboardPage() {
       peakProductivityDays: peakDays,
     };
   }, [getRawActivities, productivityViewTimeRange, hasMounted, getCategoryById, t, dateLocale]);
+
+  const streakData = useMemo(() => {
+    if (!hasMounted) return { currentStreak: 0, longestStreak: 0 };
+    const allActivities = getRawActivities();
+    const completionDates = new Set<string>();
+
+    allActivities.forEach(activity => {
+      if (!activity.isRecurringInstance && activity.completedAt) {
+        completionDates.add(formatISO(new Date(activity.completedAt), { representation: 'date' }));
+      } else if (activity.recurrence && activity.completedOccurrences) {
+        Object.keys(activity.completedOccurrences).forEach(dateKey => {
+          if (activity.completedOccurrences![dateKey]) {
+            completionDates.add(dateKey);
+          }
+        });
+      }
+    });
+
+    if (completionDates.size === 0) return { currentStreak: 0, longestStreak: 0 };
+
+    const sortedCompletionDates = Array.from(completionDates).map(dateStr => parseISO(dateStr)).sort((a,b) => a.getTime() - b.getTime());
+
+    let currentStreak = 0;
+    let longestStreak = 0;
+    let tempStreak = 0;
+
+    // Calculate longest streak
+    for (let i = 0; i < sortedCompletionDates.length; i++) {
+      if (i === 0 || differenceInCalendarDays(sortedCompletionDates[i], sortedCompletionDates[i-1]) === 1) {
+        tempStreak++;
+      } else {
+        longestStreak = Math.max(longestStreak, tempStreak);
+        tempStreak = 1; // Start new streak
+      }
+    }
+    longestStreak = Math.max(longestStreak, tempStreak);
+
+    // Calculate current streak
+    const today = startOfDay(new Date());
+    const mostRecentCompletion = sortedCompletionDates[sortedCompletionDates.length - 1];
+
+    if (isSameDay(mostRecentCompletion, today) || isSameDay(mostRecentCompletion, subDays(today,1))) {
+        let streakDay = mostRecentCompletion;
+        let currentTempStreak = 0;
+        for (let i = sortedCompletionDates.length - 1; i >= 0; i--) {
+            if (isSameDay(sortedCompletionDates[i], streakDay)) {
+                currentTempStreak++;
+                streakDay = subDays(streakDay, 1);
+            } else {
+                break;
+            }
+        }
+        currentStreak = currentTempStreak;
+    }
+
+
+    return { currentStreak, longestStreak };
+  }, [getRawActivities, hasMounted]);
+
 
   const categoryChartBars: ChartBarProps[] = [
     {
@@ -406,6 +467,23 @@ export default function DashboardPage() {
                   {t('dashboardProductivityTimeRange')} {productivityViewTimeRange === 'last7days' ? t('dashboardListLast7Days') : t('dashboardListCurrentMonth')}
               </CardDescription>
 
+              <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><Flame className="h-5 w-5 text-orange-500" /> {t('dashboardStreaksTitle')}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium">{t('dashboardCurrentStreak')}:</span>
+                        <span className="text-lg font-semibold text-primary">{t('dashboardStreakDays', {count: streakData.currentStreak})}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium">{t('dashboardLongestStreak')}:</span>
+                        <span className="text-lg font-semibold text-primary">{t('dashboardStreakDays', {count: streakData.longestStreak})}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground pt-2">{t('dashboardStreakInsight')}</p>
+                </CardContent>
+              </Card>
+
 
               <Card>
                 <CardHeader>
@@ -474,3 +552,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
