@@ -79,7 +79,7 @@ export type Translations = {
   noAssigneesYet: string;
 
 
-  // ActivityModal
+  // ActivityEditorPage (formerly ActivityModal)
   editActivityTitle: string;
   addActivityTitle: string;
   editActivityDescription: (params: { formattedInitialDate: string }) => string;
@@ -91,7 +91,7 @@ export type Translations = {
   activityDateLabel: string;
   pickADate: string;
   activityTimeLabel: string;
-  activityTimeDescription24Hour: string;
+  activityTimeDescription24Hour: string; // This was removed from UI, but key kept for now
   activityNotesLabel: string;
   activityNotesPlaceholder: string;
   todosLabel: string;
@@ -122,9 +122,10 @@ export type Translations = {
   dayFri: string;
   daySat: string;
   invalidTimeFormat24Hour: string;
-  responsiblePersonLabel: string;
-  selectResponsiblePersonPlaceholder: string;
-  unassigned: string;
+  responsiblePeopleLabel: string; // Changed from responsiblePersonLabel
+  selectResponsiblePersonPlaceholder: string; // May not be used if checkboxes replace select
+  unassigned: string; // Could be a general label or a default choice
+  noAssigneesForSelection: string;
 
 
   // ActivityCalendarView
@@ -149,7 +150,7 @@ export type Translations = {
   // ActivityListItem
   editActivitySr: string;
   deleteActivitySr: string;
-  addToCalendarSr: string; // New translation
+  addToCalendarSr: string;
   todosCompleted: (params: { completed: number, total: number }) => string;
   noDetailsAvailable: string;
   noTodosForThisActivity: string;
@@ -198,7 +199,7 @@ export type Translations = {
   passwordUpdateErrorCurrentEqualsNew: string;
   passwordMinLength: (params: { length: number }) => string;
 
-  // AppProvider Toasts
+  // AppProvider Toasts & Notifications
   toastCategoryAddedTitle: string;
   toastCategoryAddedDescription: (params: { categoryName: string }) => string;
   toastCategoryUpdatedTitle: string;
@@ -241,7 +242,7 @@ export type Translations = {
   dashboardNotesLabel: string;
   dashboardCategoryBreakdown: string;
   dashboardCompletionStats: string;
-  dashboardActivityCountLabel: string; // For BarChart legend
+  dashboardActivityCountLabel: string;
   dashboardOverallCompletionRate: string;
   dashboardTotalActivitiesLabel: string;
   dashboardTotalCompletedLabel: string;
@@ -317,6 +318,15 @@ export type Translations = {
   pomodoroErrorTitle: string;
   pomodoroSWNotReady: string;
   pomodoroInitializing: string;
+
+  // App Lock Screen
+  appLockedTitle: string;
+  appLockedDescription: string;
+  appPinInputLabel: string;
+  appPinInputPlaceholder: string;
+  appUnlockButton: string;
+  appPinIncorrect: string;
+  appPinSetupError: string;
 };
 
 export const translations: Record<Locale, Translations> = {
@@ -432,9 +442,10 @@ export const translations: Record<Locale, Translations> = {
     dayFri: "Fri",
     daySat: "Sat",
     invalidTimeFormat24Hour: "Invalid time format. Use HH:MM (24-hour).",
-    responsiblePersonLabel: "Responsible Person",
-    selectResponsiblePersonPlaceholder: "Select an assignee",
+    responsiblePeopleLabel: "Responsible People",
+    selectResponsiblePersonPlaceholder: "Select assignees",
     unassigned: "Unassigned",
+    noAssigneesForSelection: "No assignees available to select.",
     activitiesForDate: (params) => `Activities for ${params.date}`,
     activitiesForWeek: (params) => `Activities for week: ${params.startDate} - ${params.endDate}`,
     activitiesForMonth: (params) => `Activities for ${params.month}`,
@@ -614,6 +625,13 @@ export const translations: Record<Locale, Translations> = {
     pomodoroErrorTitle: "Pomodoro Error",
     pomodoroSWNotReady: "Service Worker for Pomodoro not ready. Please wait or reload.",
     pomodoroInitializing: "Initializing...",
+    appLockedTitle: "App Locked",
+    appLockedDescription: "Enter your PIN to continue.",
+    appPinInputLabel: "PIN",
+    appPinInputPlaceholder: "Enter PIN",
+    appUnlockButton: "Unlock",
+    appPinIncorrect: "Incorrect PIN. Please try again.",
+    appPinSetupError: "PIN lock is not configured correctly. Please contact support.",
   },
   es: {
     addActivity: "Añadir Actividad",
@@ -727,9 +745,10 @@ export const translations: Record<Locale, Translations> = {
     dayFri: "Vie",
     daySat: "Sáb",
     invalidTimeFormat24Hour: "Formato de hora inválido. Usa HH:MM (24 horas).",
-    responsiblePersonLabel: "Persona Responsable",
-    selectResponsiblePersonPlaceholder: "Selecciona un asignado",
+    responsiblePeopleLabel: "Personas Responsables",
+    selectResponsiblePersonPlaceholder: "Selecciona asignados",
     unassigned: "Sin asignar",
+    noAssigneesForSelection: "No hay asignados disponibles para seleccionar.",
     activitiesForDate: (params) => `Actividades para ${params.date}`,
     activitiesForWeek: (params) => `Actividades para la semana: ${params.startDate} - ${params.endDate}`,
     activitiesForMonth: (params) => `Actividades para ${params.month}`,
@@ -909,6 +928,13 @@ export const translations: Record<Locale, Translations> = {
     pomodoroErrorTitle: "Error de Pomodoro",
     pomodoroSWNotReady: "Service Worker para Pomodoro no listo. Espera o recarga.",
     pomodoroInitializing: "Inicializando...",
+    appLockedTitle: "Aplicación Bloqueada",
+    appLockedDescription: "Introduce tu PIN para continuar.",
+    appPinInputLabel: "PIN",
+    appPinInputPlaceholder: "Introduce el PIN",
+    appUnlockButton: "Desbloquear",
+    appPinIncorrect: "PIN incorrecto. Por favor, inténtalo de nuevo.",
+    appPinSetupError: "El bloqueo por PIN no está configurado correctamente. Contacta con el soporte.",
   },
   fr: {
     addActivity: "Ajouter une activité",
@@ -1022,9 +1048,10 @@ export const translations: Record<Locale, Translations> = {
     dayFri: "Ven",
     daySat: "Sam",
     invalidTimeFormat24Hour: "Format d'heure invalide. Utilisez HH:MM (24 heures).",
-    responsiblePersonLabel: "Personne Responsable",
-    selectResponsiblePersonPlaceholder: "Sélectionnez une personne",
+    responsiblePeopleLabel: "Personnes Responsables",
+    selectResponsiblePersonPlaceholder: "Sélectionnez les personnes assignées",
     unassigned: "Non assigné",
+    noAssigneesForSelection: "Aucune personne assignée disponible à sélectionner.",
     activitiesForDate: (params) => `Activités pour ${params.date}`,
     activitiesForWeek: (params) => `Activités pour la semaine : ${params.startDate} - ${params.endDate}`,
     activitiesForMonth: (params) => `Activités pour ${params.month}`,
@@ -1204,6 +1231,13 @@ export const translations: Record<Locale, Translations> = {
     pomodoroErrorTitle: "Erreur Pomodoro",
     pomodoroSWNotReady: "Service Worker pour Pomodoro non prêt. Veuillez patienter ou recharger.",
     pomodoroInitializing: "Initialisation...",
+    appLockedTitle: "Application Verrouillée",
+    appLockedDescription: "Entrez votre PIN pour continuer.",
+    appPinInputLabel: "PIN",
+    appPinInputPlaceholder: "Entrez le PIN",
+    appUnlockButton: "Déverrouiller",
+    appPinIncorrect: "PIN incorrect. Veuillez réessayer.",
+    appPinSetupError: "Le verrouillage par PIN n'est pas configuré correctement. Veuillez contacter le support.",
   },
 };
 

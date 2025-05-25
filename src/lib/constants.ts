@@ -18,7 +18,7 @@ export const APP_NAME = 'À faire';
 export const HARDCODED_USERNAME = "pruebas";
 export const HARDCODED_PASSWORD = "pruebas123";
 
-// Motivational phrases are now in src/lib/translations.ts
-
-
+// Hardcoded PIN for app lock (prototype only - NOT SECURE FOR PRODUCTION)
+// Set to null to disable PIN lock feature
+export const HARDCODED_APP_PIN: string | null = "1234";
     

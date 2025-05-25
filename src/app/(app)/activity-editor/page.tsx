@@ -20,7 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Trash2, CalendarIcon, Clock, X, Loader2, UserCheck, ArrowLeft } from 'lucide-react';
+import { PlusCircle, Trash2, CalendarIcon, Clock, X, Loader2, ArrowLeft } from 'lucide-react';
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Activity, Todo, RecurrenceRule, Assignee } from '@/lib/types';
 import CategorySelector from '@/components/shared/category-selector';
@@ -47,8 +47,6 @@ const recurrenceSchema = z.object({
   dayOfMonth: z.number().min(1).max(31).optional().nullable(),
 }).default({ type: 'none' });
 
-const UNASSIGNED_RESPONSIBLE_PERSON_ID_KEY = "_NONE_";
-
 export default function ActivityEditorPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -64,7 +62,6 @@ export default function ActivityEditorPage() {
 
   const activityId = searchParams.get('id');
   const initialDateParam = searchParams.get('initialDate');
-  // const instanceDateParam = searchParams.get('instanceDate'); // For future use if editing specific instance becomes different
 
   const dateLocale = useMemo(() => {
     if (locale === 'es') return es;
@@ -80,7 +77,7 @@ export default function ActivityEditorPage() {
     todos: z.array(todoSchema).optional(),
     notes: z.string().optional(),
     recurrence: recurrenceSchema,
-    responsiblePersonId: z.string().nullable().optional(),
+    responsiblePersonIds: z.array(z.string()).optional(),
   });
 
   type ActivityFormData = z.infer<typeof activityFormSchema>;
@@ -110,7 +107,7 @@ export default function ActivityEditorPage() {
         daysOfWeek: [],
         dayOfMonth: defaultInitialDate.getDate(),
       },
-      responsiblePersonId: null,
+      responsiblePersonIds: [],
     }
   });
 
@@ -135,15 +132,13 @@ export default function ActivityEditorPage() {
             daysOfWeek: foundActivity.recurrence?.daysOfWeek || [],
             dayOfMonth: foundActivity.recurrence?.dayOfMonth || baseDate.getDate(),
           },
-          responsiblePersonId: foundActivity.responsiblePersonId || null,
+          responsiblePersonIds: foundActivity.responsiblePersonIds || [],
         });
       } else {
-        // Activity not found, maybe redirect or show error
         toast({ variant: "destructive", title: "Error", description: "Activity not found." });
         router.replace('/');
       }
     } else {
-      // New activity mode
       form.reset({
         title: "",
         categoryId: "",
@@ -157,7 +152,7 @@ export default function ActivityEditorPage() {
           daysOfWeek: [],
           dayOfMonth: defaultInitialDate.getDate(),
         },
-        responsiblePersonId: null,
+        responsiblePersonIds: [],
       });
     }
     setIsLoadingActivity(false);
@@ -194,23 +189,23 @@ export default function ActivityEditorPage() {
       notes: data.notes,
       recurrence: recurrenceRule,
       completedOccurrences: activityToEdit?.completedOccurrences || {},
-      responsiblePersonId: (appMode === 'personal' && data.responsiblePersonId !== UNASSIGNED_RESPONSIBLE_PERSON_ID_KEY) ? data.responsiblePersonId : undefined,
+      responsiblePersonIds: (appMode === 'personal') ? data.responsiblePersonIds : [],
     };
 
-    await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 500)); 
 
     if (activityToEdit) {
       updateActivity(activityToEdit.id, activityPayload as Partial<Activity>, activityToEdit);
       toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
     } else {
       addActivity(
-        activityPayload as Omit<Activity, 'id' | 'completedOccurrences'> & { todos?: Omit<Todo, 'id' | 'completed'>[] },
+        activityPayload as Omit<Activity, 'id' | 'completedOccurrences' | 'responsiblePersonIds'> & { todos?: Omit<Todo, 'id' | 'completed'>[], responsiblePersonIds?: string[] },
         data.activityDate.getTime()
       );
       toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
     }
     setIsSubmittingForm(false);
-    router.replace('/'); // Navigate back to calendar
+    router.replace('/');
   };
 
   const dialogTitle = activityToEdit ? t('editActivityTitle') : t('addActivityTitle');
@@ -297,7 +292,7 @@ export default function ActivityEditorPage() {
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0 max-h-[calc(100vh-12rem)] overflow-y-auto" align="start">
+                        <PopoverContent className="w-auto p-0 max-h-[calc(100vh-12rem)] overflow-y-auto z-[70]" align="start">
                           <Calendar
                             mode="single"
                             selected={field.value}
@@ -327,7 +322,7 @@ export default function ActivityEditorPage() {
                       <FormLabel className="min-h-8">{t('activityTimeLabel')}</FormLabel>
                       <FormControl>
                         <div className="relative w-full max-w-full">
-                          <Input type="time" {...field} className="w-full pr-6 max-w-full" />
+                           <Input type="time" {...field} className="w-full max-w-full pr-6" />
                           <Clock className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
                         </div>
                       </FormControl>
@@ -340,28 +335,49 @@ export default function ActivityEditorPage() {
               {appMode === 'personal' && (
                 <FormField
                   control={form.control}
-                  name="responsiblePersonId"
-                  render={({ field }) => (
+                  name="responsiblePersonIds"
+                  render={() => (
                     <FormItem>
-                      <FormLabel>{t('responsiblePersonLabel')}</FormLabel>
-                      <Select
-                        onValueChange={(value) => field.onChange(value === UNASSIGNED_RESPONSIBLE_PERSON_ID_KEY ? null : value)}
-                        value={field.value === null || field.value === undefined ? UNASSIGNED_RESPONSIBLE_PERSON_ID_KEY : field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={t('selectResponsiblePersonPlaceholder')} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value={UNASSIGNED_RESPONSIBLE_PERSON_ID_KEY}>{t('unassigned')}</SelectItem>
+                      <FormLabel>{t('responsiblePeopleLabel')}</FormLabel>
+                      {assignees.length > 0 ? (
+                        <div className="space-y-2 max-h-32 overflow-y-auto pr-2 border rounded-md p-2">
                           {assignees.map((assignee: Assignee) => (
-                            <SelectItem key={assignee.id} value={assignee.id}>
-                              {assignee.name}
-                            </SelectItem>
+                            <FormField
+                              key={assignee.id}
+                              control={form.control}
+                              name="responsiblePersonIds"
+                              render={({ field }) => {
+                                return (
+                                  <FormItem
+                                    key={assignee.id}
+                                    className="flex flex-row items-center space-x-2 space-y-0"
+                                  >
+                                    <FormControl>
+                                      <Checkbox
+                                        checked={field.value?.includes(assignee.id)}
+                                        onCheckedChange={(checked) => {
+                                          return checked
+                                            ? field.onChange([...(field.value || []), assignee.id])
+                                            : field.onChange(
+                                                (field.value || []).filter(
+                                                  (value) => value !== assignee.id
+                                                )
+                                              );
+                                        }}
+                                      />
+                                    </FormControl>
+                                    <FormLabel className="font-normal">
+                                      {assignee.name}
+                                    </FormLabel>
+                                  </FormItem>
+                                );
+                              }}
+                            />
                           ))}
-                        </SelectContent>
-                      </Select>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">{t('noAssigneesForSelection')}</p>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -485,7 +501,7 @@ export default function ActivityEditorPage() {
                               </Button>
                           </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0 max-h-[calc(100vh-12rem)] overflow-y-auto" align="start">
+                        <PopoverContent className="w-auto p-0 max-h-[calc(100vh-12rem)] overflow-y-auto z-[70]" align="start">
                           <Calendar
                             mode="single"
                             selected={field.value || undefined}
@@ -621,4 +637,3 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
-

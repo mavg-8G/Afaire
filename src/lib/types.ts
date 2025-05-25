@@ -19,17 +19,17 @@ export interface Activity {
   title: string;
   categoryId: string;
   todos: Todo[];
-  createdAt: number;
+  createdAt: number; // This is the start date for non-recurring or the first occurrence date for recurring
   time?: string;
-  completed?: boolean;
+  completed?: boolean; // For non-recurring tasks or the master completion status if used differently
   completedAt?: number | null; // Timestamp for when a non-recurring activity was completed
   notes?: string;
   recurrence?: RecurrenceRule | null;
-  completedOccurrences?: Record<string, boolean>;
-  isRecurringInstance?: boolean;
-  originalInstanceDate?: number;
-  masterActivityId?: string;
-  responsiblePersonId?: string;
+  completedOccurrences?: Record<string, boolean>; // Key: YYYY-MM-DD date string of occurrence
+  isRecurringInstance?: boolean; // Client-side flag, not stored
+  originalInstanceDate?: number; // Client-side flag for instance's specific date, not stored on master
+  masterActivityId?: string; // Client-side flag, not stored
+  responsiblePersonIds?: string[]; // Changed from responsiblePersonId
 }
 
 export type AppMode = 'personal' | 'work';
@@ -45,6 +45,7 @@ export interface Category {
 export interface Assignee {
   id: string;
   name: string;
+  // mode property removed as assignees are now only for personal mode
 }
 
 export interface UINotification {
