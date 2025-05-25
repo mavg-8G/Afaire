@@ -181,7 +181,7 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
       notes: data.notes,
       recurrence: recurrenceRule,
       completedOccurrences: activity?.completedOccurrences || {},
-      responsiblePersonId: appMode === 'personal' ? data.responsiblePersonId : undefined, // Only set if in personal mode
+      responsiblePersonId: (appMode === 'personal' && data.responsiblePersonId !== UNASSIGNED_RESPONSIBLE_PERSON_ID_KEY) ? data.responsiblePersonId : undefined,
     };
 
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -333,11 +333,11 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                 control={form.control}
                 name="time"
                 render={({ field }) => (
-                  <FormItem className="flex flex-col min-w-0">
+                  <FormItem className="flex flex-col min-w-0"> {/* Added min-w-0 */}
                     <FormLabel className="min-h-8">{t('activityTimeLabel')}</FormLabel>
                     <FormControl>
                        <div className="relative w-full">
-                        <Input type="time" {...field} className="w-full pr-6" />
+                        <Input type="time" {...field} className="w-full pr-6" /> {/* Reduced pr from pr-7 */}
                         <Clock className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
                       </div>
                     </FormControl>
@@ -346,167 +346,167 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                 )}
               />
             </div>
+            
+            {/* Recurrence Type (Repeats) - Extracted */}
+            <FormField
+              control={form.control}
+              name="recurrence.type"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('recurrenceTypeLabel')}</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || 'none'}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder={t('recurrenceNone')} />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">{t('recurrenceNone')}</SelectItem>
+                      <SelectItem value="daily">{t('recurrenceDaily')}</SelectItem>
+                      <SelectItem value="weekly">{t('recurrenceWeekly')}</SelectItem>
+                      <SelectItem value="monthly">{t('recurrenceMonthly')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-            <div className="space-y-2 border p-3 rounded-md">
-              <h3 className="text-sm font-medium">{t('recurrenceLabel')}</h3>
+            {/* Conditional Recurrence Options (Days of Week / Day of Month) */}
+            {recurrenceType === 'weekly' && (
               <FormField
                 control={form.control}
-                name="recurrence.type"
-                render={({ field }) => (
+                name="recurrence.daysOfWeek"
+                render={() => (
                   <FormItem>
-                    <FormLabel>{t('recurrenceTypeLabel')}</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || 'none'}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder={t('recurrenceNone')} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">{t('recurrenceNone')}</SelectItem>
-                        <SelectItem value="daily">{t('recurrenceDaily')}</SelectItem>
-                        <SelectItem value="weekly">{t('recurrenceWeekly')}</SelectItem>
-                        <SelectItem value="monthly">{t('recurrenceMonthly')}</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormLabel>{t('recurrenceDaysOfWeekLabel')}</FormLabel>
+                    <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+                      {WEEK_DAYS.map(day => (
+                        <FormField
+                          key={day.id}
+                          control={form.control}
+                          name="recurrence.daysOfWeek"
+                          render={({ field }) => {
+                            return (
+                              <FormItem key={day.id} className="flex flex-row items-center space-x-1 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(day.id)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...(field.value || []), day.id])
+                                        : field.onChange(
+                                            (field.value || []).filter(
+                                              (value) => value !== day.id
+                                            )
+                                          )
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormLabel className="text-xs font-normal">{t(day.labelKey as any)}</FormLabel>
+                              </FormItem>
+                            )
+                          }}
+                        />
+                      ))}
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+            )}
 
-              {recurrenceType === 'weekly' && (
-                <FormField
-                  control={form.control}
-                  name="recurrence.daysOfWeek"
-                  render={() => (
-                    <FormItem>
-                      <FormLabel>{t('recurrenceDaysOfWeekLabel')}</FormLabel>
-                      <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
-                        {WEEK_DAYS.map(day => (
-                          <FormField
-                            key={day.id}
-                            control={form.control}
-                            name="recurrence.daysOfWeek"
-                            render={({ field }) => {
-                              return (
-                                <FormItem key={day.id} className="flex flex-row items-center space-x-1 space-y-0">
-                                  <FormControl>
-                                    <Checkbox
-                                      checked={field.value?.includes(day.id)}
-                                      onCheckedChange={(checked) => {
-                                        return checked
-                                          ? field.onChange([...(field.value || []), day.id])
-                                          : field.onChange(
-                                              (field.value || []).filter(
-                                                (value) => value !== day.id
-                                              )
-                                            )
-                                      }}
-                                    />
-                                  </FormControl>
-                                  <FormLabel className="text-xs font-normal">{t(day.labelKey as any)}</FormLabel>
-                                </FormItem>
-                              )
-                            }}
-                          />
-                        ))}
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
+            {recurrenceType === 'monthly' && (
+              <FormField
+                control={form.control}
+                name="recurrence.dayOfMonth"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('recurrenceDayOfMonthLabel')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="31"
+                        placeholder={t('recurrenceDayOfMonthPlaceholder')}
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={e => field.onChange(e.target.value === '' ? null : parseInt(e.target.value,10))}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
-              {recurrenceType === 'monthly' && (
-                <FormField
-                  control={form.control}
-                  name="recurrence.dayOfMonth"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('recurrenceDayOfMonthLabel')}</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min="1"
-                          max="31"
-                          placeholder={t('recurrenceDayOfMonthPlaceholder')}
-                          {...field}
-                          value={field.value ?? ''}
-                          onChange={e => field.onChange(e.target.value === '' ? null : parseInt(e.target.value,10))}
+            {/* Recurrence End Date - Extracted & Conditional */}
+            {recurrenceType !== 'none' && (
+              <FormField
+                control={form.control}
+                name="recurrence.endDate"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>{t('recurrenceEndDateLabel')}</FormLabel>
+                     <Popover open={isRecurrenceEndDatePopoverOpen} onOpenChange={setIsRecurrenceEndDatePopoverOpen}>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                           <Button
+                              variant={"outline"}
+                              className={cn(
+                                "w-full pl-3 text-left font-normal justify-start truncate whitespace-nowrap",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4 opacity-50 flex-shrink-0" />
+                              {field.value ? (
+                                format(field.value, "PPP", { locale: dateLocale })
+                              ) : (
+                                <span>{t('recurrenceNoEndDate')}</span>
+                              )}
+                            </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0 max-h-[calc(100vh-12rem)] overflow-y-auto" align="start">
+                         <Calendar
+                          mode="single"
+                          selected={field.value || undefined}
+                          onSelect={(date) => {
+                            field.onChange(date);
+                            setIsRecurrenceEndDatePopoverOpen(false);
+                          }}
+                          disabled={(date) => {
+                              const minDate = activityStartDate || new Date("1900-01-01");
+                              if (date < minDate) return true;
+                              if (maxRecurrenceEndDate && date > maxRecurrenceEndDate) return true;
+                              return false;
+                          }}
+                          locale={dateLocale}
+                          fixedWeeks
                         />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-
-              {recurrenceType !== 'none' && (
-                <FormField
-                  control={form.control}
-                  name="recurrence.endDate"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>{t('recurrenceEndDateLabel')}</FormLabel>
-                       <Popover open={isRecurrenceEndDatePopoverOpen} onOpenChange={setIsRecurrenceEndDatePopoverOpen}>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                             <Button
-                                variant={"outline"}
-                                className={cn(
-                                  "w-full pl-3 text-left font-normal justify-start truncate whitespace-nowrap",
-                                  !field.value && "text-muted-foreground"
-                                )}
-                              >
-                                <CalendarIcon className="mr-2 h-4 w-4 opacity-50 flex-shrink-0" />
-                                {field.value ? (
-                                  format(field.value, "PPP", { locale: dateLocale })
-                                ) : (
-                                  <span>{t('recurrenceNoEndDate')}</span>
-                                )}
-                              </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0 max-h-[calc(100vh-12rem)] overflow-y-auto" align="start">
-                           <Calendar
-                            mode="single"
-                            selected={field.value || undefined}
-                            onSelect={(date) => {
-                              field.onChange(date);
+                         {field.value && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="w-full rounded-t-none border-t"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              field.onChange(null);
                               setIsRecurrenceEndDatePopoverOpen(false);
                             }}
-                            disabled={(date) => {
-                                const minDate = activityStartDate || new Date("1900-01-01");
-                                if (date < minDate) return true;
-                                if (maxRecurrenceEndDate && date > maxRecurrenceEndDate) return true;
-                                return false;
-                            }}
-                            locale={dateLocale}
-                            fixedWeeks
-                          />
-                           {field.value && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="w-full rounded-t-none border-t"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                field.onChange(null);
-                                setIsRecurrenceEndDatePopoverOpen(false);
-                              }}
-                              aria-label={t('recurrenceClearEndDate')}
-                            >
-                              <X className="mr-2 h-4 w-4" /> {t('recurrenceClearEndDate')}
-                            </Button>
-                          )}
-                        </PopoverContent>
-                      </Popover>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-            </div>
+                            aria-label={t('recurrenceClearEndDate')}
+                          >
+                            <X className="mr-2 h-4 w-4" /> {t('recurrenceClearEndDate')}
+                          </Button>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
 
             <FormField
@@ -603,5 +603,3 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
-
-    
