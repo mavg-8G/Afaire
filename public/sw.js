@@ -16,246 +16,317 @@ let currentLocale = 'en'; // Default locale
 
 const translations = {
   en: {
-    pomodoroWorkSession: "Work Session",
-    pomodoroShortBreakSession: "Short Break",
-    pomodoroLongBreakSession: "Long Break",
-    pomodoroWorkSessionEnded: "Work Session Ended!",
-    pomodoroShortBreakEnded: "Short Break Ended!",
-    pomodoroLongBreakEnded: "Long Break Ended!",
-    pomodoroTakeAShortBreak: "Time for a short break (5 min).",
-    pomodoroTakeALongBreak: "Time for a long break (15 min).",
+    pomodoroWorkSessionEnded: "Work Session Ended",
+    pomodoroShortBreakEnded: "Short Break Ended",
+    pomodoroLongBreakEnded: "Long Break Ended",
+    pomodoroTakeAShortBreak: "Time for a short break!",
+    pomodoroTakeALongBreak: "Time for a long break!",
     pomodoroBackToWork: "Time to get back to work!",
   },
   es: {
-    pomodoroWorkSession: "Sesión de Trabajo",
-    pomodoroShortBreakSession: "Descanso Corto",
-    pomodoroLongBreakSession: "Descanso Largo",
-    pomodoroWorkSessionEnded: "¡Sesión de Trabajo Terminada!",
-    pomodoroShortBreakEnded: "¡Descanso Corto Terminado!",
-    pomodoroLongBreakEnded: "¡Descanso Largo Terminado!",
-    pomodoroTakeAShortBreak: "Tiempo para un descanso corto (5 min).",
-    pomodoroTakeALongBreak: "Tiempo para un descanso largo (15 min).",
+    pomodoroWorkSessionEnded: "Sesión de Trabajo Terminada",
+    pomodoroShortBreakEnded: "Descanso Corto Terminado",
+    pomodoroLongBreakEnded: "Descanso Largo Terminado",
+    pomodoroTakeAShortBreak: "¡Tiempo para un descanso corto!",
+    pomodoroTakeALongBreak: "¡Tiempo para un descanso largo!",
     pomodoroBackToWork: "¡Hora de volver al trabajo!",
   },
   fr: {
-    pomodoroWorkSession: "Session de Travail",
-    pomodoroShortBreakSession: "Petite Pause",
-    pomodoroLongBreakSession: "Longue Pause",
-    pomodoroWorkSessionEnded: "Session de travail terminée !",
-    pomodoroShortBreakEnded: "Petite pause terminée !",
-    pomodoroLongBreakEnded: "Longue pause terminée !",
-    pomodoroTakeAShortBreak: "C'est l'heure d'une petite pause (5 min).",
-    pomodoroTakeALongBreak: "C'est l'heure d'une longue pause (15 min).",
-    pomodoroBackToWork: "Retour au travail !",
+    pomodoroWorkSessionEnded: "Session de travail terminée",
+    pomodoroShortBreakEnded: "Pause courte terminée",
+    pomodoroLongBreakEnded: "Longue pause terminée",
+    pomodoroTakeAShortBreak: "C'est l'heure d'une courte pause !",
+    pomodoroTakeALongBreak: "C'est l'heure d'une longue pause !",
+    pomodoroBackToWork: "C'est l'heure de retourner au travail !",
   }
 };
 
-function getTranslation(key, locale = 'en') {
-  const lang = translations[locale] || translations.en;
-  return lang[key] || translations.en[key] || key;
+function getTranslation(key, locale) {
+  const effectiveLocale = translations[locale] ? locale : 'en';
+  return translations[effectiveLocale][key] || translations['en'][key] || key;
 }
 
-
-function broadcastState() {
-  console.log('[SW] Broadcasting state:', { phase, timeRemaining, isRunning, cyclesCompleted });
-  self.clients.matchAll().then(clients => {
-    clients.forEach(client => {
-      client.postMessage({
-        type: 'TIMER_STATE',
-        payload: { phase, timeRemaining, isRunning, cyclesCompleted, /* phaseJustChanged and previousPhase would need more logic */ }
-      });
-    });
-  });
-}
-
-function showUINotification(titleKey, bodyKey) {
+function showUINotification(titleKey, descriptionKey) { // Removed phaseForIcon, icon is fixed
   const title = getTranslation(titleKey, currentLocale);
-  const body = getTranslation(bodyKey, currentLocale);
-  console.log(`[SW] Attempting to show notification: Title - "${title}", Body - "${body}"`);
+  const description = getTranslation(descriptionKey, currentLocale);
+  console.log(`[SW] Showing notification: Title: "${title}", Description: "${description}", Locale: ${currentLocale}`);
+
   if (self.registration && self.registration.showNotification) {
     self.registration.showNotification(title, {
-      body: body,
-      icon: '/icons/icon-192x192.png', // Ensure this icon exists in public/icons
-    }).then(() => {
-      console.log('[SW] Notification shown successfully.');
-    }).catch(err => {
-      console.error('[SW] Error showing notification:', err);
-    });
+      body: description,
+      icon: `/icons/icon-192x192.png`,
+      lang: currentLocale,
+      tag: `pomodoro-phase-end-${Date.now()}` // Unique tag to prevent stacking if user doesn't dismiss
+    }).catch(err => console.error('[SW] Error showing notification:', err));
   } else {
-    console.warn('[SW] self.registration.showNotification not available.');
+    console.warn('[SW] Notification API not available on self.registration.');
+  }
+}
+
+async function broadcastState(phaseJustChanged = false, previousPhase = undefined) {
+  const statePayload = { phase, timeRemaining, isRunning, cyclesCompleted, phaseJustChanged, previousPhase };
+  console.log(`[SW] Broadcasting state:`, statePayload);
+  try {
+    const clients = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
+    if (!clients || clients.length === 0) {
+        console.log('[SW] No clients found to broadcast state to.');
+        return;
+    }
+    console.log('[SW] Found clients for broadcast:', clients.map(c => c.id));
+    clients.forEach(client => {
+      console.log('[SW] Posting TIMER_STATE to client:', client.id);
+      client.postMessage({
+        type: 'TIMER_STATE',
+        payload: statePayload
+      });
+    });
+  } catch (error) {
+      console.error('[SW] Error during broadcastState:', error);
   }
 }
 
 function tick() {
   if (!isRunning) {
-    console.log('[SW] Tick called but isRunning is false. Clearing timerId if exists:', timerId);
-    if (timerId) clearInterval(timerId);
+    // console.log('[SW] Tick called but not isRunning, clearing interval if any.');
+    if (timerId) clearInterval(timerId); // Ensure interval stops if isRunning became false elsewhere
     timerId = null;
     return;
   }
-
   timeRemaining--;
-  console.log('[SW] Tick... Remaining:', timeRemaining, 'Phase:', phase, 'IsRunning:', isRunning);
 
   if (timeRemaining < 0) {
-    if (timerId) clearInterval(timerId);
-    timerId = null;
-    isRunning = false;
-
-    let notificationTitleKey = '';
-    let notificationBodyKey = '';
-
+    const oldPhase = phase;
     if (phase === 'work') {
       cyclesCompleted++;
-      notificationTitleKey = 'pomodoroWorkSessionEnded';
       if (cyclesCompleted > 0 && cyclesCompleted % POMODORO_CYCLES_BEFORE_LONG_BREAK === 0) {
         phase = 'longBreak';
         timeRemaining = POMODORO_LONG_BREAK_DURATION_SECONDS;
-        notificationBodyKey = 'pomodoroTakeALongBreak';
+        showUINotification('pomodoroWorkSessionEnded', 'pomodoroTakeALongBreak');
       } else {
         phase = 'shortBreak';
         timeRemaining = POMODORO_SHORT_BREAK_DURATION_SECONDS;
-        notificationBodyKey = 'pomodoroTakeAShortBreak';
+        showUINotification('pomodoroWorkSessionEnded', 'pomodoroTakeAShortBreak');
       }
     } else if (phase === 'shortBreak' || phase === 'longBreak') {
-      notificationTitleKey = phase === 'shortBreak' ? 'pomodoroShortBreakEnded' : 'pomodoroLongBreakEnded';
-      notificationBodyKey = 'pomodoroBackToWork';
-      phase = 'work'; // Always back to work after any break
+      phase = 'work';
       timeRemaining = POMODORO_WORK_DURATION_SECONDS;
+      // For a more robust cycle, when a break ends, we might not reset cyclesCompleted here.
+      // cyclesCompleted should strictly count 'work' sessions.
+      showUINotification(oldPhase === 'shortBreak' ? 'pomodoroShortBreakEnded' : 'pomodoroLongBreakEnded', 'pomodoroBackToWork');
     }
-    console.log('[SW] Phase ended. New phase:', phase, 'New timeRemaining:', timeRemaining, 'Cycles completed:', cyclesCompleted);
-    showUINotification(notificationTitleKey, notificationBodyKey);
-    // Do not automatically start the next phase's timer; user should initiate.
-    // startTimer(); // Removed this to avoid auto-start
+    broadcastState(true, oldPhase);
+  } else {
+    broadcastState();
   }
-  broadcastState();
 }
 
 function startTimer() {
-  console.log('[SW] startTimer called. Current isRunning:', isRunning, 'Current timerId:', timerId);
-  if (isRunning && !timerId) { // Ensure isRunning is true and no timer is already set
-    console.log('[SW] Starting new interval. Phase:', phase, 'Time Remaining:', timeRemaining);
-    // tick(); // Call tick immediately to update UI, then set interval
-    timerId = setInterval(tick, 1000);
-  } else if (!isRunning && timerId) {
-    console.log('[SW] startTimer called but isRunning is false. Clearing existing timerId:', timerId);
+  console.log(`[SW] startTimer called. phase=${phase}, current isRunning=${isRunning}, timeRemaining=${timeRemaining}`);
+  if (isRunning && timerId) {
+    console.log('[SW] Timer already running with active interval, doing nothing.');
+    return;
+  }
+  if (phase === 'off') {
+    console.warn('[SW] Attempted to start timer while phase is off. Resetting to work phase.');
+    resetTimerValues('work'); // Default to work if trying to start from 'off'
+  }
+  isRunning = true;
+  if (timerId) clearInterval(timerId);
+  // tick(); // No initial manual tick; setInterval will handle the first tick
+  timerId = setInterval(tick, 1000);
+  console.log(`[SW] Timer started with interval ID: ${timerId}. isRunning set to true.`);
+  broadcastState();
+}
+
+function pauseTimer() {
+  console.log(`[SW] pauseTimer called. current isRunning=${isRunning}`);
+  if (!isRunning && timerId === null) { // Already paused
+      console.log('[SW] Timer already paused, doing nothing.');
+      return;
+  }
+  isRunning = false;
+  if (timerId) {
     clearInterval(timerId);
     timerId = null;
-  } else if (isRunning && timerId) {
-    console.log('[SW] startTimer called, but isRunning is true and timerId already exists. Doing nothing to prevent multiple timers.');
+    console.log('[SW] Timer interval cleared. isRunning set to false.');
+  } else {
+    console.log('[SW] pauseTimer called, but no active timerId. Ensuring isRunning is false.');
   }
   broadcastState();
 }
 
+function resetTimerValues(newPhase) {
+  console.log(`[SW] resetTimerValues called with newPhase: ${newPhase}`);
+  phase = newPhase;
+  isRunning = false;
+  if (timerId) {
+    clearInterval(timerId);
+    timerId = null;
+    console.log('[SW] Timer interval cleared during resetTimerValues.');
+  }
+
+  if (phase === 'work') {
+    timeRemaining = POMODORO_WORK_DURATION_SECONDS;
+    cyclesCompleted = 0; // Reset cycles when work phase is explicitly set/reset
+  } else if (phase === 'shortBreak') {
+    timeRemaining = POMODORO_SHORT_BREAK_DURATION_SECONDS;
+  } else if (phase === 'longBreak') {
+    timeRemaining = POMODORO_LONG_BREAK_DURATION_SECONDS;
+  } else { // 'off'
+    timeRemaining = POMODORO_WORK_DURATION_SECONDS; // Default to work duration when off
+    cyclesCompleted = 0;
+  }
+  console.log(`[SW] Timer values reset. New phase: ${phase}, timeRemaining: ${timeRemaining}, cyclesCompleted: ${cyclesCompleted}, isRunning: ${isRunning}`);
+}
+
+
+function handleStartWork() {
+    console.log('[SW] Handling START_WORK');
+    // If already in work and running, do nothing. If paused, resume. If different phase, reset.
+    if (phase !== 'work') {
+        resetTimerValues('work');
+    } else if (!isRunning) { // In work phase but paused
+      console.log('[SW] Resuming work phase.');
+    } else { // Already in work and running
+        console.log('[SW] Work phase already running.');
+        broadcastState(); // ensure client knows
+        return;
+    }
+    startTimer();
+}
+
+function handleStartShortBreak() {
+    console.log('[SW] Handling START_SHORT_BREAK');
+    resetTimerValues('shortBreak');
+    startTimer();
+}
+
+function handleStartLongBreak() {
+    console.log('[SW] Handling START_LONG_BREAK');
+    resetTimerValues('longBreak');
+    startTimer();
+}
+
+function handlePauseTimer() {
+    console.log('[SW] Handling PAUSE_TIMER');
+    pauseTimer();
+}
+
+function handleResumeTimer() {
+    console.log('[SW] Handling RESUME_TIMER');
+    if (phase !== 'off' && !isRunning) {
+        console.log('[SW] Resuming timer.');
+        startTimer();
+    } else if (isRunning) {
+        console.log('[SW] Timer already running, cannot resume. Broadcasting state.');
+        broadcastState();
+    } else {
+        console.log('[SW] Cannot resume, phase is off or timer already running. Broadcasting current state.');
+        broadcastState();
+    }
+}
+
+function handleResetTimer() {
+    console.log('[SW] Handling RESET_TIMER');
+    resetTimerValues('off');
+    broadcastState();
+}
+
+function handleGetInitialState(event) {
+    console.log('[SW] Handling GET_INITIAL_STATE from client:', event.source ? event.source.id : 'unknown client');
+    const statePayload = { phase, timeRemaining, isRunning, cyclesCompleted, phaseJustChanged: false, previousPhase: undefined };
+    if (event.source && typeof event.source.postMessage === 'function') {
+        console.log('[SW] Directly posting state to requester:', event.source.id, statePayload);
+        try {
+            event.source.postMessage({ type: 'TIMER_STATE', payload: statePayload });
+        } catch (e) {
+            console.error('[SW] Error posting directly to client:', e, '. Falling back to broadcast.');
+            broadcastState(false, undefined); // Fallback
+        }
+    } else {
+        console.warn('[SW] event.source not available or cannot postMessage for GET_INITIAL_STATE. Broadcasting state instead.');
+        broadcastState(false, undefined);
+    }
+}
+
+
 self.addEventListener('install', (event) => {
-  console.log('[SW] Install event. Timestamp:', Date.now());
-  event.waitUntil(self.skipWaiting()); // Activate worker immediately
+  console.log('[SW] Install event. Calling self.skipWaiting().');
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activate event. Timestamp:', Date.now());
-  event.waitUntil(self.clients.claim()); // Become available to all pages
-  broadcastState(); // Broadcast initial state on activation
+  console.log('[SW] Activate event starting...');
+  event.waitUntil(
+    self.clients.claim().then(() => {
+      console.log('[SW] Clients claimed in activate event.');
+      return broadcastState(false, undefined); // Ensure this returns a promise if broadcastState is async
+    }).then(() => {
+      console.log('[SW] Initial state broadcast on activate finished.');
+    }).catch(err => {
+      console.error('[SW] Error during activate event (clients.claim or broadcastState):', err);
+    })
+  );
+  console.log('[SW] Activate event handler setup finished.');
 });
 
 self.addEventListener('message', (event) => {
-  if (!event.data) {
-    console.log('[SW] Received message with no data.');
+  if (!event.data || !event.data.type) {
+    console.warn('[SW] Received message with no data or type:', event);
     return;
   }
-  console.log('[SW] Received message from client:', event.data);
+  console.log('[SW] Message received from client:', event.data);
 
-  const { type, locale } = event.data;
-  if (locale) {
-    currentLocale = locale;
+  const { type, payload } = event.data;
+  const command = type;
+
+  if (payload && payload.locale) {
+    currentLocale = payload.locale;
     console.log('[SW] Updated currentLocale to:', currentLocale);
   }
 
   try {
-    switch (type) {
-      case 'GET_INITIAL_STATE':
-        console.log('[SW] GET_INITIAL_STATE command received. Broadcasting current state.');
-        broadcastState();
-        break;
+    switch (command) {
       case 'START_WORK':
-        console.log('[SW] START_WORK command received.');
-        if (phase !== 'work' || !isRunning) { // Start fresh or if paused in work
-            phase = 'work';
-            timeRemaining = POMODORO_WORK_DURATION_SECONDS;
-            // cyclesCompleted = 0; // Reset cycles only when starting work from 'off' or after a break
-            if (!isRunning && (phase === 'off' || phase === 'shortBreak' || phase === 'longBreak')) {
-                 // This condition might need refinement. If we are explicitly told to START_WORK,
-                 // we should probably reset cycles if we are not *resuming* a work session.
-            }
-        }
-        isRunning = true;
-        startTimer();
+        handleStartWork();
         break;
       case 'START_SHORT_BREAK':
-        console.log('[SW] START_SHORT_BREAK command received.');
-        phase = 'shortBreak';
-        timeRemaining = POMODORO_SHORT_BREAK_DURATION_SECONDS;
-        isRunning = true;
-        startTimer();
+        handleStartShortBreak();
         break;
       case 'START_LONG_BREAK':
-        console.log('[SW] START_LONG_BREAK command received.');
-        phase = 'longBreak';
-        timeRemaining = POMODORO_LONG_BREAK_DURATION_SECONDS;
-        isRunning = true;
-        startTimer();
+        handleStartLongBreak();
         break;
       case 'PAUSE_TIMER':
-        console.log('[SW] PAUSE_TIMER command received. Current timerId:', timerId);
-        isRunning = false;
-        if (timerId) {
-          clearInterval(timerId);
-          timerId = null;
-          console.log('[SW] Timer paused and interval cleared.');
-        } else {
-          console.log('[SW] PAUSE_TIMER: No active timerId to clear.');
-        }
-        broadcastState(); // Broadcast paused state
+        handlePauseTimer();
         break;
       case 'RESUME_TIMER':
-        console.log('[SW] RESUME_TIMER command received. Current phase:', phase);
-        if (phase !== 'off' && !isRunning) {
-          isRunning = true;
-          startTimer(); // This will create a new interval
-        } else {
-          console.log('[SW] RESUME_TIMER: Conditions not met or already running. Phase:', phase, 'IsRunning:', isRunning);
-        }
+        handleResumeTimer();
         break;
       case 'RESET_TIMER':
-        console.log('[SW] RESET_TIMER command received. Current timerId:', timerId);
-        if (timerId) {
-          clearInterval(timerId);
-          timerId = null;
-          console.log('[SW] Timer reset and interval cleared.');
-        } else {
-          console.log('[SW] RESET_TIMER: No active timerId to clear.');
-        }
-        phase = 'off';
-        timeRemaining = POMODORO_WORK_DURATION_SECONDS;
-        isRunning = false;
-        cyclesCompleted = 0;
-        broadcastState();
+        handleResetTimer();
+        break;
+      case 'GET_INITIAL_STATE':
+        handleGetInitialState(event);
         break;
       default:
-        console.log('[SW] Unknown message type received:', type);
+        console.warn('[SW] Unknown command received:', command);
     }
   } catch (error) {
-    console.error('[SW] Error processing message:', type, error);
-    // Optionally, notify client about the error
-    self.clients.matchAll().then(clients => {
-        clients.forEach(client => {
-          client.postMessage({
-            type: 'SW_ERROR',
-            payload: { message: error.message, commandType: type }
-          });
-        });
-      });
+    console.error('[SW] Error processing command:', command, error);
+    const errorPayload = { message: `Error processing command ${command}: ${error.message || String(error)}` };
+    if (event.source && typeof event.source.postMessage === 'function') {
+        event.source.postMessage({ type: 'SW_ERROR', payload: errorPayload });
+    } else {
+        const clients = self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
+        clients.then(allClients => {
+            allClients.forEach(client => {
+                 client.postMessage({ type: 'SW_ERROR', payload: errorPayload });
+            });
+        }).catch(e => console.error('[SW] Error broadcasting SW_ERROR:', e));
+    }
   }
 });
 
-console.log('[SW] Event listeners for install, activate, message set up.');
+// Keep-alive logic removed for now to simplify debugging initial connection.
+// It's often not very effective on mobile anyway.
+console.log('[SW] Event listeners set up.');
