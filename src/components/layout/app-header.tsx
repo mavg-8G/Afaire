@@ -25,7 +25,7 @@ import { formatDistanceToNowStrict } from 'date-fns';
 import { enUS, es, fr } from 'date-fns/locale';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import PomodoroTimerPopover from '@/components/pomodoro/pomodoro-timer-popover'; // Import Pomodoro
+import PomodoroTimerPopover from '@/components/pomodoro/pomodoro-timer-popover';
 
 export default function AppHeader() {
   const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
@@ -41,7 +41,6 @@ export default function AppHeader() {
     clearAllUINotifications,
     systemNotificationPermission,
     requestSystemNotificationPermission,
-    pomodoroIsRunning, // Get Pomodoro state
   } = useAppStore();
   const router = useRouter();
 
@@ -178,7 +177,15 @@ export default function AppHeader() {
             {t('viewHistory')}
         </Link>
       </DropdownMenuItem>
-      {appMode === 'personal' && ( // Show only if personal mode, for both mobile and desktop options
+      {appMode === 'personal' && !isMobileMenu && ( // Only for desktop "Options" menu
+         <DropdownMenuItem asChild>
+            <Link href="/assignees" className="flex items-center w-full">
+                <Users className="mr-2 h-4 w-4" />
+                {t('manageAssignees')}
+            </Link>
+        </DropdownMenuItem>
+      )}
+       {appMode === 'personal' && isMobileMenu && ( // For mobile "More Options" menu
          <DropdownMenuItem asChild>
             <Link href="/assignees" className="flex items-center w-full">
                 <Users className="mr-2 h-4 w-4" />
@@ -241,10 +248,13 @@ export default function AppHeader() {
           {desktopAppModeToggleSwitch}
 
 
-          {/* Right Group - This will be pushed to the far right by justify-between */}
+          {/* Right Group */}
           <div className="flex items-center gap-x-1 sm:gap-x-2 mr-4">
             
-            <PomodoroTimerPopover /> {/* Add Pomodoro Timer Button */}
+            {/* Pomodoro Timer - Desktop Only */}
+            <div className="hidden md:block">
+              <PomodoroTimerPopover />
+            </div>
 
             {/* Notification Bell - Visible on all screen sizes */}
             <DropdownMenu>
@@ -286,7 +296,7 @@ export default function AppHeader() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="icon" aria-label={t('moreOptionsDesktop')}>
-                    <MoreHorizontal className="h-5 w-5" /> 
+                    <Settings className="h-5 w-5" /> 
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
