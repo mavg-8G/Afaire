@@ -315,10 +315,8 @@ export default function ActivityCalendarView() {
 
   const handleAddNewActivityGeneric = () => {
     setEditingActivity(undefined);
-    // When FAB is clicked, the modal should open for the currently selectedDate on the calendar,
-    // or today if no date is selected (though selectedDate is usually initialized to today).
-    setDateForModal(selectedDate || new Date());
-    setEditingInstanceDate(undefined); // No specific instance when adding generally
+    setDateForModal(selectedDate || new Date()); // Use selectedDate from calendar for new activities from FAB
+    setEditingInstanceDate(undefined);
     setIsActivityModalOpen(true);
   };
 
@@ -362,14 +360,14 @@ export default function ActivityCalendarView() {
     } else if (date) {
         setCurrentDisplayMonth(date);
     }
-    if (date) setDateForModal(date); // Update dateForModal when a calendar date is selected
+    if (date) setDateForModal(date);
   };
 
   const handleTodayButtonClick = () => {
     const today = new Date();
     setSelectedDate(today);
     setCurrentDisplayMonth(today);
-    setDateForModal(today); // Also update dateForModal for consistency
+    setDateForModal(today);
   };
 
   const todayButtonFooter = (
@@ -503,7 +501,7 @@ export default function ActivityCalendarView() {
             isOpen={isActivityModalOpen}
             onClose={handleCloseModal}
             activity={editingActivity}
-            initialDate={dateForModal}
+            initialDate={dateForModal} // Use the stable dateForModal
             instanceDate={editingInstanceDate}
           />
         )}
@@ -530,7 +528,7 @@ export default function ActivityCalendarView() {
         variant="ghost"
         onClick={handleAddNewActivityGeneric}
         className={cn(
-            "fixed bottom-16 right-6 z-50 shadow-lg", // Adjusted from bottom-12 to bottom-16
+            "fixed bottom-14 right-6 z-50 shadow-lg", // Adjusted from bottom-12 to bottom-14
             "bg-[hsl(var(--accent))]/15 text-accent-foreground backdrop-blur-md border border-border/50 hover:bg-[hsl(var(--accent))]/30",
             "flex items-center justify-center",
             // Mobile: Round button
