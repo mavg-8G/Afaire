@@ -1,4 +1,3 @@
-
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -233,53 +232,21 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                 </FormItem>
               )}
             />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="categoryId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('categoryLabel')}</FormLabel>
-                    <CategorySelector
-                      value={field.value}
-                      onChange={field.onChange}
-                      placeholder={t('selectCategoryPlaceholder')}
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              {appMode === 'personal' && (
-                <FormField
-                  control={form.control}
-                  name="responsiblePersonId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('responsiblePersonLabel')}</FormLabel>
-                      <Select
-                        onValueChange={(value) => field.onChange(value === UNASSIGNED_RESPONSIBLE_PERSON_ID_KEY ? null : value)}
-                        value={field.value === null || field.value === undefined ? UNASSIGNED_RESPONSIBLE_PERSON_ID_KEY : field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={t('selectResponsiblePersonPlaceholder')} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value={UNASSIGNED_RESPONSIBLE_PERSON_ID_KEY}>{t('unassigned')}</SelectItem>
-                          {assignees.map((assignee: Assignee) => (
-                            <SelectItem key={assignee.id} value={assignee.id}>
-                              {assignee.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+             <FormField
+              control={form.control}
+              name="categoryId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('categoryLabel')}</FormLabel>
+                  <CategorySelector
+                    value={field.value}
+                    onChange={field.onChange}
+                    placeholder={t('selectCategoryPlaceholder')}
+                  />
+                  <FormMessage />
+                </FormItem>
               )}
-            </div>
+            />
 
             <div className="grid grid-cols-2 gap-2 sm:gap-4">
               <FormField
@@ -333,11 +300,11 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
                 control={form.control}
                 name="time"
                 render={({ field }) => (
-                  <FormItem className="flex flex-col min-w-0"> {/* Added min-w-0 */}
+                  <FormItem className="flex flex-col min-w-0">
                     <FormLabel className="min-h-8">{t('activityTimeLabel')}</FormLabel>
                     <FormControl>
-                       <div className="relative w-full">
-                        <Input type="time" {...field} className="w-full pr-6" /> {/* Reduced pr from pr-7 */}
+                       <div className="relative w-full max-w-full"> {/* Added max-w-full */}
+                        <Input type="time" {...field} className="w-full pr-6 max-w-full" /> {/* Added max-w-full */}
                         <Clock className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
                       </div>
                     </FormControl>
@@ -347,7 +314,37 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
               />
             </div>
             
-            {/* Recurrence Type (Repeats) - Extracted */}
+            {appMode === 'personal' && (
+                <FormField
+                  control={form.control}
+                  name="responsiblePersonId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('responsiblePersonLabel')}</FormLabel>
+                      <Select
+                        onValueChange={(value) => field.onChange(value === UNASSIGNED_RESPONSIBLE_PERSON_ID_KEY ? null : value)}
+                        value={field.value === null || field.value === undefined ? UNASSIGNED_RESPONSIBLE_PERSON_ID_KEY : field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder={t('selectResponsiblePersonPlaceholder')} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value={UNASSIGNED_RESPONSIBLE_PERSON_ID_KEY}>{t('unassigned')}</SelectItem>
+                          {assignees.map((assignee: Assignee) => (
+                            <SelectItem key={assignee.id} value={assignee.id}>
+                              {assignee.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+            
             <FormField
               control={form.control}
               name="recurrence.type"
@@ -372,7 +369,6 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
               )}
             />
 
-            {/* Conditional Recurrence Options (Days of Week / Day of Month) */}
             {recurrenceType === 'weekly' && (
               <FormField
                 control={form.control}
@@ -440,7 +436,6 @@ export default function ActivityModal({ isOpen, onClose, activity, initialDate, 
               />
             )}
 
-            {/* Recurrence End Date - Extracted & Conditional */}
             {recurrenceType !== 'none' && (
               <FormField
                 control={form.control}
