@@ -51,7 +51,7 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
 
   const handleAddToCalendar = () => {
     const icsContent = generateICSContent(activity, instanceDate);
-    const filename = `${activity.title.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'activity'}.ics`;
+    const filename = `${(activity.title || 'activity').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.ics`;
     downloadFile(filename, icsContent);
   };
 
@@ -159,4 +159,3 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
     </Card>
   );
 }
-
