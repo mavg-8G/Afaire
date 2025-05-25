@@ -12,19 +12,21 @@ import { useTranslations } from '@/contexts/language-context';
 import { format, formatISO, isSameDay } from 'date-fns';
 import { enUS, es, fr } from 'date-fns/locale';
 import { generateICSContent, downloadFile } from '@/lib/ics-utils'; // Import ICS utilities
+import { useRouter } from 'next/navigation'; // Import useRouter for navigation
 
 interface ActivityListItemProps {
   activity: Activity; // This can be a master activity or a generated instance
   category: Category | undefined;
-  onEdit: () => void;
+  onEdit: () => void; // Kept for potential direct modal use in other contexts if needed, but navigation will be used here
   onDelete: () => void;
   showDate?: boolean;
   instanceDate?: Date; // The specific date of this occurrence if it's a recurring instance
 }
 
 export default function ActivityListItem({ activity, category, onEdit, onDelete, showDate, instanceDate }: ActivityListItemProps) {
-  const { updateActivity, toggleOccurrenceCompletion } = useAppStore();
+  const { updateActivity, toggleOccurrenceCompletion, getRawActivities } = useAppStore();
   const { t, locale } = useTranslations();
+  const router = useRouter();
   const dateLocale = locale === 'es' ? es : locale === 'fr' ? fr : enUS;
 
   const effectiveDate = instanceDate || new Date(activity.createdAt);
@@ -34,15 +36,23 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
     ? !!activity.completedOccurrences?.[occurrenceDateKey]
     : !!activity.completed;
 
-  const completedTodos = activity.todos.filter(t => t.completed).length;
+  // For recurring instances, todos are fresh copies, so their completion is per instance
+  // However, the activity.todos on a recurring instance (which is a shallow copy of master todos)
+  // does not reflect instance-specific completion.
+  // For now, we'll show master todo counts for recurring, and live counts for non-recurring.
+  // A more advanced implementation would involve managing todo completion per instance.
+  const completedTodos = !activity.isRecurringInstance ? activity.todos.filter(t => t.completed).length : 0; // Simplified for now
   const totalTodos = activity.todos.length;
 
   const handleActivityCompletedChange = (completedValue: boolean) => {
     if (activity.isRecurringInstance && activity.masterActivityId && activity.originalInstanceDate) {
+      // For recurring instance, toggle its specific completion
       toggleOccurrenceCompletion(activity.masterActivityId, activity.originalInstanceDate, completedValue);
     } else if (!activity.isRecurringInstance) {
+      // For non-recurring (master) activity
       let updatedTodos = activity.todos;
       if (completedValue && activity.todos.length > 0) {
+        // If master is marked complete, mark all its todos complete
         updatedTodos = activity.todos.map(todo => ({ ...todo, completed: true }));
       }
       // For non-recurring, set completedAt timestamp
@@ -51,8 +61,22 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
     }
   };
 
+  const handleEditClick = () => {
+    // Determine the ID to use for the edit route
+    // If it's an instance, we edit the master activity definition
+    const editId = activity.masterActivityId || activity.id;
+    let url = `/activity-editor?id=${editId}`;
+    if (activity.isRecurringInstance && activity.originalInstanceDate) {
+      // Optionally pass instanceDate if the form needs to be aware of the specific instance context
+      // For now, editing an instance still edits the master series.
+      url += `&instanceDate=${activity.originalInstanceDate}`;
+    }
+    router.push(url);
+  };
+
   const handleAddToCalendar = () => {
-    const icsContent = generateICSContent(activity, instanceDate);
+    // Use effectiveDate for the ICS file, which is instanceDate or activity.createdAt
+    const icsContent = generateICSContent(activity, effectiveDate);
     const filename = `${(activity.title || 'activity').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.ics`;
     downloadFile(filename, icsContent);
   };
@@ -81,27 +105,28 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
             >
               {activity.title}
             </CardTitle>
-            {(showDate || activity.time || (activity.recurrence && activity.recurrence.type !== 'none')) && (
+            {(showDate || activity.time || (activity.recurrence && activity.recurrence.type !== 'none' && !activity.isRecurringInstance)) && (
                 <div className="flex flex-col mt-0.5">
-                  {showDate && instanceDate && (
+                  {showDate && effectiveDate && (
                     <div className={cn(
                       "flex items-center text-xs text-muted-foreground",
                       isCompletedForThisOccurrence && "text-muted-foreground/70"
                     )}>
                       <CalendarDays className="mr-1 h-3 w-3" />
-                      {format(instanceDate, 'PPP', { locale: dateLocale })}
+                      {format(effectiveDate, 'PPP', { locale: dateLocale })}
                     </div>
                   )}
                   {activity.time && (
                     <div className={cn(
                       "flex items-center text-xs text-muted-foreground",
                       isCompletedForThisOccurrence && "text-muted-foreground/70",
-                      (showDate || (activity.recurrence && activity.recurrence.type !== 'none')) && "mt-0.5"
+                      (showDate || (activity.recurrence && activity.recurrence.type !== 'none' && !activity.isRecurringInstance)) && "mt-0.5"
                     )}>
                       <Clock className="mr-1 h-3 w-3" />
                       {activity.time}
                     </div>
                   )}
+                  {/* Show recurrence info only for the master activity card, not for each instance */}
                   {activity.recurrence && activity.recurrence.type !== 'none' && !activity.isRecurringInstance && (
                      <div className={cn(
                       "flex items-center text-xs text-muted-foreground",
@@ -121,7 +146,7 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
             <CalendarPlus className="h-4 w-4" />
             <span className="sr-only">{t('addToCalendarSr')}</span>
           </Button>
-          <Button variant="ghost" size="icon" onClick={onEdit} className="h-7 w-7">
+          <Button variant="ghost" size="icon" onClick={handleEditClick} className="h-7 w-7">
             <Edit3 className="h-4 w-4" />
             <span className="sr-only">{t('editActivitySr')}</span>
           </Button>
@@ -131,7 +156,7 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
           </Button>
         </div>
       </CardHeader>
-      {(category || totalTodos > 0) && (
+      {(category || (totalTodos > 0 && !activity.isRecurringInstance)) && ( // Show todos count only for non-recurring or master
         <CardContent className="px-3 pt-1 pb-2 pl-9">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
             {category && (
@@ -161,3 +186,4 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
     </Card>
   );
 }
+

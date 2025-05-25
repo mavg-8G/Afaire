@@ -1,6 +1,7 @@
 
 "use client";
 import React, { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation'; // Import useRouter
 import { Calendar } from '@/components/ui/calendar';
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Activity, RecurrenceRule } from '@/lib/types';
@@ -9,7 +10,7 @@ import {
   addDays, addWeeks, addMonths, getDay, getDate as getDayOfMonthFn, parseISO, formatISO,
   isAfter, isBefore, isEqual, setDate as setDayOfMonth // Added setDate
 } from 'date-fns';
-import ActivityModal from '@/components/forms/activity-modal';
+// ActivityModal import removed
 import ActivityListItem from './activity-list-item';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -129,11 +130,12 @@ function generateRecurringInstances(
       const occurrenceDateKey = formatISO(currentDate, { representation: 'date' });
       instances.push({
         ...masterActivity,
-        id: `${masterActivity.id}_${currentDate.getTime()}`,
+        id: `${masterActivity.id}_${currentDate.getTime()}`, // Unique ID for instance
         isRecurringInstance: true,
         originalInstanceDate: currentDate.getTime(),
         masterActivityId: masterActivity.id,
         completed: !!masterActivity.completedOccurrences?.[occurrenceDateKey],
+        // Create new todo instances for each recurring activity instance
         todos: masterActivity.todos.map(todo => ({...todo, id: uuidv4(), completed: false})),
       });
     }
@@ -141,11 +143,13 @@ function generateRecurringInstances(
     if (recurrence.type === 'daily') {
       currentDate = addDays(currentDate, 1);
     } else if (recurrence.type === 'weekly') {
+      // For weekly, we just advance by one day and rely on daysOfWeek check
       currentDate = addDays(currentDate, 1);
     } else if (recurrence.type === 'monthly') {
+      // For monthly, advance by one day, the check for dayOfMonth handles it
       currentDate = addDays(currentDate,1);
     } else {
-      break;
+      break; // Should not happen
     }
   }
   return instances;
@@ -153,18 +157,18 @@ function generateRecurringInstances(
 
 
 export default function ActivityCalendarView() {
-  const { getRawActivities, getCategoryById, deleteActivity, toggleOccurrenceCompletion } = useAppStore();
+  const { getRawActivities, getCategoryById, deleteActivity } = useAppStore();
   const { toast } = useToast();
   const { t, locale } = useTranslations();
+  const router = useRouter(); // Initialize useRouter
+
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [currentDisplayMonth, setCurrentDisplayMonth] = useState<Date | undefined>(undefined);
-  const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
-  const [editingActivity, setEditingActivity] = useState<Activity | undefined>(undefined);
-  const [editingInstanceDate, setEditingInstanceDate] = useState<Date | undefined>(undefined);
+  // ActivityModal related states removed
   const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
   const [hasMounted, setHasMounted] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('daily');
-  const [dateForModal, setDateForModal] = useState<Date>(new Date());
+  // dateForModal removed
 
 
   const dateLocale = useMemo(() => {
@@ -178,7 +182,7 @@ export default function ActivityCalendarView() {
     const today = new Date();
     setSelectedDate(today);
     setCurrentDisplayMonth(today);
-    setDateForModal(today);
+    // setDateForModal(today) removed;
   }, []);
 
 
@@ -193,7 +197,7 @@ export default function ActivityCalendarView() {
     } else if (viewMode === 'weekly') {
       viewStartDate = startOfWeek(selectedDate, { locale: dateLocale });
       viewEndDate = endOfWeek(selectedDate, { locale: dateLocale });
-    } else {
+    } else { // monthly
       viewStartDate = startOfMonth(selectedDate);
       viewEndDate = endOfMonth(selectedDate);
     }
@@ -202,26 +206,30 @@ export default function ActivityCalendarView() {
     rawActivities.forEach(masterActivity => {
       if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
         allDisplayActivities.push(...generateRecurringInstances(masterActivity, viewStartDate, viewEndDate));
-      } else {
+      } else { // Non-recurring
         const activityDate = new Date(masterActivity.createdAt);
          if (isWithinInterval(activityDate, { start: viewStartDate, end: viewEndDate }) || isSameDay(activityDate, viewStartDate) || isSameDay(activityDate, viewEndDate) ) {
            allDisplayActivities.push({
             ...masterActivity,
-            isRecurringInstance: false,
-            originalInstanceDate: masterActivity.createdAt,
+            isRecurringInstance: false, // Explicitly false
+            originalInstanceDate: masterActivity.createdAt, // Use createdAt as original instance
             masterActivityId: masterActivity.id,
           });
         }
       }
     });
 
+    // For daily view, filter again to ensure only activities for the exact selectedDate are shown
+    // This is important because generateRecurringInstances might include instances from the start/end of the week/month range
     if (viewMode === 'daily') {
       allDisplayActivities = allDisplayActivities.filter(activity =>
         activity.originalInstanceDate && isSameDay(new Date(activity.originalInstanceDate), selectedDate)
       );
     }
-
+    
+    // Sort logic
     const sortedActivities = allDisplayActivities.sort((a, b) => {
+        // Determine completion status for this specific instance
         const aIsCompleted = a.isRecurringInstance && a.originalInstanceDate
             ? !!a.completedOccurrences?.[formatISO(new Date(a.originalInstanceDate), { representation: 'date' })]
             : !!a.completed;
@@ -229,38 +237,48 @@ export default function ActivityCalendarView() {
             ? !!b.completedOccurrences?.[formatISO(new Date(b.originalInstanceDate), { representation: 'date' })]
             : !!b.completed;
 
+        // 1. Sort by completion status (incomplete first)
         if (aIsCompleted !== bIsCompleted) {
-            return aIsCompleted ? 1 : -1;
+            return aIsCompleted ? 1 : -1; // Completed items go to the bottom
         }
 
+        // 2. Sort by time (activities with time first, then by time ascending)
         const aTime = a.time ? parseInt(a.time.replace(':', ''), 10) : Infinity;
         const bTime = b.time ? parseInt(b.time.replace(':', ''), 10) : Infinity;
-
-        if (a.time && !b.time) return -1;
-        if (!a.time && b.time) return 1;
-
+        
+        if (a.time && !b.time) return -1; // a (with time) comes before b (without time)
+        if (!a.time && b.time) return 1;  // b (with time) comes before a (without time)
+        
         if (a.time && b.time && aTime !== bTime) {
-            return aTime - bTime;
+            return aTime - bTime; // Sort by time ascending
         }
 
+        // 3. Sort by original instance date (earlier dates first)
         const aDate = a.originalInstanceDate ? new Date(a.originalInstanceDate).getTime() : new Date(a.createdAt).getTime();
         const bDate = b.originalInstanceDate ? new Date(b.originalInstanceDate).getTime() : new Date(b.createdAt).getTime();
         if (aDate !== bDate) {
             return aDate - bDate;
         }
-
-        return 0;
+        
+        // 4. Fallback sort by title (alphabetical) for stability if all else is equal
+        return a.title.localeCompare(b.title);
     });
 
     const allCompleted = sortedActivities.length > 0 && sortedActivities.every(act => {
+      // Check completion of the specific instance
       const isInstanceCompleted = act.isRecurringInstance && act.originalInstanceDate
         ? !!act.completedOccurrences?.[formatISO(new Date(act.originalInstanceDate), { representation: 'date' })]
         : !!act.completed;
 
       if (!isInstanceCompleted) return false;
-      if (act.todos && act.todos.length > 0) {
+      // If it's a recurring instance, its todos are fresh copies, so they are not pre-completed
+      // unless specifically handled after generation (which is not the case here).
+      // For non-recurring, check its todos.
+      if (!act.isRecurringInstance && act.todos && act.todos.length > 0) {
         return act.todos.every(todo => todo.completed);
       }
+      // If recurring, its "main" completion implies completion for the chart
+      // If non-recurring and no todos, its "main" completion is enough
       return true;
     });
 
@@ -272,8 +290,10 @@ export default function ActivityCalendarView() {
     const rawActivities = getRawActivities();
     const counts = new Map<string, number>();
 
-    const displayRangeStart = startOfMonth(addMonths(currentDisplayMonth, -1));
-    const displayRangeEnd = endOfMonth(addMonths(currentDisplayMonth, 1));
+    // Define the range for which to generate instances for dots
+    // Typically, this covers the visible month plus potentially parts of prev/next month
+    const displayRangeStart = startOfMonth(addMonths(currentDisplayMonth, -1)); // Include previous month
+    const displayRangeEnd = endOfMonth(addMonths(currentDisplayMonth, 1));   // Include next month
 
     rawActivities.forEach(activity => {
       if (activity.recurrence && activity.recurrence.type !== 'none') {
@@ -284,8 +304,9 @@ export default function ActivityCalendarView() {
             counts.set(dateKey, (counts.get(dateKey) || 0) + 1);
           }
         });
-      } else {
+      } else { // Non-recurring
         const activityDate = new Date(activity.createdAt);
+        // Check if the non-recurring activity falls within the wider display range for dots
         if (isWithinInterval(activityDate, {start: displayRangeStart, end: displayRangeEnd})) {
           const dateKey = formatISO(activityDate, { representation: 'date' });
           counts.set(dateKey, (counts.get(dateKey) || 0) + 1);
@@ -295,7 +316,6 @@ export default function ActivityCalendarView() {
     return counts;
   }, [getRawActivities, hasMounted, currentDisplayMonth]);
 
-
   const handleEditActivity = (activityInstanceOrMaster: Activity) => {
     const rawActivities = getRawActivities();
     const masterActivity = activityInstanceOrMaster.masterActivityId
@@ -303,38 +323,42 @@ export default function ActivityCalendarView() {
       : activityInstanceOrMaster;
 
     if (masterActivity) {
-      setEditingActivity(masterActivity);
-      const instanceOrDefaultDate = activityInstanceOrMaster.originalInstanceDate
-        ? new Date(activityInstanceOrMaster.originalInstanceDate)
-        : new Date(masterActivity.createdAt);
-      setDateForModal(instanceOrDefaultDate);
-      setEditingInstanceDate(instanceOrDefaultDate);
-      setIsActivityModalOpen(true);
+      let url = `/activity-editor?id=${masterActivity.id}`;
+      if (activityInstanceOrMaster.isRecurringInstance && activityInstanceOrMaster.originalInstanceDate) {
+        url += `&instanceDate=${activityInstanceOrMaster.originalInstanceDate}`;
+      }
+      router.push(url);
     }
   };
 
   const handleAddNewActivityGeneric = () => {
-    setEditingActivity(undefined);
-    setDateForModal(selectedDate || new Date()); // Use selectedDate from calendar for new activities from FAB
-    setEditingInstanceDate(undefined);
-    setIsActivityModalOpen(true);
+    let url = `/activity-editor`;
+    if (selectedDate) {
+      url += `?initialDate=${selectedDate.getTime()}`;
+    }
+    router.push(url);
   };
 
 
   const handleOpenDeleteConfirm = (activityInstanceOrMaster: Activity) => {
-     const rawActivities = getRawActivities();
+    const rawActivities = getRawActivities(); // Fetch fresh list
+    // For deletion, we always target the master activity if it's a recurring series
     const masterActivity = activityInstanceOrMaster.masterActivityId
       ? rawActivities.find(a => a.id === activityInstanceOrMaster.masterActivityId)
       : activityInstanceOrMaster;
 
     if (masterActivity) {
-      setActivityToDelete(masterActivity);
+      setActivityToDelete(masterActivity); // Set the master activity for deletion
+    } else {
+      // This case should ideally not happen if data is consistent
+      console.warn("Could not find master activity for deletion", activityInstanceOrMaster);
+      setActivityToDelete(activityInstanceOrMaster); // Fallback to deleting the instance if master not found
     }
   };
 
   const handleConfirmDelete = () => {
     if (activityToDelete) {
-      deleteActivity(activityToDelete.id);
+      deleteActivity(activityToDelete.id); // This deletes the master, thus the series
       toast({
         title: t('toastActivityDeletedTitle'),
         description: t('toastActivityDeletedDescription', { activityTitle: activityToDelete.title })
@@ -343,31 +367,29 @@ export default function ActivityCalendarView() {
     }
   };
 
-  const handleCloseModal = () => {
-    setIsActivityModalOpen(false);
-    setEditingActivity(undefined);
-    setEditingInstanceDate(undefined);
-  };
+  // handleCloseModal removed
 
   const handleDateSelect = (date: Date | undefined) => {
     setSelectedDate(date);
     if (date && currentDisplayMonth) {
       const newSelectedMonthStart = startOfMonth(date);
       const currentDisplayMonthStart = startOfMonth(currentDisplayMonth);
+      // Check if the month of the selected date is different from the current display month
       if (newSelectedMonthStart.getTime() !== currentDisplayMonthStart.getTime()) {
-          setCurrentDisplayMonth(date);
+          setCurrentDisplayMonth(date); // Update display month to the month of the selected date
       }
     } else if (date) {
+        // If currentDisplayMonth is undefined (e.g., on initial load after selection)
         setCurrentDisplayMonth(date);
     }
-    if (date) setDateForModal(date);
+    // dateForModal removed
   };
 
   const handleTodayButtonClick = () => {
     const today = new Date();
     setSelectedDate(today);
-    setCurrentDisplayMonth(today);
-    setDateForModal(today);
+    setCurrentDisplayMonth(today); // Ensure calendar view also jumps to current month
+    // dateForModal removed
   };
 
   const todayButtonFooter = (
@@ -396,24 +418,26 @@ export default function ActivityCalendarView() {
     } else if (viewMode === 'monthly') {
       return t('activitiesForMonth', { month: format(selectedDate, 'MMMM yyyy', { locale: dateLocale }) });
     }
-    return t('loadingDate');
+    return t('loadingDate'); // Fallback
   };
 
 
   if (!hasMounted || !selectedDate || !currentDisplayMonth) {
     return (
       <div className="container mx-auto py-6 flex flex-col lg:flex-row gap-6 items-start">
+        {/* Calendar Skeleton */}
         <Card className="lg:w-1/2 xl:w-2/3 shadow-lg w-full">
           <CardContent className="p-0 sm:p-1 flex justify-center">
             <Skeleton className="h-[300px] w-[350px] sm:w-[400px] sm:h-[350px] rounded-md" />
           </CardContent>
         </Card>
+        {/* Activity List Skeleton */}
         <Card className="lg:w-1/2 xl:w-1/3 shadow-lg w-full flex flex-col">
           <CardHeader>
             <CardTitle>
               <Skeleton className="h-6 w-3/4" />
             </CardTitle>
-             <div className="pt-2">
+             <div className="pt-2"> {/* Added padding for tabs skeleton */}
                 <Skeleton className="h-10 w-full" />
             </div>
           </CardHeader>
@@ -437,19 +461,19 @@ export default function ActivityCalendarView() {
               mode="single"
               selected={selectedDate}
               onSelect={handleDateSelect}
-              month={currentDisplayMonth}
-              onMonthChange={setCurrentDisplayMonth}
+              month={currentDisplayMonth} // Control the displayed month
+              onMonthChange={setCurrentDisplayMonth} // Allow user to change month
               className="p-1 sm:p-3 rounded-md"
               locale={dateLocale}
               footer={todayButtonFooter}
-              dayEventCounts={dayEventCounts}
+              dayEventCounts={dayEventCounts} // Pass event counts
             />
           </CardContent>
         </Card>
 
         <Card className={cn(
           "lg:w-1/2 xl:w-1/3 shadow-lg w-full flex flex-col transition-colors duration-300",
-          allActivitiesInViewCompleted && activitiesForView.length > 0 && "bg-primary/10"
+          allActivitiesInViewCompleted && activitiesForView.length > 0 && "bg-primary/10" // Highlight if all complete
           )}>
           <CardHeader>
             <CardTitle>
@@ -471,7 +495,7 @@ export default function ActivityCalendarView() {
                 <div className="space-y-3">
                   {activitiesForView.map(activity => (
                     <ActivityListItem
-                      key={activity.id}
+                      key={activity.id} // Use the generated unique ID for instances
                       activity={activity}
                       category={getCategoryById(activity.categoryId)}
                       onEdit={() => handleEditActivity(activity)}
@@ -496,15 +520,7 @@ export default function ActivityCalendarView() {
           )}
         </Card>
 
-        {isActivityModalOpen && (
-          <ActivityModal
-            isOpen={isActivityModalOpen}
-            onClose={handleCloseModal}
-            activity={editingActivity}
-            initialDate={dateForModal} // Use the stable dateForModal
-            instanceDate={editingInstanceDate}
-          />
-        )}
+        {/* ActivityModal removed */}
 
         {activityToDelete && (
           <AlertDialog open={!!activityToDelete} onOpenChange={() => setActivityToDelete(null)}>
@@ -528,7 +544,7 @@ export default function ActivityCalendarView() {
         variant="ghost"
         onClick={handleAddNewActivityGeneric}
         className={cn(
-            "fixed bottom-14 right-6 z-50 shadow-lg", // Adjusted from bottom-12 to bottom-14
+            "fixed bottom-14 right-6 z-50 shadow-lg",
             "bg-[hsl(var(--accent))]/15 text-accent-foreground backdrop-blur-md border border-border/50 hover:bg-[hsl(var(--accent))]/30",
             "flex items-center justify-center",
             // Mobile: Round button
