@@ -91,7 +91,7 @@ export type Translations = {
   activityDateLabel: string;
   pickADate: string;
   activityTimeLabel: string;
-  activityTimeDescription24Hour: string; // This was requested to be removed, but keeping the key in case.
+  activityTimeDescription24Hour: string;
   activityNotesLabel: string;
   activityNotesPlaceholder: string;
   todosLabel: string;
@@ -238,6 +238,14 @@ export type Translations = {
   dashboardListCurrentMonth: string;
   dashboardNoActivitiesForList: string;
   dashboardNotesLabel: string;
+  dashboardProductivityView: string;
+  dashboardCategoryBreakdown: string;
+  dashboardCompletionStats: string;
+  dashboardActivityCountLabel: string; // For BarChart legend
+  dashboardOverallCompletionRate: string;
+  dashboardTotalActivitiesLabel: string;
+  dashboardTotalCompletedLabel: string;
+  dashboardNoDataForAnalysis: string;
 
   // History Page
   historyPageTitle: string;
@@ -385,7 +393,7 @@ export const translations: Record<Locale, Translations> = {
     activityDateLabel: "Start Date / Date",
     pickADate: "Pick a date",
     activityTimeLabel: "Activity Time (HH:MM)",
-    activityTimeDescription24Hour: "Please use 24-hour format (e.g., 14:30).",
+    activityTimeDescription24Hour: "Use 24-hour format (e.g., 14:30).",
     activityNotesLabel: "Notes",
     activityNotesPlaceholder: "Add any additional details or links here...",
     todosLabel: "Todos",
@@ -505,6 +513,7 @@ export const translations: Record<Locale, Translations> = {
     dashboardMainDescription: "Track your activity progress and view summaries.",
     dashboardChartView: "Chart View",
     dashboardListView: "List View",
+    dashboardProductivityView: "Productivity",
     dashboardViewWeekly: "Last 7 Days",
     dashboardViewMonthly: "Current Month (by Week)",
     dashboardChartTotalActivities: "Total Activities",
@@ -515,6 +524,13 @@ export const translations: Record<Locale, Translations> = {
     dashboardListCurrentMonth: "Current Month",
     dashboardNoActivitiesForList: "No activities found for the selected period.",
     dashboardNotesLabel: "Notes",
+    dashboardCategoryBreakdown: "Category Breakdown",
+    dashboardCompletionStats: "Completion Statistics",
+    dashboardActivityCountLabel: "Completed Activities",
+    dashboardOverallCompletionRate: "Overall Completion Rate:",
+    dashboardTotalActivitiesLabel: "Total Activities:",
+    dashboardTotalCompletedLabel: "Total Completed:",
+    dashboardNoDataForAnalysis: "Not enough data for analysis in this period.",
     historyPageTitle: "Activity History",
     historyPageDescription: "Recent actions performed during this session.",
     noHistoryYet: "No activity recorded in this session yet.",
@@ -590,7 +606,7 @@ export const translations: Record<Locale, Translations> = {
     language: "Idioma",
     english: "Inglés",
     spanish: "Español",
-    french: "Francés",
+    french: "Français",
     theme: "Tema",
     lightTheme: "Claro",
     darkTheme: "Oscuro",
@@ -665,7 +681,7 @@ export const translations: Record<Locale, Translations> = {
     activityDateLabel: "Fecha de Inicio / Fecha",
     pickADate: "Elige una fecha",
     activityTimeLabel: "Hora de la Actividad (HH:MM)",
-    activityTimeDescription24Hour: "Por favor, usa el formato de 24 horas (ej: 14:30).",
+    activityTimeDescription24Hour: "Usa el formato de 24 horas (ej: 14:30).",
     activityNotesLabel: "Notas",
     activityNotesPlaceholder: "Añade detalles adicionales o enlaces aquí...",
     todosLabel: "Tareas",
@@ -785,6 +801,7 @@ export const translations: Record<Locale, Translations> = {
     dashboardMainDescription: "Sigue el progreso de tus actividades y visualiza resúmenes.",
     dashboardChartView: "Vista de Gráfico",
     dashboardListView: "Vista de Lista",
+    dashboardProductivityView: "Productividad",
     dashboardViewWeekly: "Últimos 7 Días",
     dashboardViewMonthly: "Mes Actual (por Semana)",
     dashboardChartTotalActivities: "Actividades Totales",
@@ -795,6 +812,13 @@ export const translations: Record<Locale, Translations> = {
     dashboardListCurrentMonth: "Mes Actual",
     dashboardNoActivitiesForList: "No se encontraron actividades para el período seleccionado.",
     dashboardNotesLabel: "Notas",
+    dashboardCategoryBreakdown: "Desglose por Categoría",
+    dashboardCompletionStats: "Estadísticas de Finalización",
+    dashboardActivityCountLabel: "Actividades Completadas",
+    dashboardOverallCompletionRate: "Tasa de Finalización General:",
+    dashboardTotalActivitiesLabel: "Actividades Totales:",
+    dashboardTotalCompletedLabel: "Total Completadas:",
+    dashboardNoDataForAnalysis: "No hay suficientes datos para el análisis en este período.",
     historyPageTitle: "Historial de Actividad",
     historyPageDescription: "Acciones recientes realizadas durante esta sesión.",
     noHistoryYet: "Aún no se ha registrado actividad en esta sesión.",
@@ -945,7 +969,7 @@ export const translations: Record<Locale, Translations> = {
     activityDateLabel: "Date de début / Date",
     pickADate: "Choisissez une date",
     activityTimeLabel: "Heure de l'activité (HH:MM)",
-    activityTimeDescription24Hour: "Veuillez utiliser le format 24 heures (ex: 14:30).",
+    activityTimeDescription24Hour: "Utilisez le format 24 heures (ex: 14:30).",
     activityNotesLabel: "Notes",
     activityNotesPlaceholder: "Ajoutez des détails supplémentaires ou des liens ici...",
     todosLabel: "Tâches",
@@ -1065,6 +1089,7 @@ export const translations: Record<Locale, Translations> = {
     dashboardMainDescription: "Suivez la progression de vos activités et consultez des résumés.",
     dashboardChartView: "Vue graphique",
     dashboardListView: "Vue liste",
+    dashboardProductivityView: "Productivité",
     dashboardViewWeekly: "7 derniers jours",
     dashboardViewMonthly: "Mois en cours (par semaine)",
     dashboardChartTotalActivities: "Total des activités",
@@ -1075,6 +1100,13 @@ export const translations: Record<Locale, Translations> = {
     dashboardListCurrentMonth: "Mois en cours",
     dashboardNoActivitiesForList: "Aucune activité trouvée pour la période sélectionnée.",
     dashboardNotesLabel: "Notes",
+    dashboardCategoryBreakdown: "Répartition par catégorie",
+    dashboardCompletionStats: "Statistiques d'achèvement",
+    dashboardActivityCountLabel: "Activités terminées",
+    dashboardOverallCompletionRate: "Taux d'achèvement global:",
+    dashboardTotalActivitiesLabel: "Activités totales:",
+    dashboardTotalCompletedLabel: "Total terminées:",
+    dashboardNoDataForAnalysis: "Pas assez de données pour l'analyse sur cette période.",
     historyPageTitle: "Historique des activités",
     historyPageDescription: "Actions récentes effectuées pendant cette session.",
     noHistoryYet: "Aucune activité enregistrée dans cette session pour le moment.",

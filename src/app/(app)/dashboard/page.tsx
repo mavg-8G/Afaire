@@ -23,8 +23,8 @@ import {
   isWithinInterval,
   parseISO,
 } from 'date-fns';
-import { enUS, es } from 'date-fns/locale';
-import { ArrowLeft, LayoutDashboard, ListChecks, BarChart3, CheckCircle, Circle } from 'lucide-react';
+import { enUS, es, fr } from 'date-fns/locale';
+import { ArrowLeft, LayoutDashboard, ListChecks, BarChart3, CheckCircle, Circle, TrendingUp } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -32,7 +32,9 @@ import { cn } from '@/lib/utils';
 
 type ChartViewMode = 'weekly' | 'monthly';
 type ListViewTimeRange = 'last7days' | 'currentMonth';
-type DashboardMainView = 'chart' | 'list';
+type ProductivityViewTimeRange = 'last7days' | 'currentMonth';
+type DashboardMainView = 'chart' | 'list' | 'productivity';
+
 
 const isActivityChartCompleted = (activity: Activity): boolean => {
   if (activity.todos && activity.todos.length > 0) {
@@ -44,14 +46,15 @@ const isActivityChartCompleted = (activity: Activity): boolean => {
 };
 
 export default function DashboardPage() {
-  const { activities, getCategoryById } = useAppStore();
+  const { activities, getCategoryById, categories } = useAppStore();
   const { t, locale } = useTranslations();
   const [chartViewMode, setChartViewMode] = useState<ChartViewMode>('weekly');
   const [listViewTimeRange, setListViewTimeRange] = useState<ListViewTimeRange>('last7days');
+  const [productivityViewTimeRange, setProductivityViewTimeRange] = useState<ProductivityViewTimeRange>('last7days');
   const [dashboardMainView, setDashboardMainView] = useState<DashboardMainView>('chart');
   const [hasMounted, setHasMounted] = useState(false);
 
-  const dateLocale = locale === 'es' ? es : enUS;
+  const dateLocale = locale === 'es' ? es : locale === 'fr' ? fr : enUS;
 
   useEffect(() => {
     setHasMounted(true);
@@ -139,6 +142,64 @@ export default function DashboardPage() {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [activities, listViewTimeRange, hasMounted]);
 
+
+  const productivityData = useMemo(() => {
+    if (!hasMounted) return { categoryChartData: [], overallCompletionRate: 0, totalActivitiesInPeriod: 0, totalCompletedInPeriod: 0 };
+
+    const now = new Date();
+    let startDate: Date;
+    let endDate: Date = now;
+
+    if (productivityViewTimeRange === 'last7days') {
+      startDate = subDays(now, 6);
+    } else { // currentMonth
+      startDate = startOfMonth(now);
+      endDate = endOfMonth(now);
+    }
+
+    const relevantActivities = activities.filter(activity => {
+      const activityDate = new Date(activity.createdAt);
+      return isWithinInterval(activityDate, { start: startDate, end: endDate });
+    });
+
+    const completedActivitiesInPeriod = relevantActivities.filter(isActivityChartCompleted);
+    const totalActivitiesInPeriod = relevantActivities.length;
+    const totalCompletedInPeriod = completedActivitiesInPeriod.length;
+
+    const overallCompletionRate = totalActivitiesInPeriod > 0
+      ? (totalCompletedInPeriod / totalActivitiesInPeriod) * 100
+      : 0;
+
+    const categoryCounts: Record<string, number> = {};
+    completedActivitiesInPeriod.forEach(activity => {
+      const category = getCategoryById(activity.categoryId);
+      const categoryName = category ? category.name : "Uncategorized";
+      categoryCounts[categoryName] = (categoryCounts[categoryName] || 0) + 1;
+    });
+
+    const categoryChartData: BarChartDataItem[] = Object.entries(categoryCounts).map(([name, count]) => ({
+      name,
+      count, // Use 'count' as dataKey for this chart
+    }));
+
+    return {
+      categoryChartData,
+      overallCompletionRate,
+      totalActivitiesInPeriod,
+      totalCompletedInPeriod,
+    };
+  }, [activities, productivityViewTimeRange, hasMounted, getCategoryById]);
+
+  const categoryChartBars: ChartBarProps[] = [
+    {
+      dataKey: 'count', // Match dataKey with what's produced in productivityData
+      fillVariable: '--chart-3',
+      nameKey: 'dashboardActivityCountLabel', // "Completed Activities"
+      radius: [4,4,0,0]
+    }
+  ];
+
+
   if (!hasMounted) {
     return (
       <div className="container mx-auto py-8 px-4">
@@ -169,7 +230,7 @@ export default function DashboardPage() {
           </Button>
         </Link>
         <Tabs value={dashboardMainView} onValueChange={(value) => setDashboardMainView(value as DashboardMainView)} className="w-full md:w-auto">
-          <TabsList className="grid w-full grid-cols-2 md:w-auto mt-4 md:mt-0">
+          <TabsList className="grid w-full grid-cols-3 md:w-auto mt-4 md:mt-0">
             <TabsTrigger value="chart">
               <BarChart3 className="mr-2 h-4 w-4" />
               {t('dashboardChartView')}
@@ -178,8 +239,11 @@ export default function DashboardPage() {
               <ListChecks className="mr-2 h-4 w-4" />
               {t('dashboardListView')}
             </TabsTrigger>
+            <TabsTrigger value="productivity">
+              <TrendingUp className="mr-2 h-4 w-4" />
+              {t('dashboardProductivityView')}
+            </TabsTrigger>
           </TabsList>
-          {/* No TabsContent here, content is rendered conditionally below */}
         </Tabs>
       </div>
 
@@ -195,7 +259,7 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent className="pt-2">
           {dashboardMainView === 'chart' && (
-            <div> {/* Replaces TabsContent value="chart" */}
+            <div>
               <p className="text-sm text-muted-foreground mb-4">
                 {chartViewMode === 'weekly' ? t('dashboardViewWeekly') : t('dashboardViewMonthly')}
               </p>
@@ -216,7 +280,7 @@ export default function DashboardPage() {
           )}
 
           {dashboardMainView === 'list' && (
-            <div> {/* Replaces TabsContent value="list" */}
+            <div>
               <Tabs value={listViewTimeRange} onValueChange={(value) => setListViewTimeRange(value as ListViewTimeRange)} className="mb-4">
                 <TabsList className="grid w-full grid-cols-2 md:w-1/2">
                   <TabsTrigger value="last7days">{t('dashboardListLast7Days')}</TabsTrigger>
@@ -273,6 +337,57 @@ export default function DashboardPage() {
                   {t('dashboardNoActivitiesForList')}
                 </div>
               )}
+            </div>
+          )}
+
+          {dashboardMainView === 'productivity' && (
+            <div className="space-y-6">
+              <Tabs value={productivityViewTimeRange} onValueChange={(value) => setProductivityViewTimeRange(value as ProductivityViewTimeRange)} className="mb-4">
+                <TabsList className="grid w-full grid-cols-2 md:w-1/2">
+                  <TabsTrigger value="last7days">{t('dashboardListLast7Days')}</TabsTrigger>
+                  <TabsTrigger value="currentMonth">{t('dashboardListCurrentMonth')}</TabsTrigger>
+                </TabsList>
+              </Tabs>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t('dashboardCategoryBreakdown')}</CardTitle>
+                  <CardDescription>{t('dashboardActivityCountLabel')}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {productivityData.categoryChartData.length > 0 ? (
+                    <BarChart data={productivityData.categoryChartData} bars={categoryChartBars} xAxisDataKey="name" height={300} />
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">{t('dashboardNoDataForAnalysis')}</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t('dashboardCompletionStats')}</CardTitle>
+                  <CardDescription>
+                     {productivityViewTimeRange === 'last7days' ? t('dashboardListLast7Days') : t('dashboardListCurrentMonth')}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">{t('dashboardOverallCompletionRate')}</span>
+                    <span className="text-lg font-semibold text-primary">{productivityData.overallCompletionRate.toFixed(1)}%</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">{t('dashboardTotalActivitiesLabel')}</span>
+                    <span className="text-sm font-medium">{productivityData.totalActivitiesInPeriod}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">{t('dashboardTotalCompletedLabel')}</span>
+                    <span className="text-sm font-medium">{productivityData.totalCompletedInPeriod}</span>
+                  </div>
+                   {productivityData.totalActivitiesInPeriod === 0 && (
+                     <p className="text-sm text-muted-foreground text-center pt-4">{t('dashboardNoDataForAnalysis')}</p>
+                   )}
+                </CardContent>
+              </Card>
             </div>
           )}
         </CardContent>
