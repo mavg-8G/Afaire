@@ -2,7 +2,10 @@
 "use client";
 import type { ReactNode } from 'react';
 import React, { createContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import type { Activity, Todo, Category, AppMode, RecurrenceRule, UINotification, HistoryLogEntry, HistoryLogActionKey, Translations, Assignee, PomodoroPhase, BackendCategoryCreatePayload, BackendCategory } from '@/lib/types';
+import type {
+  Activity, Todo, Category, AppMode, RecurrenceRule, UINotification, HistoryLogEntry, HistoryLogActionKey, Translations, Assignee, PomodoroPhase,
+  BackendCategoryCreatePayload, BackendCategory, BackendUser, BackendUserCreatePayload, BackendUserUpdatePayload, BackendActivityCreatePayload, BackendActivityUpdatePayload, BackendActivity, BackendTodoCreate, BackendHistory, RecurrenceType, BackendCategoryMode, BackendRepeatMode
+} from '@/lib/types';
 import { HARDCODED_APP_PIN } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
@@ -17,13 +20,13 @@ import {
   setDate as setDayOfMonthFn,
   addYears, isEqual,
   formatDistanceToNowStrict,
+  format as formatDateFns, // Renamed to avoid conflict
 } from 'date-fns';
 import * as Icons from 'lucide-react';
 import { useTranslations } from '@/contexts/language-context';
 import { enUS, es, fr } from 'date-fns/locale';
 import { useTheme } from 'next-themes';
 
-// Define the API base URL directly
 const API_BASE_URL = 'http://62.171.187.41:10242';
 
 
@@ -35,30 +38,31 @@ export interface AppContextType {
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
   addActivity: (
-    activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId'> & {
-      todos?: Omit<Todo, 'id' | 'completed'>[];
+    activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId' | 'appMode' | 'masterActivityId' | 'isRecurringInstance' | 'originalInstanceDate'> & {
+      todos?: Omit<Todo, 'id' | 'completed'>[]; // Todo IDs will be numbers from backend
       time?: string;
       notes?: string;
       recurrence?: RecurrenceRule | null;
-      responsiblePersonIds?: string[];
-      categoryId: number; // Ensure categoryId is number
+      responsiblePersonIds?: number[];
+      categoryId: number;
+      appMode: AppMode;
     },
     customCreatedAt?: number
-  ) => void;
-  updateActivity: (activityId: string, updates: Partial<Activity>, originalActivity?: Activity) => void;
-  deleteActivity: (activityId: string) => void;
-  toggleOccurrenceCompletion: (masterActivityId: string, occurrenceDateTimestamp: number, completed: boolean) => void;
-  addTodoToActivity: (activityId: string, todoText: string) => void;
-  updateTodoInActivity: (activityId: string, todoId: string, updates: Partial<Todo>) => void;
-  deleteTodoFromActivity: (activityId: string, todoId: string, masterActivityId?: string) => void;
-  getCategoryById: (categoryId: number) => Category | undefined; // Changed to number
-  addCategory: (name: string, iconName: string, mode: AppMode | 'all') => Promise<void>; // Made async
-  updateCategory: (categoryId: number, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => Promise<void>; // Made async, categoryId is number
-  deleteCategory: (categoryId: number) => Promise<void>; // Made async, categoryId is number
-  addAssignee: (name: string) => void;
-  updateAssignee: (assigneeId: string, updates: Partial<Omit<Assignee, 'id'>>) => void;
-  deleteAssignee: (assigneeId: string) => void;
-  getAssigneeById: (assigneeId: string) => Assignee | undefined;
+  ) => Promise<void>;
+  updateActivity: (activityId: number, updates: Partial<Omit<Activity, 'id'>>, originalActivity?: Activity) => Promise<void>;
+  deleteActivity: (activityId: number) => Promise<void>;
+  toggleOccurrenceCompletion: (masterActivityId: number, occurrenceDateTimestamp: number, completed: boolean) => void;
+  addTodoToActivity: (activityId: number, todoText: string) => void; // ActivityId is number
+  updateTodoInActivity: (activityId: number, todoId: number, updates: Partial<Todo>) => void; // IDs are numbers
+  deleteTodoFromActivity: (activityId: number, todoId: number, masterActivityId?: number) => void; // IDs are numbers
+  getCategoryById: (categoryId: number) => Category | undefined;
+  addCategory: (name: string, iconName: string, mode: AppMode | 'all') => Promise<void>;
+  updateCategory: (categoryId: number, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => Promise<void>;
+  deleteCategory: (categoryId: number) => Promise<void>;
+  addAssignee: (name: string, username?: string, password?: string) => Promise<void>; // Now async, takes more params
+  updateAssignee: (assigneeId: number, updates: Partial<Omit<Assignee, 'id'>>) => Promise<void>; // Now async
+  deleteAssignee: (assigneeId: number) => Promise<void>; // Now async
+  getAssigneeById: (assigneeId: number) => Assignee | undefined; // ID is number
   isLoading: boolean;
   error: string | null;
 
@@ -84,9 +88,8 @@ export interface AppContextType {
   systemNotificationPermission: NotificationPermission | null;
   requestSystemNotificationPermission: () => Promise<void>;
 
-  // Pomodoro Timer
   pomodoroPhase: PomodoroPhase;
-  pomodoroTimeRemaining: number; // in seconds
+  pomodoroTimeRemaining: number;
   pomodoroIsRunning: boolean;
   pomodoroCyclesCompleted: number;
   startPomodoroWork: () => void;
@@ -97,7 +100,6 @@ export interface AppContextType {
   resetPomodoro: () => void;
   isPomodoroReady: boolean;
 
-  // App Lock
   isAppLocked: boolean;
   appPinState: string | null;
   unlockApp: (pinAttempt: string) => boolean;
@@ -106,17 +108,15 @@ export interface AppContextType {
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities_v2';
-const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities_v2';
-// const LOCAL_STORAGE_KEY_ALL_CATEGORIES = 'todoFlowAllCategories_v2'; // No longer used for primary storage
-const LOCAL_STORAGE_KEY_ASSIGNEES = 'todoFlowAssignees_v1';
+const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities_v3_api'; // Incremented version
+const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities_v3_api'; // Incremented version
 const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode';
 const LOCAL_STORAGE_KEY_IS_AUTHENTICATED = 'todoFlowIsAuthenticated';
 const LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS = 'todoFlowLoginAttempts';
 const LOCAL_STORAGE_KEY_LOCKOUT_END_TIME = 'todoFlowLockoutEndTime';
 const LOCAL_STORAGE_KEY_SESSION_EXPIRY = 'todoFlowSessionExpiry';
 const LOCAL_STORAGE_KEY_UI_NOTIFICATIONS = 'todoFlowUINotifications_v1';
-const SESSION_STORAGE_KEY_HISTORY_LOG = 'todoFlowHistoryLog_v1';
+const SESSION_STORAGE_KEY_HISTORY_LOG = 'todoFlowHistoryLog_v2_api'; // Incremented version
 const LOCAL_STORAGE_KEY_APP_PIN = 'todoFlowAppPin';
 
 
@@ -143,7 +143,7 @@ const getStartOfDayUtil = (date: Date): Date => {
 
 interface FutureInstance {
   instanceDate: Date;
-  masterActivityId: string;
+  masterActivityId: number;
 }
 
 function generateFutureInstancesForNotifications(
@@ -187,16 +187,13 @@ function generateFutureInstancesForNotifications(
       }
   }
 
-
   const seriesEndDate = recurrence.endDate ? new Date(recurrence.endDate) : null;
   let iterations = 0;
-  const maxIterations = 366 * 1; 
+  const maxIterations = 366 * 1;
 
   while (iterations < maxIterations && !isAfter(currentDate, rangeEndDate)) {
     iterations++;
-
     if (seriesEndDate && isAfter(currentDate, seriesEndDate)) break;
-
     if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
         if (recurrence.type === 'daily') currentDate = addDays(currentDate, 1);
         else if (recurrence.type === 'weekly') currentDate = addDays(currentDate, 1);
@@ -206,7 +203,6 @@ function generateFutureInstancesForNotifications(
         } else break;
         continue;
     }
-
 
     let isValidOccurrence = false;
     switch (recurrence.type) {
@@ -228,7 +224,6 @@ function generateFutureInstancesForNotifications(
     if (isValidOccurrence) {
       const occurrenceDateKey = formatISO(currentDate, { representation: 'date' });
       const isInstanceCompleted = !!masterActivity.completedOccurrences?.[occurrenceDateKey];
-
       if (!isInstanceCompleted) {
            instances.push({
             instanceDate: new Date(currentDate.getTime()),
@@ -245,7 +240,6 @@ function generateFutureInstancesForNotifications(
         if (recurrence.dayOfMonth) {
             let nextIterationDate;
             const currentMonthTargetDay = setDayOfMonthFn(currentDate, recurrence.dayOfMonth);
-
             if(isAfter(currentMonthTargetDay, currentDate) && getDate(currentMonthTargetDay) === recurrence.dayOfMonth){
                  nextIterationDate = currentMonthTargetDay;
             } else {
@@ -267,11 +261,9 @@ function parseHslString(hslString: string): { h: number; s: number; l: number } 
   if (!hslString) return null;
   const match = hslString.match(/^(?:hsl\(\s*)?(-?\d*\.?\d+)(?:deg|rad|turn|)?\s*[, ]?\s*(-?\d*\.?\d+)%?\s*[, ]?\s*(-?\d*\.?\d+)%?(?:\s*[,/]\s*(-?\d*\.?\d+)\%?)?(?:\s*\))?$/i);
   if (!match) return null;
-
   const h = parseFloat(match[1]);
   const s = parseFloat(match[2]);
   const l = parseFloat(match[3]);
-
   if (isNaN(h) || isNaN(s) || isNaN(l)) return null;
   return { h, s, l };
 }
@@ -281,14 +273,11 @@ function hslToHex(h: number, s: number, l: number): string {
   l /= 100;
   const k = (n: number) => (n + h / 30) % 12;
   const a = s * Math.min(l, 1 - l);
-  const f = (n: number) =>
-    l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
-
+  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
   const toHexByte = (c: number) => {
     const hex = Math.round(c * 255).toString(16);
     return hex.length === 1 ? '0' + hex : hex;
   };
-
   return `#${toHexByte(f(0))}${toHexByte(f(8))}${toHexByte(f(4))}`;
 }
 
@@ -297,14 +286,101 @@ const POMODORO_SHORT_BREAK_DURATION_SECONDS = 5 * 60;
 const POMODORO_LONG_BREAK_DURATION_SECONDS = 15 * 60;
 const POMODORO_CYCLES_BEFORE_LONG_BREAK = 4;
 
-// Helper to transform backend category to frontend category
+// --- Transformation Helpers ---
 const backendToFrontendCategory = (backendCat: BackendCategory): Category => ({
   id: backendCat.id,
   name: backendCat.name,
   iconName: backendCat.icon_name,
   icon: getIconComponent(backendCat.icon_name || 'Package'),
-  mode: backendCat.mode,
+  mode: backendCat.mode === 'both' ? 'all' : backendCat.mode,
 });
+
+const frontendToBackendCategoryMode = (frontendMode: AppMode | 'all'): BackendCategoryMode => {
+  if (frontendMode === 'all') return 'both';
+  return frontendMode; // 'personal' or 'work'
+};
+
+const backendToFrontendAssignee = (backendUser: BackendUser): Assignee => ({
+  id: backendUser.id,
+  name: backendUser.name,
+  username: backendUser.username,
+});
+
+const backendToFrontendActivity = (backendActivity: BackendActivity, currentAppMode: AppMode): Activity => {
+  const recurrence: RecurrenceRule = {
+    type: backendActivity.repeat_mode as RecurrenceType, // Assuming direct mapping
+    endDate: backendActivity.end_date ? parseISO(backendActivity.end_date).getTime() : null,
+    daysOfWeek: backendActivity.days_of_week ? backendActivity.days_of_week.split(',').map(Number) : [],
+    dayOfMonth: backendActivity.day_of_month ?? undefined,
+  };
+
+  return {
+    id: backendActivity.id,
+    title: backendActivity.title,
+    categoryId: backendActivity.category_id,
+    todos: backendActivity.todos.map(bt => ({
+      id: bt.id,
+      text: bt.text,
+      completed: false, // Backend doesn't store completion; default to false
+    })),
+    createdAt: parseISO(backendActivity.start_date).getTime(),
+    time: backendActivity.time,
+    // completed & completedAt are client-side or derived for non-recurring
+    notes: backendActivity.notes ?? undefined,
+    recurrence: recurrence.type === 'none' ? { type: 'none' } : recurrence,
+    completedOccurrences: {}, // To be managed client-side
+    responsiblePersonIds: backendActivity.responsibles.map(r => r.id),
+    appMode: backendActivity.mode === 'both' ? currentAppMode : backendActivity.mode, // If 'both', use current appMode, else specific
+  };
+};
+
+const frontendToBackendActivityPayload = (
+  activity: Omit<Activity, 'id' | 'todos' | 'completedOccurrences' | 'isRecurringInstance' | 'originalInstanceDate' | 'masterActivityId'> & { todos?: Omit<Todo, 'id' | 'completed'>[] },
+  isUpdate: boolean = false
+): BackendActivityCreatePayload | BackendActivityUpdatePayload => {
+  const payload: Partial<BackendActivityCreatePayload & BackendActivityUpdatePayload> = {
+    title: activity.title,
+    start_date: formatISO(new Date(activity.createdAt)),
+    time: activity.time || "00:00", // Backend requires time
+    category_id: activity.categoryId,
+    notes: activity.notes,
+    mode: activity.appMode === 'personal' ? 'personal' : 'work', // Map AppMode to CategoryMode
+    responsible_ids: activity.responsiblePersonIds || [],
+  };
+
+  if (activity.recurrence && activity.recurrence.type !== 'none') {
+    payload.repeat_mode = activity.recurrence.type as BackendRepeatMode;
+    if (activity.recurrence.endDate) {
+      payload.end_date = formatISO(new Date(activity.recurrence.endDate));
+    }
+    if (activity.recurrence.type === 'weekly' && activity.recurrence.daysOfWeek) {
+      payload.days_of_week = activity.recurrence.daysOfWeek.map(String);
+    }
+    if (activity.recurrence.type === 'monthly' && activity.recurrence.dayOfMonth) {
+      payload.day_of_month = activity.recurrence.dayOfMonth;
+    }
+  } else {
+    payload.repeat_mode = 'none';
+  }
+
+  if (!isUpdate) { // For create
+    (payload as BackendActivityCreatePayload).todos = (activity.todos || []).map(t => ({ text: t.text }));
+  }
+  // For updates, todos are handled differently by the backend (not simple field update).
+  // The current backend PUT /activities doesn't seem to update todos.
+
+  return payload as BackendActivityCreatePayload | BackendActivityUpdatePayload;
+};
+
+const backendToFrontendHistory = (backendHistory: BackendHistory): HistoryLogEntry => ({
+  id: backendHistory.id,
+  timestamp: parseISO(backendHistory.timestamp).getTime(),
+  actionKey: 'historyLogLogin', // Placeholder, needs mapping from backendHistory.action
+  backendAction: backendHistory.action,
+  backendUserId: backendHistory.user_id,
+  scope: 'account', // Default, may need more logic based on action
+});
+
 
 const createApiErrorToast = (
     err: unknown,
@@ -312,10 +388,13 @@ const createApiErrorToast = (
     defaultTitle: string,
     operationType: 'loading' | 'adding' | 'updating' | 'deleting'
   ) => {
-    console.error(`[AppProvider] Failed ${operationType} categories via API. This could be due to network issues, the backend server being down, or CORS configuration problems on the server.`, err);
-    let description = (err as Error).message;
-    if (description.toLowerCase().includes('failed to fetch')) {
-      description = `Could not connect to the server (${API_BASE_URL}). Please check your network connection and ensure the backend server is running and accessible. This might also be a CORS issue on the server.`;
+    const error = err as Error;
+    console.error(`[AppProvider] Failed ${operationType}. API: ${API_BASE_URL}. Error:`, error);
+    let description = error.message || `An unknown error occurred while ${operationType}.`;
+    if (error.message.toLowerCase().includes('failed to fetch')) {
+      description = `Could not connect to the server (${API_BASE_URL}). Please check your network connection, ensure the backend server is running and accessible, and verify CORS configuration on the server.`;
+    } else if (error.message.includes("Unexpected token '<'")) {
+      description = `The server returned HTML instead of JSON, indicating a server-side error or incorrect endpoint. Check the server logs. API: ${API_BASE_URL}`;
     }
     toastFn({ variant: "destructive", title: defaultTitle, description });
 };
@@ -327,50 +406,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [assignees, setAllAssignees] = useState<Assignee[]>([]);
   const [appModeState, setAppModeState] = useState<AppMode>('personal');
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true); // Combined loading state
+  const [isCategoriesLoading, setIsCategoriesLoading] = useState(true);
+  const [isAssigneesLoading, setIsAssigneesLoading] = useState(true);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
+  // Activities are loaded from localStorage primarily, so no specific loading state for them yet
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const { t, locale } = useTranslations();
 
-  const dateFnsLocale = useMemo(() => {
-    if (locale === 'es') return es;
-    if (locale === 'fr') return fr;
-    return enUS;
-  }, [locale]);
-
+  const dateFnsLocale = useMemo(() => (locale === 'es' ? es : locale === 'fr' ? fr : enUS), [locale]);
   const [lastNotificationCheckDay, setLastNotificationCheckDay] = useState<number | null>(null);
   const [notifiedToday, setNotifiedToday] = useState<Set<string>>(new Set());
-
   const [isAuthenticated, setIsAuthenticatedState] = useState<boolean>(false);
   const [loginAttempts, setLoginAttemptsState] = useState<number>(0);
   const [lockoutEndTime, setLockoutEndTimeState] = useState<number | null>(null);
   const [sessionExpiryTimestamp, setSessionExpiryTimestampState] = useState<number | null>(null);
-
   const [uiNotifications, setUINotifications] = useState<UINotification[]>([]);
   const [historyLog, setHistoryLog] = useState<HistoryLogEntry[]>([]);
   const { theme, resolvedTheme } = useTheme();
   const [systemNotificationPermission, setSystemNotificationPermission] = useState<NotificationPermission | null>(null);
-
   const [pomodoroPhase, setPomodoroPhase] = useState<PomodoroPhase>('off');
   const [pomodoroTimeRemaining, setPomodoroTimeRemaining] = useState(POMODORO_WORK_DURATION_SECONDS);
   const [pomodoroIsRunning, setPomodoroIsRunning] = useState(false);
   const [pomodoroCyclesCompleted, setPomodoroCyclesCompleted] = useState(0);
   const [isPomodoroReady, setIsPomodoroReady] = useState(false);
   const prevPomodoroPhaseRef = useRef<PomodoroPhase>(pomodoroPhase);
-
   const [isAppLocked, setIsAppLocked] = useState(false);
   const [appPinState, setAppPinState] = useState<string | null>(HARDCODED_APP_PIN);
 
 
   useEffect(() => {
-    if (typeof window === 'undefined' || isLoading) {
-      return;
-    }
+    if (typeof window === 'undefined' || isLoading) return;
     const timerId = setTimeout(() => {
         const computedStyle = getComputedStyle(document.documentElement);
         const backgroundHslString = computedStyle.getPropertyValue('--background').trim();
         const hslValues = parseHslString(backgroundHslString);
-
         if (hslValues) {
           const hexColor = hslToHex(hslValues.h, hslValues.s, hslValues.l);
           let metaThemeColor = document.querySelector('meta[name="theme-color"]');
@@ -383,12 +454,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } else {
             console.warn("[AppProvider] Could not parse --background HSL string for theme-color:", backgroundHslString);
         }
-    }, 0); 
-
+    }, 0);
     return () => clearTimeout(timerId);
-
   }, [theme, resolvedTheme, appModeState, isLoading]);
-
 
   const getRawActivities = useCallback(() => {
     return appModeState === 'work' ? workActivities : personalActivities;
@@ -399,22 +467,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [appModeState]);
 
  const filteredCategories = useMemo(() => {
-    if (isLoading) return []; // isLoading for categories might be different now
+    if (isCategoriesLoading) return [];
     return allCategories.filter(cat =>
-      !cat.mode || cat.mode === 'all' || cat.mode === appModeState
+      cat.mode === 'all' || cat.mode === appModeState
     );
-  }, [allCategories, appModeState, isLoading]);
-
+  }, [allCategories, appModeState, isCategoriesLoading]);
 
   const assigneesForContext = useMemo(() => {
-    if (isLoading) return [];
+    if (isAssigneesLoading) return [];
     return appModeState === 'personal' ? assignees : [];
-  }, [assignees, appModeState, isLoading]);
-
+  }, [assignees, appModeState, isAssigneesLoading]);
 
   const addHistoryLogEntry = useCallback((actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope: HistoryLogEntry['scope'] = 'account') => {
+    // This will mostly add to client-side history log.
+    // True backend history is through GET /history or server-side triggers.
     const newEntry: HistoryLogEntry = {
-      id: uuidv4(),
+      id: Math.random(), // Temporary ID for client-side display if not synced
       timestamp: Date.now(),
       actionKey,
       details,
@@ -438,62 +506,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   const showSystemNotification = useCallback((title: string, description: string) => {
-    console.log(`[AppProvider] Attempting to show system notification. Title: "${title}"`);
-    if (typeof window === 'undefined' || !('Notification' in window)) {
-      console.warn("[AppProvider] System notifications not supported by this browser.");
-      return;
-    }
-
-    const currentBrowserPermission = Notification.permission;
-    console.log(`[AppProvider] Current browser permission at time of call: ${currentBrowserPermission}`);
-
-    if (currentBrowserPermission === 'granted') {
-      try {
-        new Notification(title, {
-          body: description,
-          icon: '/icons/icon-192x192.png',
-          lang: locale,
-        });
-        console.log(`[AppProvider] System notification shown: "${title}"`);
-      } catch (error) {
-        console.error("[AppProvider] Error creating system notification:", error);
-      }
-    } else if (currentBrowserPermission === 'default') {
-      console.log(`[AppProvider] System notification for "${title}" not shown because permission is 'default'. User must enable via UI first.`);
-    } else { 
-      console.log(`[AppProvider] System notification for "${title}" not shown because permission is 'denied'.`);
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission === 'granted') {
+      try { new Notification(title, { body: description, icon: '/icons/icon-192x192.png', lang: locale }); }
+      catch (error) { console.error("[AppProvider] Error creating system notification:", error); }
     }
   }, [locale]);
 
   const requestSystemNotificationPermission = useCallback(async () => {
-    console.log("[AppProvider] requestSystemNotificationPermission called.");
     if (typeof window === 'undefined' || !('Notification' in window)) {
-      console.warn("[AppProvider] System notifications not supported. Setting permission to 'denied'.");
       setSystemNotificationPermission('denied');
       toast({ title: t('systemNotificationsBlocked'), description: t('enableSystemNotificationsDescription') as string });
       return;
     }
-
-    let currentBrowserPermission = Notification.permission;
-    console.log(`[AppProvider] At permission request time, browser permission is: ${currentBrowserPermission}`);
-
-    if (currentBrowserPermission === 'granted') {
-      setSystemNotificationPermission('granted');
-      toast({ title: t('systemNotificationsEnabled'), description: t('systemNotificationsNowActive') as string });
-      return;
-    }
-    if (currentBrowserPermission === 'denied') {
+    if (Notification.permission === 'granted') { setSystemNotificationPermission('granted'); return; }
+    if (Notification.permission === 'denied') {
       setSystemNotificationPermission('denied');
       toast({ title: t('systemNotificationsBlocked'), description: t('enableSystemNotificationsDescription') as string, duration: 7000 });
       return;
     }
-
-    console.log("[AppProvider] Notification permission is 'default'. Requesting from user...");
     try {
       const permissionResult = await Notification.requestPermission();
-      console.log(`[AppProvider] Notification.requestPermission() result: ${permissionResult}`);
-      setSystemNotificationPermission(permissionResult); 
-
+      setSystemNotificationPermission(permissionResult);
       if (permissionResult === 'granted') {
         toast({ title: t('systemNotificationsEnabled'), description: t('systemNotificationsNowActive') as string });
         showSystemNotification(t('systemNotificationsEnabled') as string, t('systemNotificationsNowActive') as string);
@@ -502,12 +536,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } else {
          toast({ title: t('systemNotificationsNotYetEnabled') as string, description: t('systemNotificationsDismissed') as string });
       }
-    } catch (err) {
-      console.error("[AppProvider] Error requesting notification permission:", err);
-      setSystemNotificationPermission(Notification.permission); 
-    }
+    } catch (err) { setSystemNotificationPermission(Notification.permission); }
   }, [t, toast, showSystemNotification]);
-
 
   const logout = useCallback(() => {
     addHistoryLogEntry('historyLogLogout', undefined, 'account');
@@ -515,13 +545,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setLoginAttemptsState(0);
     setLockoutEndTimeState(null);
     setSessionExpiryTimestampState(null);
-    setHistoryLog([]);
+    setHistoryLog([]); // Clear client-side history log on logout
     setIsAppLocked(false);
-
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({ type: 'RESET_TIMER', payload: { locale } });
     }
-
     if (typeof window !== 'undefined') {
         localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
         localStorage.removeItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
@@ -529,120 +557,107 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
         sessionStorage.removeItem(SESSION_STORAGE_KEY_HISTORY_LOG);
     }
-
-    if (logoutChannel) {
-      logoutChannel.postMessage('logout_event');
-    }
+    if (logoutChannel) logoutChannel.postMessage('logout_event');
   }, [addHistoryLogEntry, locale]);
 
  useEffect(() => {
-    setIsLoading(true);
+    setIsLoading(true); // Overall loading
+    setIsCategoriesLoading(true);
+    setIsAssigneesLoading(true);
+    setIsHistoryLoading(true);
     let initialAuth = false;
 
-    const fetchInitialCategories = async () => {
+    const fetchInitialData = async () => {
       try {
-        console.log(`[AppProvider] Fetching categories from: ${API_BASE_URL}/categories`);
-        const response = await fetch(`${API_BASE_URL}/categories`); 
-        if (!response.ok) {
-          let errorDetail = response.statusText;
-          try {
-            const errorData = await response.json();
-            errorDetail = errorData.detail || errorDetail;
-          } catch (e) { /* Ignore if response is not JSON */ }
-          throw new Error(`Failed to fetch categories: ${response.status} ${errorDetail}`);
-        }
-        const backendCategories: BackendCategory[] = await response.json();
-        const frontendCategories = backendCategories.map(backendToFrontendCategory);
-        setAllCategories(frontendCategories);
-        console.log("[AppProvider] Categories loaded successfully from API.");
+        // Fetch Categories
+        const catResponse = await fetch(`${API_BASE_URL}/categories`);
+        if (!catResponse.ok) throw new Error(`Failed to fetch categories: ${catResponse.status} ${catResponse.statusText}`);
+        const backendCategories: BackendCategory[] = await catResponse.json();
+        setAllCategories(backendCategories.map(backendToFrontendCategory));
       } catch (err) {
         createApiErrorToast(err, toast, "Error Loading Categories", "loading");
-        setError("Failed to load categories from the server.");
-        setAllCategories([]); 
+        setError(prev => prev ? `${prev} Categories failed. ` : "Categories failed. ");
+        setAllCategories([]);
+      } finally {
+        setIsCategoriesLoading(false);
       }
-    };
 
-    const loadOtherData = () => {
+      try {
+        // Fetch Assignees (Users)
+        const userResponse = await fetch(`${API_BASE_URL}/users`);
+        if (!userResponse.ok) throw new Error(`Failed to fetch users: ${userResponse.status} ${userResponse.statusText}`);
+        const backendUsers: BackendUser[] = await userResponse.json();
+        setAllAssignees(backendUsers.map(backendToFrontendAssignee));
+      } catch (err) {
+        createApiErrorToast(err, toast, "Error Loading Assignees", "loading");
+        setError(prev => prev ? `${prev} Assignees failed. ` : "Assignees failed. ");
+        setAllAssignees([]);
+      } finally {
+        setIsAssigneesLoading(false);
+      }
+      
+      try {
+        // Load Activities (from localStorage, as no GET /activities endpoint)
+        const storedPersonalActivities = localStorage.getItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES);
+        if (storedPersonalActivities) setPersonalActivities(JSON.parse(storedPersonalActivities));
+        const storedWorkActivities = localStorage.getItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES);
+        if (storedWorkActivities) setWorkActivities(JSON.parse(storedWorkActivities));
+      } catch (e) {
+        console.error("[AppProvider] Failed to parse activities from localStorage.", e);
+        setError(prev => prev ? `${prev} Local activities failed. ` : "Local activities failed. ");
+      }
+
+
+      // Load other local storage items (auth, settings, etc.)
+      const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
+      if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) setAppModeState(storedAppMode);
+      const storedAuth = localStorage.getItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
+      const storedExpiry = localStorage.getItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
+      if (storedAuth === 'true' && storedExpiry) {
+          const expiryTime = parseInt(storedExpiry, 10);
+          if (Date.now() > expiryTime) { initialAuth = false; logout(); }
+          else { initialAuth = true; setSessionExpiryTimestampState(expiryTime); }
+      }
+      setIsAuthenticatedState(initialAuth);
+
+      if (initialAuth) {
         try {
-            const storedPersonalActivities = localStorage.getItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES);
-            if (storedPersonalActivities) setPersonalActivities(JSON.parse(storedPersonalActivities));
-
-            const storedWorkActivities = localStorage.getItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES);
-            if (storedWorkActivities) setWorkActivities(JSON.parse(storedWorkActivities));
-            
-            let loadedAssignees: Assignee[] = [];
-            const storedAssigneesString = localStorage.getItem(LOCAL_STORAGE_KEY_ASSIGNEES);
-            if (storedAssigneesString) {
-                try {
-                    const parsedAssignees = JSON.parse(storedAssigneesString) as Assignee[];
-                    if (Array.isArray(parsedAssignees)) {
-                        loadedAssignees = parsedAssignees.map(asg => ({id: asg.id, name: asg.name}));
-                    }
-                } catch (e) {
-                    console.error("[AppProvider] Failed to parse assignees from localStorage, using empty list.", e);
-                }
-            }
-            setAllAssignees(loadedAssignees);
-
-            const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
-            if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) {
-                setAppModeState(storedAppMode);
-            }
-
-            const storedAuth = localStorage.getItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
-            const storedExpiry = localStorage.getItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
-
-            if (storedAuth === 'true' && storedExpiry) {
-                const expiryTime = parseInt(storedExpiry, 10);
-                if (Date.now() > expiryTime) {
-                    initialAuth = false;
-                    logout(); 
-                } else {
-                    initialAuth = true;
-                    setSessionExpiryTimestampState(expiryTime);
-                }
-            }
-            setIsAuthenticatedState(initialAuth);
-            if (initialAuth) {
-                const storedHistoryLog = sessionStorage.getItem(SESSION_STORAGE_KEY_HISTORY_LOG);
-                if (storedHistoryLog) setHistoryLog(JSON.parse(storedHistoryLog));
-
-                const storedPin = localStorage.getItem(LOCAL_STORAGE_KEY_APP_PIN);
-                if (storedPin) {
-                    setAppPinState(storedPin);
-                } else if (HARDCODED_APP_PIN) {
-                    setAppPinState(HARDCODED_APP_PIN);
-                }
-            }
-
-            const storedAttempts = localStorage.getItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
-            setLoginAttemptsState(storedAttempts ? parseInt(storedAttempts, 10) : 0);
-
-            const storedLockoutTime = localStorage.getItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
-            setLockoutEndTimeState(storedLockoutTime ? parseInt(storedLockoutTime, 10) : null);
-
-            const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
-            if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
-
-            if (typeof window !== 'undefined' && 'Notification' in window) {
-                setSystemNotificationPermission(Notification.permission);
-            }
+          const historyResponse = await fetch(`${API_BASE_URL}/history`);
+          if (!historyResponse.ok) throw new Error(`Failed to fetch history: ${historyResponse.status} ${historyResponse.statusText}`);
+          const backendHistoryItems: BackendHistory[] = await historyResponse.json();
+          setHistoryLog(backendHistoryItems.map(backendToFrontendHistory));
         } catch (err) {
-            console.error("[AppProvider] Failed to load non-category data from local storage", err);
-            setError((prevError) => prevError ? `${prevError} Failed to load other saved data.` : "Failed to load other saved data.");
+          createApiErrorToast(err, toast, "Error Loading History", "loading");
+          setError(prev => prev ? `${prev} History failed. ` : "History failed. ");
+          setHistoryLog([]); // Fallback to empty or try session storage if needed
+        } finally {
+          setIsHistoryLoading(false);
         }
+        const storedPin = localStorage.getItem(LOCAL_STORAGE_KEY_APP_PIN);
+        if (storedPin) setAppPinState(storedPin);
+        else if (HARDCODED_APP_PIN) setAppPinState(HARDCODED_APP_PIN);
+      } else {
+        setIsHistoryLoading(false); // No auth, no history to load from backend
+      }
+
+      const storedAttempts = localStorage.getItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
+      setLoginAttemptsState(storedAttempts ? parseInt(storedAttempts, 10) : 0);
+      const storedLockoutTime = localStorage.getItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
+      setLockoutEndTimeState(storedLockoutTime ? parseInt(storedLockoutTime, 10) : null);
+      const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
+      if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
+      if (typeof window !== 'undefined' && 'Notification' in window) setSystemNotificationPermission(Notification.permission);
+
+      setIsLoading(false); // Overall loading finished
     };
-    
-    fetchInitialCategories().finally(() => {
-        loadOtherData();
-        setIsLoading(false);
-    });
+
+    fetchInitialData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
+  }, []);
 
 
   useEffect(() => {
-    if (!isLoading) {
+    if (!isLoading) { // Persist activities to localStorage as primary display source
       localStorage.setItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES, JSON.stringify(personalActivities));
     }
   }, [personalActivities, isLoading]);
@@ -653,13 +668,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [workActivities, isLoading]);
 
-
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem(LOCAL_STORAGE_KEY_ASSIGNEES, JSON.stringify(assignees.map(asg => ({id: asg.id, name: asg.name}))));
-    }
-  }, [assignees, isLoading]);
-
   useEffect(() => {
     if (!isLoading) {
       localStorage.setItem(LOCAL_STORAGE_KEY_APP_MODE, appModeState);
@@ -669,93 +677,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [appModeState, isLoading]);
 
-  useEffect(() => {
-    if (!isLoading) {
-      if (isAuthenticated) {
-        localStorage.setItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED, 'true');
-      } else {
-        localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
-      }
-    }
-  }, [isAuthenticated, isLoading]);
-
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS, String(loginAttempts));
-    }
-  }, [loginAttempts, isLoading]);
-
-  useEffect(() => {
-    if (!isLoading) {
-      if (lockoutEndTime === null) {
-        localStorage.removeItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
-      } else {
-        localStorage.setItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME, String(lockoutEndTime));
-      }
-    }
-  }, [lockoutEndTime, isLoading]);
-
-   useEffect(() => {
-    if (!isLoading) {
-      if (sessionExpiryTimestamp === null) {
-        localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
-      } else {
-        localStorage.setItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY, String(sessionExpiryTimestamp));
-      }
-    }
-  }, [sessionExpiryTimestamp, isLoading]);
-
-  useEffect(() => {
-    if(!isLoading) {
-        localStorage.setItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS, JSON.stringify(uiNotifications));
-    }
-  }, [uiNotifications, isLoading]);
-
-  useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      sessionStorage.setItem(SESSION_STORAGE_KEY_HISTORY_LOG, JSON.stringify(historyLog));
-    }
-  }, [historyLog, isLoading, isAuthenticated]);
+  // Other useEffects for localStorage (auth, login attempts, etc.) remain similar
+  useEffect(() => { if (!isLoading) { if (isAuthenticated) localStorage.setItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED, 'true'); else localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);}}, [isAuthenticated, isLoading]);
+  useEffect(() => { if (!isLoading) localStorage.setItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS, String(loginAttempts));}, [loginAttempts, isLoading]);
+  useEffect(() => { if (!isLoading) { if (lockoutEndTime === null) localStorage.removeItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME); else localStorage.setItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME, String(lockoutEndTime));}}, [lockoutEndTime, isLoading]);
+  useEffect(() => { if (!isLoading) { if (sessionExpiryTimestamp === null) localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY); else localStorage.setItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY, String(sessionExpiryTimestamp));}}, [sessionExpiryTimestamp, isLoading]);
+  useEffect(() => { if(!isLoading) localStorage.setItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS, JSON.stringify(uiNotifications));}, [uiNotifications, isLoading]);
+  // History log is primarily from backend if authenticated, or sessionStorage for client-side only actions
+  // useEffect(() => { if (!isLoading && isAuthenticated) { /* sessionStorage.setItem(SESSION_STORAGE_KEY_HISTORY_LOG, JSON.stringify(historyLog)); */ }}, [historyLog, isLoading, isAuthenticated]);
 
   useEffect(() => {
     if (isLoading || !isAuthenticated) return;
-
     const intervalId = setInterval(() => {
       const now = new Date();
       const today = getStartOfDayUtil(now);
       const currentDayOfMonthFromNow = now.getDate();
-
-      if (lastNotificationCheckDay !== null && lastNotificationCheckDay !== currentDayOfMonthFromNow) {
-        setNotifiedToday(new Set());
-      }
+      if (lastNotificationCheckDay !== null && lastNotificationCheckDay !== currentDayOfMonthFromNow) setNotifiedToday(new Set());
       setLastNotificationCheckDay(currentDayOfMonthFromNow);
-
       const activitiesToScan = appModeState === 'work' ? workActivities : personalActivities;
-
-
       activitiesToScan.forEach(masterActivity => {
         const activityTitle = masterActivity.title;
-        const masterId = String(masterActivity.id);
-
-
+        const masterId = masterActivity.id;
         if (masterActivity.time) {
           const todayInstances = generateFutureInstancesForNotifications(masterActivity, today, dateFnsEndOfDay(today));
           todayInstances.forEach(instance => {
             const occurrenceDateKey = formatISO(instance.instanceDate, { representation: 'date' });
             const notificationKey5Min = `${masterId}:${occurrenceDateKey}:5min_soon`;
             const isInstanceCompleted = !!masterActivity.completedOccurrences?.[occurrenceDateKey];
-
             if (!isInstanceCompleted && !notifiedToday.has(notificationKey5Min)) {
               const [hours, minutes] = masterActivity.time!.split(':').map(Number);
               const activityDateTime = new Date(instance.instanceDate);
               activityDateTime.setHours(hours, minutes, 0, 0);
               const fiveMinutesInMs = 5 * 60 * 1000;
               const timeDiffMs = activityDateTime.getTime() - now.getTime();
-
               if (timeDiffMs >= 0 && timeDiffMs <= fiveMinutesInMs) {
                 const toastTitle = t('toastActivityStartingSoonTitle');
                 const toastDesc = t('toastActivityStartingSoonDescription', { activityTitle, activityTime: masterActivity.time! });
-
                 showSystemNotification(toastTitle, toastDesc);
                 stableAddUINotification({ title: toastTitle, description: toastDesc, activityId: masterId, instanceDate: instance.instanceDate.getTime() });
                 toast({ title: toastTitle, description: toastDesc });
@@ -764,502 +721,138 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
           });
         }
-
-
         if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
           const recurrenceType = masterActivity.recurrence.type;
-          const futureCheckEndDate = addDays(today, 8); 
+          const futureCheckEndDate = addDays(today, 8);
           const upcomingInstances = generateFutureInstancesForNotifications(masterActivity, addDays(today,1), futureCheckEndDate);
-
           upcomingInstances.forEach(instance => {
             const instanceDateKey = formatISO(instance.instanceDate, { representation: 'date' });
             const isOccurrenceCompleted = !!masterActivity.completedOccurrences?.[instanceDateKey];
             if(isOccurrenceCompleted) return;
-
             const notify = (typeKey: string, titleKey: keyof Translations, descKey: keyof Translations, params: { activityTitle: string }) => {
               const notificationFullKey = `${masterId}:${instanceDateKey}:${typeKey}`;
               if (!notifiedToday.has(notificationFullKey)) {
                 const notifTitle = t(titleKey as any, params);
                 const notifDesc = t(descKey as any, params);
-
                 showSystemNotification(notifTitle, notifDesc);
                 stableAddUINotification({ title: notifTitle, description: notifDesc, activityId: masterId, instanceDate: instance.instanceDate.getTime() });
                 toast({ title: notifTitle, description: notifDesc });
                 setNotifiedToday(prev => new Set(prev).add(notificationFullKey));
               }
             };
-
             const oneDayBeforeInstance = dateFnsStartOfDay(subDays(instance.instanceDate, 1));
             const twoDaysBeforeInstance = dateFnsStartOfDay(subDays(instance.instanceDate, 2));
             const oneWeekBeforeInstance = dateFnsStartOfDay(subWeeks(instance.instanceDate, 1));
-
-            if (recurrenceType === 'weekly') {
-              if (isSameDay(today, oneDayBeforeInstance)) {
-                notify('1day_weekly', 'toastActivityTomorrowTitle', 'toastActivityTomorrowDescription', { activityTitle });
-              }
-            } else if (recurrenceType === 'monthly') {
-              if (isSameDay(today, oneWeekBeforeInstance)) {
-                 notify('1week_monthly', 'toastActivityInOneWeekTitle', 'toastActivityInOneWeekDescription', { activityTitle });
-              }
-              if (isSameDay(today, twoDaysBeforeInstance)) {
-                 notify('2days_monthly', 'toastActivityInTwoDaysTitle', 'toastActivityInTwoDaysDescription', { activityTitle });
-              }
-              if (isSameDay(today, oneDayBeforeInstance)) {
-                 notify('1day_monthly', 'toastActivityTomorrowTitle', 'toastActivityTomorrowDescription', { activityTitle });
-              }
+            if (recurrenceType === 'weekly') { if (isSameDay(today, oneDayBeforeInstance)) notify('1day_weekly', 'toastActivityTomorrowTitle', 'toastActivityTomorrowDescription', { activityTitle });}
+            else if (recurrenceType === 'monthly') {
+              if (isSameDay(today, oneWeekBeforeInstance)) notify('1week_monthly', 'toastActivityInOneWeekTitle', 'toastActivityInOneWeekDescription', { activityTitle });
+              if (isSameDay(today, twoDaysBeforeInstance)) notify('2days_monthly', 'toastActivityInTwoDaysTitle', 'toastActivityInTwoDaysDescription', { activityTitle });
+              if (isSameDay(today, oneDayBeforeInstance)) notify('1day_monthly', 'toastActivityTomorrowTitle', 'toastActivityTomorrowDescription', { activityTitle });
             }
           });
         }
       });
-    }, 60000); 
-
+    }, 60000);
     return () => clearInterval(intervalId);
   }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, stableAddUINotification, dateFnsLocale, showSystemNotification, locale]);
 
-
   useEffect(() => {
     if (!logoutChannel) return;
-    const handleLogoutMessage = (event: MessageEvent) => {
-      if (event.data === 'logout_event' && isAuthenticated) {
-        logout();
-      }
-    };
+    const handleLogoutMessage = (event: MessageEvent) => { if (event.data === 'logout_event' && isAuthenticated) logout();};
     logoutChannel.addEventListener('message', handleLogoutMessage);
-    return () => {
-      if (logoutChannel) {
-        logoutChannel.removeEventListener('message', handleLogoutMessage);
-      }
-    };
+    return () => { if (logoutChannel) logoutChannel.removeEventListener('message', handleLogoutMessage);};
   }, [isAuthenticated, logout]);
 
-
   const postToServiceWorker = useCallback((message: any) => {
-    console.log('[AppProvider] Attempting to post message to SW:', message);
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage({...message, payload: { ...message.payload, locale } });
-      console.log('[AppProvider] Message posted to SW controller:', message);
     } else {
-      console.warn('[AppProvider] Service Worker controller not active. Pomodoro command ignored:', message);
       if (message.type !== 'GET_INITIAL_STATE' && !isPomodoroReady) {
-        toast({
-            variant: 'destructive',
-            title: t('pomodoroErrorTitle') as string,
-            description: t('pomodoroSWNotReady') as string
-        });
+        toast({ variant: 'destructive', title: t('pomodoroErrorTitle') as string, description: t('pomodoroSWNotReady') as string });
       }
     }
   }, [locale, t, toast, isPomodoroReady]);
 
-
   const handleSWMessage = useCallback((event: MessageEvent) => {
-        console.log('[AppProvider] Message received from SW:', event.data);
         if (event.data && event.data.type) {
             if (event.data.type === 'TIMER_STATE') {
                 const { phase, timeRemaining, isRunning, cyclesCompleted } = event.data.payload;
-                setPomodoroPhase(phase);
-                setPomodoroTimeRemaining(timeRemaining);
-                setPomodoroIsRunning(isRunning);
-                setPomodoroCyclesCompleted(cyclesCompleted);
-
-                if (!isPomodoroReady) {
-                    setIsPomodoroReady(true);
-                    console.log('[AppProvider] Pomodoro is now READY after first TIMER_STATE from SW.');
-                }
+                setPomodoroPhase(phase); setPomodoroTimeRemaining(timeRemaining); setPomodoroIsRunning(isRunning); setPomodoroCyclesCompleted(cyclesCompleted);
+                if (!isPomodoroReady) setIsPomodoroReady(true);
             } else if (event.data.type === 'SW_ERROR') {
-                console.error('[AppProvider] Error message from SW:', event.data.payload);
-                toast({
-                    variant: 'destructive',
-                    title: t('pomodoroErrorTitle') as string,
-                    description: `Service Worker: ${event.data.payload.message || 'Unknown SW Error'}`
-                });
+                toast({ variant: 'destructive', title: t('pomodoroErrorTitle') as string, description: `Service Worker: ${event.data.payload.message || 'Unknown SW Error'}`});
             }
         }
     }, [isPomodoroReady, toast, t]);
 
   useEffect(() => {
-    console.log('[AppProvider] SW Effect RUNNING. Current locale:', locale);
-    
     const registerAndInitializeSW = async () => {
         try {
-            console.log('[AppProvider] Attempting to register Service Worker /sw.js');
-            const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-            console.log('[AppProvider] Service Worker registered with scope:', registration.scope);
-
+            await navigator.serviceWorker.register('/sw.js', { scope: '/' });
             await navigator.serviceWorker.ready;
-            console.log('[AppProvider] navigator.serviceWorker.ready resolved.');
-            
-            if (navigator.serviceWorker.controller) {
-                console.log('[AppProvider] SW controller active on ready. Sending GET_INITIAL_STATE.');
-                setTimeout(() => postToServiceWorker({ type: 'GET_INITIAL_STATE' }), 200);
-            } else {
-                 console.warn('[AppProvider] SW controller not active immediately after .ready. Will wait for controllerchange or next load.');
-            }
-        } catch (error) {
-            console.error('[AppProvider] Service Worker registration failed:', error);
-            setIsPomodoroReady(false);
-            toast({
-                variant: 'destructive',
-                title: t('pomodoroErrorTitle') as string,
-                description: `SW Reg Error: ${error instanceof Error ? error.message : String(error)}`
-            });
-        }
+            if (navigator.serviceWorker.controller) setTimeout(() => postToServiceWorker({ type: 'GET_INITIAL_STATE' }), 200);
+        } catch (error) { setIsPomodoroReady(false); toast({ variant: 'destructive', title: t('pomodoroErrorTitle') as string, description: `SW Reg Error: ${error instanceof Error ? error.message : String(error)}`});}
     };
-
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
         navigator.serviceWorker.addEventListener('message', handleSWMessage);
-
-        const handleControllerChange = () => {
-            console.log('[AppProvider] SW controllerchange event fired.');
-            if (navigator.serviceWorker.controller) {
-                console.log('[AppProvider] New SW controller active. Sending GET_INITIAL_STATE.');
-                setTimeout(() => postToServiceWorker({ type: 'GET_INITIAL_STATE' }), 200);
-            } else {
-                console.warn('[AppProvider] SW controllerchange event, but controller is null.');
-                setIsPomodoroReady(false);
-            }
-        };
+        const handleControllerChange = () => { if (navigator.serviceWorker.controller) setTimeout(() => postToServiceWorker({ type: 'GET_INITIAL_STATE' }), 200); else setIsPomodoroReady(false);};
         navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
-        
-        if (document.readyState === 'complete') {
-            registerAndInitializeSW();
-        } else {
-            window.addEventListener('load', registerAndInitializeSW, { once: true });
-        }
-
-        if (navigator.serviceWorker.controller) {
-             console.log('[AppProvider] SW controller already active on mount. Sending GET_INITIAL_STATE.');
-             setTimeout(() => postToServiceWorker({ type: 'GET_INITIAL_STATE' }), 200);
-        }
-
-
-    } else {
-        console.warn("[AppProvider] Service Worker API not available.");
-        setIsPomodoroReady(false);
-    }
-
-    return () => {
-        console.log('[AppProvider] Cleaning up SW listeners.');
-        navigator.serviceWorker.removeEventListener('message', handleSWMessage);
-    };
+        if (document.readyState === 'complete') registerAndInitializeSW(); else window.addEventListener('load', registerAndInitializeSW, { once: true });
+        if (navigator.serviceWorker.controller) setTimeout(() => postToServiceWorker({ type: 'GET_INITIAL_STATE' }), 200);
+    } else { setIsPomodoroReady(false); }
+    return () => { if (typeof window !== 'undefined' && 'serviceWorker' in navigator) navigator.serviceWorker.removeEventListener('message', handleSWMessage);};
   }, [locale, postToServiceWorker, handleSWMessage, t, toast]);
-
 
   useEffect(() => {
     if (isPomodoroReady && prevPomodoroPhaseRef.current !== pomodoroPhase && prevPomodoroPhaseRef.current !== 'off') {
         const phaseThatEnded = prevPomodoroPhaseRef.current;
-
         let titleKey: keyof Translations = 'pomodoroWorkSessionEnded';
-        let descriptionKey: keyof Translations = 'pomodoroFocusOnTask'; 
-
-        if (phaseThatEnded === 'work') {
-            titleKey = 'pomodoroWorkSessionEnded';
-            descriptionKey = (pomodoroCyclesCompleted > 0 && pomodoroCyclesCompleted % POMODORO_CYCLES_BEFORE_LONG_BREAK === 0)
-                ? 'pomodoroTakeALongBreak'
-                : 'pomodoroTakeAShortBreak';
-        } else if (phaseThatEnded === 'shortBreak') {
-            titleKey = 'pomodoroShortBreakEnded';
-            descriptionKey = 'pomodoroBackToWork';
-        } else if (phaseThatEnded === 'longBreak') {
-            titleKey = 'pomodoroLongBreakEnded';
-            descriptionKey = 'pomodoroBackToWork';
-        }
-
-        const title = t(titleKey as any);
-        const description = t(descriptionKey as any);
-
-        if (title && description) {
-            console.log(`[AppProvider] UI Notification for phase change. Ended: ${phaseThatEnded}. Title: ${title}`);
-            stableAddUINotification({ title, description, activityId: `pomodoro_cycle_${pomodoroCyclesCompleted}_${phaseThatEnded}` });
-            toast({ title, description });
-        }
+        let descriptionKey: keyof Translations = 'pomodoroFocusOnTask';
+        if (phaseThatEnded === 'work') { titleKey = 'pomodoroWorkSessionEnded'; descriptionKey = (pomodoroCyclesCompleted > 0 && pomodoroCyclesCompleted % POMODORO_CYCLES_BEFORE_LONG_BREAK === 0) ? 'pomodoroTakeALongBreak' : 'pomodoroTakeAShortBreak';}
+        else if (phaseThatEnded === 'shortBreak') { titleKey = 'pomodoroShortBreakEnded'; descriptionKey = 'pomodoroBackToWork';}
+        else if (phaseThatEnded === 'longBreak') { titleKey = 'pomodoroLongBreakEnded'; descriptionKey = 'pomodoroBackToWork';}
+        const title = t(titleKey as any); const description = t(descriptionKey as any);
+        if (title && description) { stableAddUINotification({ title, description, activityId: `pomodoro_cycle_${pomodoroCyclesCompleted}_${phaseThatEnded}` }); toast({ title, description });}
     }
     prevPomodoroPhaseRef.current = pomodoroPhase;
-
   }, [pomodoroPhase, pomodoroCyclesCompleted, isPomodoroReady, stableAddUINotification, t, toast]);
 
-
-  const startPomodoroWork = useCallback(() => {
-    console.log('[AppProvider] startPomodoroWork called.');
-    postToServiceWorker({ type: 'START_WORK', payload: { locale, cyclesCompleted: 0 } });
-  }, [postToServiceWorker, locale]);
-
-  const startPomodoroShortBreak = useCallback(() => {
-    console.log('[AppProvider] startPomodoroShortBreak called.');
-    postToServiceWorker({ type: 'START_SHORT_BREAK', payload: { locale } });
-  }, [postToServiceWorker, locale]);
-
-  const startPomodoroLongBreak = useCallback(() => {
-    console.log('[AppProvider] startPomodoroLongBreak called.');
-    postToServiceWorker({ type: 'START_LONG_BREAK', payload: { locale } });
-  }, [postToServiceWorker, locale]);
-
-  const pausePomodoro = useCallback(() => {
-    console.log('[AppProvider] pausePomodoro called.');
-    postToServiceWorker({ type: 'PAUSE_TIMER', payload: { locale } });
-  }, [postToServiceWorker, locale]);
-
-  const resumePomodoro = useCallback(() => {
-    console.log('[AppProvider] resumePomodoro called.');
-    postToServiceWorker({ type: 'RESUME_TIMER', payload: { locale } });
-  }, [postToServiceWorker, locale]);
-
-  const resetPomodoro = useCallback(() => {
-    console.log('[AppProvider] resetPomodoro called.');
-    setIsPomodoroReady(false); 
-    postToServiceWorker({ type: 'RESET_TIMER', payload: { locale } });
-  }, [postToServiceWorker, locale]);
-
-
-  const setAppMode = useCallback((mode: AppMode) => {
-    if (mode !== appModeState) {
-        addHistoryLogEntry(mode === 'personal' ? 'historyLogSwitchToPersonalMode' : 'historyLogSwitchToWorkMode', undefined, 'account');
-    }
-    setAppModeState(mode);
-  }, [appModeState, addHistoryLogEntry]);
-
+  const startPomodoroWork = useCallback(() => postToServiceWorker({ type: 'START_WORK', payload: { locale, cyclesCompleted: 0 } }), [postToServiceWorker, locale]);
+  const startPomodoroShortBreak = useCallback(() => postToServiceWorker({ type: 'START_SHORT_BREAK', payload: { locale } }), [postToServiceWorker, locale]);
+  const startPomodoroLongBreak = useCallback(() => postToServiceWorker({ type: 'START_LONG_BREAK', payload: { locale } }), [postToServiceWorker, locale]);
+  const pausePomodoro = useCallback(() => postToServiceWorker({ type: 'PAUSE_TIMER', payload: { locale } }), [postToServiceWorker, locale]);
+  const resumePomodoro = useCallback(() => postToServiceWorker({ type: 'RESUME_TIMER', payload: { locale } }), [postToServiceWorker, locale]);
+  const resetPomodoro = useCallback(() => { setIsPomodoroReady(false); postToServiceWorker({ type: 'RESET_TIMER', payload: { locale } });}, [postToServiceWorker, locale]);
+  const setAppMode = useCallback((mode: AppMode) => { if (mode !== appModeState) addHistoryLogEntry(mode === 'personal' ? 'historyLogSwitchToPersonalMode' : 'historyLogSwitchToWorkMode', undefined, 'account'); setAppModeState(mode);}, [appModeState, addHistoryLogEntry]);
   const setIsAuthenticated = useCallback((value: boolean, rememberMe: boolean = false) => {
-    const wasAuthenticated = isAuthenticated;
-    setIsAuthenticatedState(value);
-
+    const wasAuthenticated = isAuthenticated; setIsAuthenticatedState(value);
     if (value && !wasAuthenticated) {
         addHistoryLogEntry('historyLogLogin', undefined, 'account');
-        if (typeof window !== 'undefined') {
-          sessionStorage.removeItem(SESSION_STORAGE_KEY_HISTORY_LOG);
-        }
+        if (typeof window !== 'undefined') sessionStorage.removeItem(SESSION_STORAGE_KEY_HISTORY_LOG);
         setHistoryLog([]);
-
-        const title = t('loginSuccessNotificationTitle');
-        const description = t('loginSuccessNotificationDescription');
-        stableAddUINotification({ title, description });
-        showSystemNotification(title, description);
+        const title = t('loginSuccessNotificationTitle'); const description = t('loginSuccessNotificationDescription');
+        stableAddUINotification({ title, description }); showSystemNotification(title, description);
     }
-
-    if (value) {
-      const nowTime = Date.now();
-      const expiryDuration = rememberMe ? SESSION_DURATION_30_DAYS_MS : SESSION_DURATION_24_HOURS_MS;
-      const newExpiryTimestamp = nowTime + expiryDuration;
-      setSessionExpiryTimestampState(newExpiryTimestamp);
-    } else {
-      setSessionExpiryTimestampState(null);
-    }
+    if (value) { const newExpiryTimestamp = Date.now() + (rememberMe ? SESSION_DURATION_30_DAYS_MS : SESSION_DURATION_24_HOURS_MS); setSessionExpiryTimestampState(newExpiryTimestamp);}
+    else setSessionExpiryTimestampState(null);
   }, [isAuthenticated, addHistoryLogEntry, t, stableAddUINotification, showSystemNotification]);
 
-  const logPasswordChange = useCallback(() => {
-    addHistoryLogEntry('historyLogPasswordChange', undefined, 'account');
-  }, [addHistoryLogEntry]);
+  const logPasswordChange = useCallback(() => addHistoryLogEntry('historyLogPasswordChange', undefined, 'account'), [addHistoryLogEntry]);
+  const setLoginAttempts = useCallback((attempts: number) => setLoginAttemptsState(attempts), []);
+  const setLockoutEndTime = useCallback((timestamp: number | null) => setLockoutEndTimeState(timestamp), []);
 
-  const setLoginAttempts = useCallback((attempts: number) => {
-    setLoginAttemptsState(attempts);
-  }, []);
-
-  const setLockoutEndTime = useCallback((timestamp: number | null) => {
-    setLockoutEndTimeState(timestamp);
-  }, []);
-
-  const addActivity = useCallback((
-      activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences'| 'responsiblePersonIds' | 'categoryId'> & {
-        todos?: Omit<Todo, 'id' | 'completed'>[];
-        time?: string;
-        notes?: string;
-        recurrence?: RecurrenceRule | null;
-        responsiblePersonIds?: string[];
-        categoryId: number;
-      },
-      customCreatedAt?: number
-    ) => {
-    const newActivity: Activity = {
-      id: uuidv4(), // This ID will be client-side only if activities are backend-driven
-      title: activityData.title,
-      categoryId: activityData.categoryId,
-      todos: (activityData.todos || []).map(todo => ({ ...todo, id: uuidv4(), completed: false })),
-      createdAt: customCreatedAt !== undefined ? customCreatedAt : Date.now(),
-      completed: false,
-      completedAt: null,
-      time: activityData.time === "" ? undefined : activityData.time,
-      notes: activityData.notes || undefined,
-      recurrence: activityData.recurrence || { type: 'none' },
-      completedOccurrences: {},
-      responsiblePersonIds: appModeState === 'personal' ? (activityData.responsiblePersonIds || []) : [],
-    };
-    // TODO: Replace with API call for activities
-    currentActivitySetter(prev => [...prev, newActivity]);
-    addHistoryLogEntry(
-      appModeState === 'personal' ? 'historyLogAddActivityPersonal' : 'historyLogAddActivityWork',
-      { title: newActivity.title },
-      appModeState
-    );
-  }, [currentActivitySetter, appModeState, addHistoryLogEntry]);
-
-  const updateActivity = useCallback((activityId: string, updates: Partial<Activity>, originalActivity?: Activity) => {
-    let activityTitleForLog = updates.title || originalActivity?.title || 'Unknown Activity';
-    // TODO: Replace with API call for activities
-    currentActivitySetter(prev =>
-      prev.map(act => {
-        if (String(act.id) === activityId) { // Ensure comparison is correct if IDs might be numbers from backend later
-          if (!originalActivity) originalActivity = act;
-          activityTitleForLog = updates.title || originalActivity.title;
-
-          const updatedRecurrence = updates.recurrence?.type === 'none'
-            ? { type: 'none' }
-            : updates.recurrence || act.recurrence;
-
-          let updatedCompletedOccurrences = act.completedOccurrences;
-          if (updates.recurrence && updates.recurrence.type === 'none') {
-            updatedCompletedOccurrences = {};
-          } else if (updates.recurrence &&
-                     (updates.recurrence.type !== act.recurrence?.type ||
-                      updates.recurrence.dayOfMonth !== act.recurrence?.dayOfMonth ||
-                      JSON.stringify(updates.recurrence.daysOfWeek) !== JSON.stringify(act.recurrence?.daysOfWeek) ||
-                      (updates.createdAt && new Date(updates.createdAt).getTime() !== new Date(act.createdAt).getTime())
-                      )) {
-            updatedCompletedOccurrences = {};
-          }
-
-          let newCompletedAt = act.completedAt;
-          if (updates.completed === true && !act.completed) {
-            newCompletedAt = Date.now();
-          } else if (updates.completed === false && act.completed) {
-            newCompletedAt = null;
-          }
-         
-          const updatedResponsiblePersonIds = appModeState === 'personal'
-            ? (updates.responsiblePersonIds !== undefined ? updates.responsiblePersonIds : act.responsiblePersonIds)
-            : [];
-
-          return { ...act, ...updates, recurrence: updatedRecurrence as RecurrenceRule | undefined, completedOccurrences: updatedCompletedOccurrences, responsiblePersonIds: updatedResponsiblePersonIds, completedAt: newCompletedAt };
-        }
-        return act;
-      })
-    );
-     addHistoryLogEntry(
-      appModeState === 'personal' ? 'historyLogUpdateActivityPersonal' : 'historyLogUpdateActivityWork',
-      { title: activityTitleForLog },
-      appModeState
-    );
-  }, [currentActivitySetter, appModeState, addHistoryLogEntry]);
-
-  const deleteActivity = useCallback((activityId: string) => {
-    let deletedActivityTitle = 'Unknown Activity';
-    const currentActivities = appModeState === 'work' ? workActivities : personalActivities;
-    const activityToDelete = currentActivities.find(act => String(act.id) === activityId);
-    if (activityToDelete) {
-        deletedActivityTitle = activityToDelete.title;
-    }
-    // TODO: Replace with API call for activities
-    currentActivitySetter(prev => prev.filter(act => String(act.id) !== activityId));
-    addHistoryLogEntry(
-        appModeState === 'personal' ? 'historyLogDeleteActivityPersonal' : 'historyLogDeleteActivityWork',
-        { title: deletedActivityTitle },
-        appModeState
-    );
-  }, [currentActivitySetter, appModeState, addHistoryLogEntry, personalActivities, workActivities]);
-
-  const toggleOccurrenceCompletion = useCallback((masterActivityId: string, occurrenceDateTimestamp: number, completedState: boolean) => {
-    let activityTitleForLog = 'Unknown Activity';
-    const currentActivities = appModeState === 'work' ? workActivities : personalActivities;
-    const masterActivity = currentActivities.find(act => String(act.id) === masterActivityId);
-    if (masterActivity) {
-      activityTitleForLog = masterActivity.title;
-    }
-
-    const occurrenceDateKey = formatISO(new Date(occurrenceDateTimestamp), { representation: 'date' });
-    // TODO: API call might be needed here if completion of instances is server-managed
-    currentActivitySetter(prevActivities =>
-      prevActivities.map(act => {
-        if (String(act.id) === masterActivityId) {
-          const updatedOccurrences = { ...act.completedOccurrences };
-          if (completedState) {
-            updatedOccurrences[occurrenceDateKey] = true;
-          } else {
-            delete updatedOccurrences[occurrenceDateKey];
-          }
-          return { ...act, completedOccurrences: updatedOccurrences };
-        }
-        return act;
-      })
-    );
-    addHistoryLogEntry(
-        appModeState === 'personal' ? 'historyLogToggleActivityCompletionPersonal' : 'historyLogToggleActivityCompletionWork',
-        { title: activityTitleForLog, completed: completedState ? 1 : 0 },
-        appModeState
-    );
-  }, [currentActivitySetter, appModeState, addHistoryLogEntry, personalActivities, workActivities]);
-
-
-  const addTodoToActivity = useCallback((activityId: string, todoText: string) => {
-    const newTodo: Todo = { id: uuidv4(), text: todoText, completed: false };
-    // TODO: API call for todos
-    currentActivitySetter(prev =>
-      prev.map(act =>
-        String(act.id) === activityId ? { ...act, todos: [...act.todos, newTodo] } : act
-      )
-    );
-  }, [currentActivitySetter]);
-
-  const updateTodoInActivity = useCallback(
-    (activityId: string, todoId: string, updates: Partial<Todo>) => {
-      // TODO: API call for todos
-      currentActivitySetter(prev =>
-        prev.map(act =>
-          String(act.id) === activityId
-            ? {
-                ...act,
-                todos: act.todos.map(todo =>
-                  todo.id === todoId ? { ...todo, ...updates } : todo
-                ),
-              }
-            : act
-        )
-      );
-    },
-    [currentActivitySetter]
-  );
-
-  const deleteTodoFromActivity = useCallback((activityId: string, todoId: string) => {
-    // TODO: API call for todos
-    currentActivitySetter(prev =>
-      prev.map(act =>
-        String(act.id) === activityId
-          ? { ...act, todos: act.todos.filter(todo => todo.id !== todoId) }
-          : act
-      )
-    );
-  }, [currentActivitySetter]);
-
-  const getCategoryById = useCallback(
-    (categoryId: number) => { // Changed to number
-      return allCategories.find(cat => cat.id === categoryId)
-    },
-    [allCategories]
-  );
-
+  // --- Category API Methods ---
   const addCategory = useCallback(async (name: string, iconName: string, mode: AppMode | 'all') => {
     setError(null);
-    const payload: BackendCategoryCreatePayload = { name, icon_name: iconName, mode };
+    const payload: BackendCategoryCreatePayload = { name, icon_name: iconName, mode: frontendToBackendCategoryMode(mode) };
     try {
-      const response = await fetch(`${API_BASE_URL}/categories`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(errorData.detail || `Failed to add category: ${response.statusText}`);
-      }
+      const response = await fetch(`${API_BASE_URL}/categories`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to add category: HTTP ${response.status}`);}
       const newBackendCategory: BackendCategory = await response.json();
-      const newFrontendCategory = backendToFrontendCategory(newBackendCategory);
-      setAllCategories(prev => [...prev, newFrontendCategory]);
-      
+      setAllCategories(prev => [...prev, backendToFrontendCategory(newBackendCategory)]);
       toast({ title: t('toastCategoryAddedTitle'), description: t('toastCategoryAddedDescription', { categoryName: name }) });
-      let actionKey: HistoryLogActionKey;
-      if (mode === 'personal') actionKey = 'historyLogAddCategoryPersonal';
-      else if (mode === 'work') actionKey = 'historyLogAddCategoryWork';
-      else actionKey = 'historyLogAddCategoryAll';
-      addHistoryLogEntry(actionKey, { name }, 'category');
-    } catch (err) {
-      createApiErrorToast(err, toast, "Error Adding Category", "adding");
-      setError((err as Error).message);
-    }
+      addHistoryLogEntry(mode === 'personal' ? 'historyLogAddCategoryPersonal' : mode === 'work' ? 'historyLogAddCategoryWork' : 'historyLogAddCategoryAll', { name }, 'category');
+    } catch (err) { createApiErrorToast(err, toast, "Error Adding Category", "adding"); setError((err as Error).message); throw err; }
   }, [toast, t, addHistoryLogEntry]);
 
   const updateCategory = useCallback(async (categoryId: number, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => {
@@ -1267,230 +860,272 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const payload: Partial<BackendCategoryCreatePayload> = {};
     if (updates.name !== undefined) payload.name = updates.name;
     if (updates.iconName !== undefined) payload.icon_name = updates.iconName;
-    if (updates.mode !== undefined) payload.mode = updates.mode;
-
+    if (updates.mode !== undefined) payload.mode = frontendToBackendCategoryMode(updates.mode);
     try {
-      const response = await fetch(`${API_BASE_URL}/categories/${categoryId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(errorData.detail || `Failed to update category: ${response.statusText}`);
-      }
+      const response = await fetch(`${API_BASE_URL}/categories/${categoryId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to update category: HTTP ${response.status}`);}
       const updatedBackendCategory: BackendCategory = await response.json();
       const updatedFrontendCategory = backendToFrontendCategory(updatedBackendCategory);
-
-      setAllCategories(prev =>
-        prev.map(cat => (cat.id === categoryId ? updatedFrontendCategory : cat))
-      );
-      
-      const catName = updatedFrontendCategory.name;
-      const catMode = updatedFrontendCategory.mode;
-      toast({ title: t('toastCategoryUpdatedTitle'), description: t('toastCategoryUpdatedDescription', { categoryName: catName }) });
-      
-      let actionKey: HistoryLogActionKey;
-      if (catMode === 'personal') actionKey = 'historyLogUpdateCategoryPersonal';
-      else if (catMode === 'work') actionKey = 'historyLogUpdateCategoryWork';
-      else actionKey = 'historyLogUpdateCategoryAll';
-      addHistoryLogEntry(actionKey, { name: catName, oldName: oldCategoryData?.name !== catName ? oldCategoryData?.name : undefined , oldMode: oldCategoryData?.mode !== catMode ? oldCategoryData?.mode : undefined }, 'category');
-
-    } catch (err) {
-      createApiErrorToast(err, toast, "Error Updating Category", "updating");
-      setError((err as Error).message);
-    }
+      setAllCategories(prev => prev.map(cat => (cat.id === categoryId ? updatedFrontendCategory : cat)));
+      toast({ title: t('toastCategoryUpdatedTitle'), description: t('toastCategoryUpdatedDescription', { categoryName: updatedFrontendCategory.name }) });
+      let actionKey: HistoryLogActionKey = 'historyLogUpdateCategoryAll';
+      if (updatedFrontendCategory.mode === 'personal') actionKey = 'historyLogUpdateCategoryPersonal';
+      else if (updatedFrontendCategory.mode === 'work') actionKey = 'historyLogUpdateCategoryWork';
+      addHistoryLogEntry(actionKey, { name: updatedFrontendCategory.name, oldName: oldCategoryData?.name !== updatedFrontendCategory.name ? oldCategoryData?.name : undefined , oldMode: oldCategoryData?.mode !== updatedFrontendCategory.mode ? oldCategoryData?.mode : undefined }, 'category');
+    } catch (err) { createApiErrorToast(err, toast, "Error Updating Category", "updating"); setError((err as Error).message); throw err; }
   }, [toast, t, addHistoryLogEntry]);
-
 
   const deleteCategory = useCallback(async (categoryId: number) => {
     setError(null);
     const categoryToDelete = allCategories.find(cat => cat.id === categoryId);
     if (!categoryToDelete) return;
-
     try {
       const response = await fetch(`${API_BASE_URL}/categories/${categoryId}`, { method: 'DELETE' });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(errorData.detail || `Failed to delete category: ${response.statusText}`);
-      }
-      
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to delete category: HTTP ${response.status}`);}
       setAllCategories(prev => prev.filter(cat => cat.id !== categoryId));
-      
       toast({ title: t('toastCategoryDeletedTitle'), description: t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name }) });
       addHistoryLogEntry('historyLogDeleteCategory', { name: categoryToDelete.name, mode: categoryToDelete.mode as string }, 'category');
-    } catch (err) {
-      createApiErrorToast(err, toast, "Error Deleting Category", "deleting");
-      setError((err as Error).message);
-    }
+    } catch (err) { createApiErrorToast(err, toast, "Error Deleting Category", "deleting"); setError((err as Error).message); throw err; }
   }, [allCategories, toast, t, addHistoryLogEntry]);
 
+  // --- Assignee (User) API Methods ---
+  const addAssignee = useCallback(async (name: string, username?: string, password?: string) => {
+    setError(null);
+    const finalUsername = username || name.toLowerCase().replace(/\s+/g, '') + Math.floor(Math.random() * 1000);
+    const finalPassword = password || "P@ssword123"; // Placeholder
+    const payload: BackendUserCreatePayload = { name, username: finalUsername, password: finalPassword };
+    try {
+      const response = await fetch(`${API_BASE_URL}/users`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to add assignee: HTTP ${response.status}`);}
+      const newBackendUser: BackendUser = await response.json();
+      setAllAssignees(prev => [...prev, backendToFrontendAssignee(newBackendUser)]);
+      toast({ title: t('toastAssigneeAddedTitle'), description: t('toastAssigneeAddedDescription', { assigneeName: name }) });
+      addHistoryLogEntry('historyLogAddAssignee', { name }, 'assignee');
+    } catch (err) { createApiErrorToast(err, toast, "Error Adding Assignee", "adding"); setError((err as Error).message); throw err; }
+  }, [toast, t, addHistoryLogEntry]);
 
-  const addAssignee = useCallback((name: string) => {
-    const newAssignee: Assignee = { id: `asg_${uuidv4()}`, name };
-    // TODO: API call for assignees
-    setAllAssignees(prev => [...prev, newAssignee]);
-    toast({ title: t('toastAssigneeAddedTitle'), description: t('toastAssigneeAddedDescription', { assigneeName: name }) });
-    addHistoryLogEntry('historyLogAddAssignee', { name }, 'assignee');
-  }, [t, toast, addHistoryLogEntry]);
+  const updateAssignee = useCallback(async (assigneeId: number, updates: Partial<Omit<Assignee, 'id'>>) => {
+    setError(null);
+    const currentAssignee = assignees.find(a => a.id === assigneeId);
+    // Backend PUT /users requires name, username, password as Form data.
+    // This is a mismatch with frontend's partial JSON update intention.
+    // For now, sending only name if provided. This might require backend adjustment.
+    const payload: BackendUserUpdatePayload = { name: updates.name };
+    // If you need to update username/password, the frontend form and this payload need to be more complex.
+    // And use FormData for the request.
+    try {
+      // Simulating JSON PUT, which might fail if backend strictly expects Form.
+      const response = await fetch(`${API_BASE_URL}/users/${assigneeId}`, {
+         method: 'PUT',
+         headers: { 'Content-Type': 'application/json' }, // Sending as JSON
+         body: JSON.stringify(payload)
+      });
+      // If using FormData:
+      // const formData = new FormData();
+      // if (updates.name) formData.append('name', updates.name);
+      // if (currentAssignee?.username) formData.append('username', currentAssignee.username); // Or new username
+      // formData.append('password', 'newPlaceholderPassword'); // Required by backend Form
+      // const response = await fetch(`${API_BASE_URL}/users/${assigneeId}`, { method: 'PUT', body: formData });
 
-  const updateAssignee = useCallback((assigneeId: string, updates: Partial<Omit<Assignee, 'id'>>) => {
-    let assigneeNameForLog = updates.name;
-    let oldNameForLog: string | undefined = undefined;
-    // TODO: API call for assignees
-    setAllAssignees(prev =>
-      prev.map(asg => {
-        if (asg.id === assigneeId) {
-          oldNameForLog = asg.name;
-          const newName = updates.name !== undefined ? updates.name : asg.name;
-          if (!assigneeNameForLog) assigneeNameForLog = newName;
-          return { ...asg, name: newName };
-        }
-        return asg;
-      })
-    );
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to update assignee: HTTP ${response.status}`);}
+      const updatedBackendUser: BackendUser = await response.json();
+      setAllAssignees(prev => prev.map(asg => (asg.id === assigneeId ? backendToFrontendAssignee(updatedBackendUser) : asg)));
+      toast({ title: t('toastAssigneeUpdatedTitle'), description: t('toastAssigneeUpdatedDescription', { assigneeName: updatedBackendUser.name }) });
+      addHistoryLogEntry('historyLogUpdateAssignee', { name: updatedBackendUser.name, oldName: currentAssignee?.name !== updatedBackendUser.name ? currentAssignee?.name : undefined }, 'assignee');
+    } catch (err) { createApiErrorToast(err, toast, "Error Updating Assignee", "updating"); setError((err as Error).message); throw err; }
+  }, [assignees, toast, t, addHistoryLogEntry]);
 
-    const asgName = assigneeNameForLog || "Unknown Assignee";
-    toast({ title: t('toastAssigneeUpdatedTitle'), description: t('toastAssigneeUpdatedDescription', { assigneeName: asgName }) });
-    addHistoryLogEntry('historyLogUpdateAssignee', { name: asgName, oldName: oldNameForLog !== asgName ? oldNameForLog : undefined }, 'assignee');
-  }, [t, toast, addHistoryLogEntry]);
-
-  const deleteAssignee = useCallback((assigneeId: string) => {
+  const deleteAssignee = useCallback(async (assigneeId: number) => {
+    setError(null);
     const assigneeToDelete = assignees.find(asg => asg.id === assigneeId);
     if (!assigneeToDelete) return;
-    // TODO: API call for assignees
-    setAllAssignees(prev => prev.filter(asg => asg.id !== assigneeId));
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/${assigneeId}`, { method: 'DELETE' });
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to delete assignee: HTTP ${response.status}`);}
+      setAllAssignees(prev => prev.filter(asg => asg.id !== assigneeId));
+      // Also remove from activities' responsiblePersonIds (client-side update)
+      setPersonalActivities(prevActs => prevActs.map(act => ({ ...act, responsiblePersonIds: act.responsiblePersonIds?.filter(id => id !== assigneeId) })));
+      setWorkActivities(prevActs => prevActs.map(act => ({ ...act, responsiblePersonIds: act.responsiblePersonIds?.filter(id => id !== assigneeId) })));
+      toast({ title: t('toastAssigneeDeletedTitle'), description: t('toastAssigneeDeletedDescription', { assigneeName: assigneeToDelete.name }) });
+      addHistoryLogEntry('historyLogDeleteAssignee', { name: assigneeToDelete.name }, 'assignee');
+    } catch (err) { createApiErrorToast(err, toast, "Error Deleting Assignee", "deleting"); setError((err as Error).message); throw err; }
+  }, [assignees, toast, t, addHistoryLogEntry]);
 
-    setPersonalActivities(prevActivities =>
-      prevActivities.map(act =>
-        act.responsiblePersonIds?.includes(assigneeId) 
-        ? { ...act, responsiblePersonIds: act.responsiblePersonIds?.filter(id => id !== assigneeId) } 
-        : act
+
+  // --- Activity API Methods (using localStorage as primary source for GETs) ---
+  const addActivity = useCallback(async (
+      activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId' | 'appMode' | 'masterActivityId' | 'isRecurringInstance' | 'originalInstanceDate'> & {
+        todos?: Omit<Todo, 'id' | 'completed'>[]; time?: string; notes?: string; recurrence?: RecurrenceRule | null; responsiblePersonIds?: number[]; categoryId: number; appMode: AppMode;
+      }, customCreatedAt?: number
+    ) => {
+    setError(null);
+    const frontendActivityShell: Activity = {
+      // Temporary ID for optimistic update, will be replaced by backend ID
+      // However, since we're using localStorage as primary GET, we might just keep client ID.
+      // For now, let's assume backend ID becomes the source of truth if call succeeds.
+      id: Date.now(), // Placeholder, will be replaced by backend
+      title: activityData.title,
+      categoryId: activityData.categoryId,
+      todos: (activityData.todos || []).map(t => ({ ...t, id: Date.now() + Math.random(), completed: false })), // Placeholder IDs
+      createdAt: customCreatedAt !== undefined ? customCreatedAt : Date.now(),
+      time: activityData.time,
+      notes: activityData.notes,
+      recurrence: activityData.recurrence,
+      responsiblePersonIds: activityData.responsiblePersonIds,
+      appMode: activityData.appMode,
+      completedOccurrences: {},
+    };
+
+    const payload = frontendToBackendActivityPayload(frontendActivityShell) as BackendActivityCreatePayload;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/activities`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to add activity: HTTP ${response.status}`);}
+      const newBackendActivity: BackendActivity = await response.json();
+      const newFrontendActivity = backendToFrontendActivity(newBackendActivity, appModeState);
+      
+      currentActivitySetter(prev => [...prev, newFrontendActivity]); // Add to localStorage-backed state
+      toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
+      addHistoryLogEntry(appModeState === 'personal' ? 'historyLogAddActivityPersonal' : 'historyLogAddActivityWork', { title: newFrontendActivity.title }, appModeState);
+    } catch (err) { createApiErrorToast(err, toast, "Error Adding Activity", "adding"); setError((err as Error).message); throw err; }
+  }, [currentActivitySetter, appModeState, toast, t, addHistoryLogEntry]);
+
+  const updateActivity = useCallback(async (activityId: number, updates: Partial<Omit<Activity, 'id'>>, originalActivity?: Activity) => {
+    setError(null);
+    const activityToUpdate = (appModeState === 'work' ? workActivities : personalActivities).find(a => a.id === activityId);
+    if (!activityToUpdate) {
+      console.error("Activity not found for update:", activityId);
+      toast({variant: "destructive", title: "Error", description: "Activity not found for update."});
+      return;
+    }
+
+    // Merge updates with existing activity to form a complete frontend shell
+    const updatedFrontendShell: Activity = { ...activityToUpdate, ...updates };
+    const payload = frontendToBackendActivityPayload(updatedFrontendShell, true) as BackendActivityUpdatePayload;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/activities/${activityId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to update activity: HTTP ${response.status}`);}
+      const updatedBackendActivity: BackendActivity = await response.json();
+      const finalFrontendActivity = backendToFrontendActivity(updatedBackendActivity, appModeState);
+
+      // Client-side only properties need to be preserved if not part of backend response
+      finalFrontendActivity.completedOccurrences = activityToUpdate.completedOccurrences;
+      if (updates.completedOccurrences) finalFrontendActivity.completedOccurrences = updates.completedOccurrences;
+      if (updates.completed !== undefined) finalFrontendActivity.completed = updates.completed;
+      if (updates.completedAt !== undefined) finalFrontendActivity.completedAt = updates.completedAt;
+
+
+      currentActivitySetter(prev => prev.map(act => (act.id === activityId ? finalFrontendActivity : act)));
+      toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
+      addHistoryLogEntry(appModeState === 'personal' ? 'historyLogUpdateActivityPersonal' : 'historyLogUpdateActivityWork', { title: finalFrontendActivity.title }, appModeState);
+    } catch (err) { createApiErrorToast(err, toast, "Error Updating Activity", "updating"); setError((err as Error).message); throw err; }
+  }, [currentActivitySetter, appModeState, personalActivities, workActivities, toast, t, addHistoryLogEntry]);
+
+  const deleteActivity = useCallback(async (activityId: number) => {
+    setError(null);
+    const activityToDelete = (appModeState === 'work' ? workActivities : personalActivities).find(a => a.id === activityId);
+    if (!activityToDelete) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/activities/${activityId}`, { method: 'DELETE' });
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to delete activity: HTTP ${response.status}`);}
+      currentActivitySetter(prev => prev.filter(act => act.id !== activityId));
+      toast({ title: t('toastActivityDeletedTitle'), description: t('toastActivityDeletedDescription', { activityTitle: activityToDelete.title }) });
+      addHistoryLogEntry(appModeState === 'personal' ? 'historyLogDeleteActivityPersonal' : 'historyLogDeleteActivityWork', { title: activityToDelete.title }, appModeState);
+    } catch (err) { createApiErrorToast(err, toast, "Error Deleting Activity", "deleting"); setError((err as Error).message); throw err; }
+  }, [currentActivitySetter, appModeState, personalActivities, workActivities, toast, t, addHistoryLogEntry]);
+
+
+  // Todo operations remain largely client-side, but should mark activity as 'dirty' for potential sync
+  const addTodoToActivity = useCallback((activityId: number, todoText: string) => {
+    const newTodo: Todo = { id: Date.now() + Math.random(), text: todoText, completed: false };
+    currentActivitySetter(prev =>
+      prev.map(act =>
+        act.id === activityId ? { ...act, todos: [...act.todos, newTodo] } : act
       )
     );
+    // Consider triggering updateActivity if backend supports full todo list updates
+  }, [currentActivitySetter]);
 
-    toast({ title: t('toastAssigneeDeletedTitle'), description: t('toastAssigneeDeletedDescription', { assigneeName: assigneeToDelete.name }) });
-    addHistoryLogEntry('historyLogDeleteAssignee', { name: assigneeToDelete.name }, 'assignee');
-  }, [assignees, t, toast, addHistoryLogEntry]);
-
-  const getAssigneeById = useCallback((assigneeId: string) => {
-    return assignees.find(asg => asg.id === assigneeId);
-  }, [assignees]);
-
-
-  const markUINotificationAsRead = useCallback((notificationId: string) => {
-    setUINotifications(prev =>
-      prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
+  const updateTodoInActivity = useCallback((activityId: number, todoId: number, updates: Partial<Todo>) => {
+    currentActivitySetter(prev =>
+      prev.map(act =>
+        act.id === activityId
+          ? { ...act, todos: act.todos.map(todo => todo.id === todoId ? { ...todo, ...updates } : todo) }
+          : act
+      )
     );
-  }, []);
+  }, [currentActivitySetter]);
 
-  const markAllUINotificationsAsRead = useCallback(() => {
-    setUINotifications(prev => prev.map(n => ({ ...n, read: true })));
-  }, []);
+  const deleteTodoFromActivity = useCallback((activityId: number, todoId: number) => {
+    currentActivitySetter(prev =>
+      prev.map(act =>
+        act.id === activityId
+          ? { ...act, todos: act.todos.filter(todo => todo.id !== todoId) }
+          : act
+      )
+    );
+  }, [currentActivitySetter]);
 
-  const clearAllUINotifications = useCallback(() => {
-    setUINotifications([]);
-  }, []);
+  const toggleOccurrenceCompletion = useCallback((masterActivityId: number, occurrenceDateTimestamp: number, completedState: boolean) => {
+    let activityTitleForLog = 'Unknown Activity';
+    const masterActivity = getRawActivities().find(act => act.id === masterActivityId);
+    if (masterActivity) activityTitleForLog = masterActivity.title;
+    const occurrenceDateKey = formatDateFns(new Date(occurrenceDateTimestamp), 'yyyy-MM-dd'); // Use date-fns format
+    currentActivitySetter(prevActivities =>
+      prevActivities.map(act => {
+        if (act.id === masterActivityId) {
+          const updatedOccurrences = { ...act.completedOccurrences };
+          if (completedState) updatedOccurrences[occurrenceDateKey] = true;
+          else delete updatedOccurrences[occurrenceDateKey];
+          return { ...act, completedOccurrences: updatedOccurrences };
+        }
+        return act;
+      })
+    );
+    addHistoryLogEntry(appModeState === 'personal' ? 'historyLogToggleActivityCompletionPersonal' : 'historyLogToggleActivityCompletionWork', { title: activityTitleForLog, completed: completedState ? 1 : 0 }, appModeState);
+  }, [currentActivitySetter, appModeState, addHistoryLogEntry, getRawActivities]);
 
-  const unlockApp = useCallback((pinAttempt: string): boolean => {
-    if (appPinState && pinAttempt === appPinState) {
-      setIsAppLocked(false);
-      return true;
-    }
-    return false;
-  }, [appPinState]);
+  const getCategoryById = useCallback((categoryId: number) => allCategories.find(cat => cat.id === categoryId), [allCategories]);
+  const getAssigneeById = useCallback((assigneeId: number) => assignees.find(asg => asg.id === assigneeId), [assignees]);
 
+  const markUINotificationAsRead = useCallback((notificationId: string) => setUINotifications(prev => prev.map(n => n.id === notificationId ? { ...n, read: true } : n)), []);
+  const markAllUINotificationsAsRead = useCallback(() => setUINotifications(prev => prev.map(n => ({ ...n, read: true }))), []);
+  const clearAllUINotifications = useCallback(() => setUINotifications([]), []);
+  const unlockApp = useCallback((pinAttempt: string): boolean => { if (appPinState && pinAttempt === appPinState) { setIsAppLocked(false); return true; } return false; }, [appPinState]);
   const setAppPin = useCallback((pin: string | null) => {
     setAppPinState(pin);
-    if (typeof window !== 'undefined') {
-      if (pin) {
-        localStorage.setItem(LOCAL_STORAGE_KEY_APP_PIN, pin);
-      } else {
-        localStorage.removeItem(LOCAL_STORAGE_KEY_APP_PIN);
-        setIsAppLocked(false);
-      }
-    }
-    console.log("[AppProvider] App PIN set/updated (prototype).");
+    if (typeof window !== 'undefined') { if (pin) localStorage.setItem(LOCAL_STORAGE_KEY_APP_PIN, pin); else { localStorage.removeItem(LOCAL_STORAGE_KEY_APP_PIN); setIsAppLocked(false);}}
   }, []);
 
    useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && isAuthenticated && appPinState) {
-        setIsAppLocked(true);
-      }
-    };
+    const handleVisibilityChange = () => { if (document.visibilityState === 'visible' && isAuthenticated && appPinState) setIsAppLocked(true);};
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [isAuthenticated, appPinState]);
 
-
+  const combinedIsLoading = isLoading || isCategoriesLoading || isAssigneesLoading || (isAuthenticated && isHistoryLoading);
 
   return (
     <AppContext.Provider
       value={{
-        activities: getRawActivities(),
-        getRawActivities,
-        categories: filteredCategories,
-        assignees: assigneesForContext, 
-        appMode: appModeState,
-        setAppMode,
-        addActivity,
-        updateActivity,
-        deleteActivity,
-        toggleOccurrenceCompletion,
-        addTodoToActivity,
-        updateTodoInActivity,
-        deleteTodoFromActivity,
-        getCategoryById,
-        addCategory,
-        updateCategory,
-        deleteCategory,
-        addAssignee,
-        updateAssignee,
-        deleteAssignee,
-        getAssigneeById,
-        isLoading,
-        error,
-        isAuthenticated,
-        setIsAuthenticated,
-        loginAttempts,
-        setLoginAttempts,
-        lockoutEndTime,
-        setLockoutEndTime,
-        sessionExpiryTimestamp,
-        logout,
-        logPasswordChange,
-        uiNotifications,
-        addUINotification: stableAddUINotification,
-        markUINotificationAsRead,
-        markAllUINotificationsAsRead,
-        clearAllUINotifications,
-        historyLog,
-        addHistoryLogEntry,
-        systemNotificationPermission,
-        requestSystemNotificationPermission,
-        pomodoroPhase,
-        pomodoroTimeRemaining,
-        pomodoroIsRunning,
-        pomodoroCyclesCompleted,
-        startPomodoroWork,
-        startPomodoroShortBreak,
-        startPomodoroLongBreak,
-        pausePomodoro,
-        resumePomodoro,
-        resetPomodoro,
-        isPomodoroReady,
-        isAppLocked,
-        appPinState,
-        unlockApp,
-        setAppPin,
+        activities: getRawActivities(), getRawActivities, categories: filteredCategories, assignees: assigneesForContext, appMode: appModeState, setAppMode,
+        addActivity, updateActivity, deleteActivity, toggleOccurrenceCompletion,
+        addTodoToActivity, updateTodoInActivity, deleteTodoFromActivity,
+        getCategoryById, addCategory, updateCategory, deleteCategory,
+        addAssignee, updateAssignee, deleteAssignee, getAssigneeById,
+        isLoading: combinedIsLoading, error,
+        isAuthenticated, setIsAuthenticated, loginAttempts, setLoginAttempts, lockoutEndTime, setLockoutEndTime, sessionExpiryTimestamp, logout, logPasswordChange,
+        uiNotifications, addUINotification: stableAddUINotification, markUINotificationAsRead, markAllUINotificationsAsRead, clearAllUINotifications,
+        historyLog, addHistoryLogEntry,
+        systemNotificationPermission, requestSystemNotificationPermission,
+        pomodoroPhase, pomodoroTimeRemaining, pomodoroIsRunning, pomodoroCyclesCompleted,
+        startPomodoroWork, startPomodoroShortBreak, startPomodoroLongBreak, pausePomodoro, resumePomodoro, resetPomodoro, isPomodoroReady,
+        isAppLocked, appPinState, unlockApp, setAppPin,
       }}
     >
       {children}
     </AppContext.Provider>
   );
 };
-
-    

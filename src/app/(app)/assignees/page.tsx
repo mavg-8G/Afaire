@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/form";
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Assignee } from '@/lib/types';
-import { Trash2, PlusCircle, Edit3, XCircle, ArrowLeft, Users } from 'lucide-react';
+import { Trash2, PlusCircle, Edit3, XCircle, ArrowLeft, Users, Loader2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,26 +32,29 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslations } from '@/contexts/language-context';
-import { useRouter } from 'next/navigation'; // Import useRouter
+import { useRouter } from 'next/navigation';
 
+// Schema might need username and password if backend requires them for creation/update
+// For simplicity, we'll focus on 'name' for now, and AppProvider handles defaults.
 const assigneeFormSchema = z.object({
   name: z.string().min(1, "Assignee name is required."),
+  // username: z.string().optional(), // Could add these if UI supports it
+  // password: z.string().optional(),
 });
 
 type AssigneeFormData = z.infer<typeof assigneeFormSchema>;
 
 export default function ManageAssigneesPage() {
-  const { assignees, addAssignee, updateAssignee, deleteAssignee, appMode } = useAppStore();
+  const { assignees, addAssignee, updateAssignee, deleteAssignee, appMode, isLoading: isAppStoreLoading } = useAppStore();
   const { t } = useTranslations();
-  const router = useRouter(); // Initialize useRouter
-  const [assigneeToDelete, setAssigneeToDelete] = useState<string | null>(null);
+  const router = useRouter();
+  const [assigneeToDelete, setAssigneeToDelete] = useState<number | null>(null); // ID is now number
   const [editingAssignee, setEditingAssignee] = useState<Assignee | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<AssigneeFormData>({
     resolver: zodResolver(assigneeFormSchema),
-    defaultValues: {
-      name: "",
-    },
+    defaultValues: { name: "" },
   });
 
   useEffect(() => {
@@ -62,30 +65,46 @@ export default function ManageAssigneesPage() {
 
   useEffect(() => {
     if (editingAssignee) {
-      form.reset({
-        name: editingAssignee.name,
-      });
+      form.reset({ name: editingAssignee.name });
     } else {
       form.reset({ name: "" });
     }
   }, [editingAssignee, form]);
 
-  const onSubmit = (data: AssigneeFormData) => {
-    if (editingAssignee) {
-      updateAssignee(editingAssignee.id, { name: data.name });
-      setEditingAssignee(null);
-    } else {
-      addAssignee(data.name);
+  const onSubmit = async (data: AssigneeFormData) => {
+    setIsSubmitting(true);
+    try {
+      if (editingAssignee) {
+        // Backend update might require more fields (username, password)
+        // AppProvider's updateAssignee will attempt to send what it can.
+        await updateAssignee(editingAssignee.id, { name: data.name });
+        setEditingAssignee(null);
+      } else {
+        // AppProvider's addAssignee handles default username/password.
+        await addAssignee(data.name);
+      }
+      form.reset({ name: "" });
+    } catch (error) {
+      // Error is handled by AppProvider's toast
+      console.error("Failed to save assignee:", error);
+    } finally {
+      setIsSubmitting(false);
     }
-    form.reset({ name: "" });
   };
 
-  const handleDeleteAssignee = (assigneeId: string) => {
-    deleteAssignee(assigneeId);
-    setAssigneeToDelete(null);
-    if (editingAssignee?.id === assigneeId) {
-      setEditingAssignee(null);
-      form.reset({ name: "" });
+  const handleDeleteAssignee = async (assigneeId: number) => {
+    setIsSubmitting(true);
+    try {
+      await deleteAssignee(assigneeId);
+      setAssigneeToDelete(null);
+      if (editingAssignee?.id === assigneeId) {
+        setEditingAssignee(null);
+        form.reset({ name: "" });
+      }
+    } catch (error) {
+      console.error("Failed to delete assignee:", error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -104,8 +123,7 @@ export default function ManageAssigneesPage() {
         <div className="mb-6 flex justify-start">
           <Link href="/" passHref>
             <Button variant="outline">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              {t('backToCalendar')}
+              <ArrowLeft className="mr-2 h-4 w-4" />{t('backToCalendar')}
             </Button>
           </Link>
         </div>
@@ -127,21 +145,20 @@ export default function ManageAssigneesPage() {
                       <FormItem>
                         <FormLabel>{t('assigneeNameLabel')}</FormLabel>
                         <FormControl>
-                          <Input placeholder={t('assigneeNamePlaceholder')} {...field} />
+                          <Input placeholder={t('assigneeNamePlaceholder')} {...field} disabled={isSubmitting || isAppStoreLoading} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                   <div className="flex space-x-2">
-                    <Button type="submit" className="flex-grow">
-                      {editingAssignee ? <Edit3 className="mr-2 h-5 w-5" /> : <PlusCircle className="mr-2 h-5 w-5" />}
+                    <Button type="submit" className="flex-grow" disabled={isSubmitting || isAppStoreLoading}>
+                      {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : (editingAssignee ? <Edit3 className="mr-2 h-5 w-5" /> : <PlusCircle className="mr-2 h-5 w-5" />)}
                       {editingAssignee ? t('saveChanges') : t('addNewAssignee')}
                     </Button>
                     {editingAssignee && (
-                      <Button type="button" variant="outline" onClick={handleCancelEdit}>
-                        <XCircle className="mr-2 h-5 w-5" />
-                        {t('cancel')}
+                      <Button type="button" variant="outline" onClick={handleCancelEdit} disabled={isSubmitting}>
+                        <XCircle className="mr-2 h-5 w-5" />{t('cancel')}
                       </Button>
                     )}
                   </div>
@@ -156,7 +173,8 @@ export default function ManageAssigneesPage() {
               <CardDescription>{t('viewEditManageAssignees')}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow">
-              {assignees.length > 0 ? (
+             {isAppStoreLoading && <div className="flex justify-center items-center h-32"><Loader2 className="h-8 w-8 animate-spin" /></div>}
+              {!isAppStoreLoading && assignees.length > 0 ? (
                 <ScrollArea className="h-full pr-1">
                   <ul className="space-y-3">
                     {assignees.map((assignee) => (
@@ -166,15 +184,13 @@ export default function ManageAssigneesPage() {
                           <span className="font-medium">{assignee.name}</span>
                         </div>
                         <div className="flex items-center">
-                          <Button variant="ghost" size="icon" onClick={() => handleEditAssignee(assignee)} className="text-primary hover:text-primary/80">
-                            <Edit3 className="h-5 w-5" />
-                            <span className="sr-only">{t('editAssignee')}</span>
+                          <Button variant="ghost" size="icon" onClick={() => handleEditAssignee(assignee)} className="text-primary hover:text-primary/80" disabled={isSubmitting}>
+                            <Edit3 className="h-5 w-5" /><span className="sr-only">{t('editAssignee')}</span>
                           </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive/80">
-                                <Trash2 className="h-5 w-5" />
-                                 <span className="sr-only">{t('delete')}</span>
+                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive/80" disabled={isSubmitting}>
+                                <Trash2 className="h-5 w-5" /><span className="sr-only">{t('delete')}</span>
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
@@ -186,8 +202,8 @@ export default function ManageAssigneesPage() {
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel onClick={() => setAssigneeToDelete(null)}>{t('cancel')}</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDeleteAssignee(assignee.id)}>
-                                  {t('delete')}
+                                <AlertDialogAction onClick={() => handleDeleteAssignee(assignee.id)} disabled={isSubmitting}>
+                                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t('delete')}
                                 </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
@@ -198,10 +214,10 @@ export default function ManageAssigneesPage() {
                   </ul>
                 </ScrollArea>
               ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">{t('noAssigneesYet')}</p>
+                !isAppStoreLoading && <p className="text-sm text-muted-foreground text-center py-4">{t('noAssigneesYet')}</p>
               )}
             </CardContent>
-             {assignees.length > 0 && (
+             {!isAppStoreLoading && assignees.length > 0 && (
               <CardFooter className="text-sm text-muted-foreground">
                 {t('assigneesCount', { count: assignees.length })}
               </CardFooter>
