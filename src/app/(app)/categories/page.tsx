@@ -19,7 +19,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Category, AppMode } from '@/lib/types';
-import { Trash2, PlusCircle, Edit3, XCircle, ArrowLeft } from 'lucide-react';
+import { Trash2, PlusCircle, Edit3, XCircle, ArrowLeft, Loader2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslations } from '@/contexts/language-context';
-import { FormDescription } from "@/components/ui/form";
+import { FormDescription as ShadcnFormDescription } from "@/components/ui/form"; // Aliased to avoid conflict
 
 
 const categoryFormSchema = z.object({
@@ -45,10 +45,11 @@ const categoryFormSchema = z.object({
 type CategoryFormData = z.infer<typeof categoryFormSchema>;
 
 export default function ManageCategoriesPage() {
-  const { categories: filteredCategories, addCategory, updateCategory, deleteCategory, appMode } = useAppStore();
+  const { categories: filteredCategories, addCategory, updateCategory, deleteCategory, appMode, isLoading: isAppLoading } = useAppStore();
   const { t } = useTranslations();
-  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
+  const [categoryToDelete, setCategoryToDelete] = useState<number | null>(null); // Changed to number
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<CategoryFormData>({
     resolver: zodResolver(categoryFormSchema),
@@ -71,23 +72,27 @@ export default function ManageCategoriesPage() {
     }
   }, [editingCategory, form, appMode]);
 
-  const onSubmit = (data: CategoryFormData) => {
+  const onSubmit = async (data: CategoryFormData) => {
+    setIsSubmitting(true);
     if (editingCategory) {
-      updateCategory(editingCategory.id, { name: data.name, iconName: data.iconName, mode: data.mode });
+      await updateCategory(editingCategory.id, { name: data.name, iconName: data.iconName, mode: data.mode }, editingCategory);
       setEditingCategory(null);
     } else {
-      addCategory(data.name, data.iconName, data.mode);
+      await addCategory(data.name, data.iconName, data.mode);
     }
     form.reset({ name: "", iconName: "", mode: appMode });
+    setIsSubmitting(false);
   };
 
-  const handleDeleteCategory = (categoryId: string) => {
-    deleteCategory(categoryId);
+  const handleDeleteCategory = async (categoryId: number) => {
+    setIsSubmitting(true); // Potentially disable delete button during operation
+    await deleteCategory(categoryId);
     setCategoryToDelete(null);
     if (editingCategory?.id === categoryId) {
       setEditingCategory(null);
       form.reset({ name: "", iconName: "", mode: appMode });
     }
+    setIsSubmitting(false);
   };
 
   const handleEditCategory = (category: Category) => {
@@ -132,7 +137,7 @@ export default function ManageCategoriesPage() {
                       <FormItem>
                         <FormLabel>{t('categoryName')}</FormLabel>
                         <FormControl>
-                          <Input placeholder="e.g., Fitness, Gimnasio" {...field} />
+                          <Input placeholder="e.g., Fitness, Gimnasio" {...field} disabled={isSubmitting} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -145,9 +150,9 @@ export default function ManageCategoriesPage() {
                       <FormItem>
                         <FormLabel>{t('iconName')}</FormLabel>
                         <FormControl>
-                          <Input placeholder="e.g., Dumbbell, Coffee, BookOpen" {...field} />
+                          <Input placeholder="e.g., Dumbbell, Coffee, BookOpen" {...field} disabled={isSubmitting} />
                         </FormControl>
-                        <FormDescription dangerouslySetInnerHTML={{ __html: iconNameDescription }} />
+                        <ShadcnFormDescription dangerouslySetInnerHTML={{ __html: iconNameDescription }} />
                         <FormMessage />
                       </FormItem>
                     )}
@@ -161,8 +166,9 @@ export default function ManageCategoriesPage() {
                         <FormControl>
                           <RadioGroup
                             onValueChange={field.onChange}
-                            value={field.value} // Ensure value is controlled
+                            value={field.value}
                             className="flex flex-col space-y-1 sm:flex-row sm:space-y-0 sm:space-x-4"
+                            disabled={isSubmitting}
                           >
                             <FormItem className="flex items-center space-x-2 space-y-0">
                               <FormControl>
@@ -189,12 +195,12 @@ export default function ManageCategoriesPage() {
                     )}
                   />
                   <div className="flex space-x-2">
-                    <Button type="submit" className="flex-grow">
-                      {editingCategory ? <Edit3 className="mr-2 h-5 w-5" /> : <PlusCircle className="mr-2 h-5 w-5" />}
+                    <Button type="submit" className="flex-grow" disabled={isSubmitting || isAppLoading}>
+                      {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : (editingCategory ? <Edit3 className="mr-2 h-5 w-5" /> : <PlusCircle className="mr-2 h-5 w-5" />)}
                       {editingCategory ? t('saveChanges') : t('addCategory')}
                     </Button>
                     {editingCategory && (
-                      <Button type="button" variant="outline" onClick={handleCancelEdit}>
+                      <Button type="button" variant="outline" onClick={handleCancelEdit} disabled={isSubmitting}>
                         <XCircle className="mr-2 h-5 w-5" />
                         {t('cancel')}
                       </Button>
@@ -211,7 +217,8 @@ export default function ManageCategoriesPage() {
               <CardDescription>{t('viewEditManageCategories')}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow">
-              {filteredCategories.length > 0 ? (
+              {isAppLoading && <div className="flex justify-center items-center h-32"><Loader2 className="h-8 w-8 animate-spin" /></div>}
+              {!isAppLoading && filteredCategories.length > 0 ? (
                 <ScrollArea className="h-full pr-1"> 
                   <ul className="space-y-3">
                     {filteredCategories.map((category) => (
@@ -224,13 +231,13 @@ export default function ManageCategoriesPage() {
                           </span>
                         </div>
                         <div className="flex items-center">
-                          <Button variant="ghost" size="icon" onClick={() => handleEditCategory(category)} className="text-primary hover:text-primary/80">
+                          <Button variant="ghost" size="icon" onClick={() => handleEditCategory(category)} className="text-primary hover:text-primary/80" disabled={isSubmitting}>
                             <Edit3 className="h-5 w-5" />
                             <span className="sr-only">{t('editCategory')}</span>
                           </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive/80">
+                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive/80" disabled={isSubmitting}>
                                 <Trash2 className="h-5 w-5" />
                                  <span className="sr-only">{t('delete')}</span>
                               </Button>
@@ -245,7 +252,7 @@ export default function ManageCategoriesPage() {
                               <AlertDialogFooter>
                                 <AlertDialogCancel onClick={() => setCategoryToDelete(null)}>{t('cancel')}</AlertDialogCancel>
                                 <AlertDialogAction onClick={() => handleDeleteCategory(category.id)}>
-                                  {t('delete')}
+                                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t('delete')}
                                 </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
@@ -256,10 +263,10 @@ export default function ManageCategoriesPage() {
                   </ul>
                 </ScrollArea>
               ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">{t('noCategoriesYet')}</p>
+                !isAppLoading && <p className="text-sm text-muted-foreground text-center py-4">{t('noCategoriesYet')}</p>
               )}
             </CardContent>
-             {filteredCategories.length > 0 && (
+             {!isAppLoading && filteredCategories.length > 0 && (
               <CardFooter className="text-sm text-muted-foreground">
                 {t('categoriesCount', { count: filteredCategories.length })}
               </CardFooter>

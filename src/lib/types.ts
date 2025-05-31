@@ -17,7 +17,7 @@ export interface RecurrenceRule {
 export interface Activity {
   id: string;
   title: string;
-  categoryId: string;
+  categoryId: number; // Changed from string to number
   todos: Todo[];
   createdAt: number; // This is the start date for non-recurring or the first occurrence date for recurring
   time?: string;
@@ -29,23 +29,38 @@ export interface Activity {
   isRecurringInstance?: boolean; // Client-side flag, not stored
   originalInstanceDate?: number; // Client-side flag for instance's specific date, not stored on master
   masterActivityId?: string; // Client-side flag, not stored
-  responsiblePersonIds?: string[]; // Changed from responsiblePersonId
+  responsiblePersonIds?: string[];
 }
 
 export type AppMode = 'personal' | 'work';
 
 export interface Category {
-  id: string;
+  id: number; // Changed from string to number
   name: string;
   icon: LucideIcon;
-  iconName: string;
+  iconName: string; // This will store the string name like "Home", "Briefcase"
   mode?: AppMode | 'all';
 }
+
+// This interface can represent the data structure expected by the backend for creating a category
+export interface BackendCategoryCreatePayload {
+  name: string;
+  icon_name: string;
+  mode: AppMode | 'all';
+}
+
+// This interface can represent the data structure received from the backend for a category
+export interface BackendCategory {
+  id: number;
+  name: string;
+  icon_name: string;
+  mode: AppMode | 'all';
+}
+
 
 export interface Assignee {
   id: string;
   name: string;
-  // mode property removed as assignees are now only for personal mode
 }
 
 export interface UINotification {
@@ -54,7 +69,7 @@ export interface UINotification {
   description: string;
   timestamp: number;
   read: boolean;
-  activityId?: string;
+  activityId?: string; // Could be string if activity IDs from backend are strings
   instanceDate?: number;
 }
 

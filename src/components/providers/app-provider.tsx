@@ -2,7 +2,7 @@
 "use client";
 import type { ReactNode } from 'react';
 import React, { createContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import type { Activity, Todo, Category, AppMode, RecurrenceRule, UINotification, HistoryLogEntry, HistoryLogActionKey, Translations, Assignee, PomodoroPhase } from '@/lib/types';
+import type { Activity, Todo, Category, AppMode, RecurrenceRule, UINotification, HistoryLogEntry, HistoryLogActionKey, Translations, Assignee, PomodoroPhase, BackendCategoryCreatePayload, BackendCategory } from '@/lib/types';
 import { INITIAL_CATEGORIES, HARDCODED_APP_PIN
 } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
@@ -33,12 +33,13 @@ export interface AppContextType {
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
   addActivity: (
-    activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds'> & {
+    activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId'> & {
       todos?: Omit<Todo, 'id' | 'completed'>[];
       time?: string;
       notes?: string;
       recurrence?: RecurrenceRule | null;
       responsiblePersonIds?: string[];
+      categoryId: number; // Ensure categoryId is number
     },
     customCreatedAt?: number
   ) => void;
@@ -48,10 +49,10 @@ export interface AppContextType {
   addTodoToActivity: (activityId: string, todoText: string) => void;
   updateTodoInActivity: (activityId: string, todoId: string, updates: Partial<Todo>) => void;
   deleteTodoFromActivity: (activityId: string, todoId: string, masterActivityId?: string) => void;
-  getCategoryById: (categoryId: string) => Category | undefined;
-  addCategory: (name: string, iconName: string, mode: AppMode | 'all') => void;
-  updateCategory: (categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => void;
-  deleteCategory: (categoryId: string) => void;
+  getCategoryById: (categoryId: number) => Category | undefined; // Changed to number
+  addCategory: (name: string, iconName: string, mode: AppMode | 'all') => Promise<void>; // Made async
+  updateCategory: (categoryId: number, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => Promise<void>; // Made async, categoryId is number
+  deleteCategory: (categoryId: number) => Promise<void>; // Made async, categoryId is number
   addAssignee: (name: string) => void;
   updateAssignee: (assigneeId: string, updates: Partial<Omit<Assignee, 'id'>>) => void;
   deleteAssignee: (assigneeId: string) => void;
@@ -98,15 +99,15 @@ export interface AppContextType {
   isAppLocked: boolean;
   appPinState: string | null;
   unlockApp: (pinAttempt: string) => boolean;
-  setAppPin: (pin: string | null) => void; // For future use: UI to set/change PIN
+  setAppPin: (pin: string | null) => void;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities_v2';
 const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities_v2';
-const LOCAL_STORAGE_KEY_ALL_CATEGORIES = 'todoFlowAllCategories_v2'; // v2 for mode
-const LOCAL_STORAGE_KEY_ASSIGNEES = 'todoFlowAssignees_v1'; // v1 because mode removed
+// const LOCAL_STORAGE_KEY_ALL_CATEGORIES = 'todoFlowAllCategories_v2'; // No longer used for primary storage
+const LOCAL_STORAGE_KEY_ASSIGNEES = 'todoFlowAssignees_v1';
 const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode';
 const LOCAL_STORAGE_KEY_IS_AUTHENTICATED = 'todoFlowIsAuthenticated';
 const LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS = 'todoFlowLoginAttempts';
@@ -114,7 +115,7 @@ const LOCAL_STORAGE_KEY_LOCKOUT_END_TIME = 'todoFlowLockoutEndTime';
 const LOCAL_STORAGE_KEY_SESSION_EXPIRY = 'todoFlowSessionExpiry';
 const LOCAL_STORAGE_KEY_UI_NOTIFICATIONS = 'todoFlowUINotifications_v1';
 const SESSION_STORAGE_KEY_HISTORY_LOG = 'todoFlowHistoryLog_v1';
-const LOCAL_STORAGE_KEY_APP_PIN = 'todoFlowAppPin'; // This should be handled more securely in a real app
+const LOCAL_STORAGE_KEY_APP_PIN = 'todoFlowAppPin';
 
 
 const SESSION_DURATION_24_HOURS_MS = 24 * 60 * 60 * 1000;
@@ -294,6 +295,15 @@ const POMODORO_SHORT_BREAK_DURATION_SECONDS = 5 * 60;
 const POMODORO_LONG_BREAK_DURATION_SECONDS = 15 * 60;
 const POMODORO_CYCLES_BEFORE_LONG_BREAK = 4;
 
+// Helper to transform backend category to frontend category
+const backendToFrontendCategory = (backendCat: BackendCategory): Category => ({
+  id: backendCat.id,
+  name: backendCat.name,
+  iconName: backendCat.icon_name,
+  icon: getIconComponent(backendCat.icon_name || 'Package'),
+  mode: backendCat.mode,
+});
+
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [personalActivities, setPersonalActivities] = useState<Activity[]>([]);
@@ -332,7 +342,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isPomodoroReady, setIsPomodoroReady] = useState(false);
   const prevPomodoroPhaseRef = useRef<PomodoroPhase>(pomodoroPhase);
 
-  // App Lock State
   const [isAppLocked, setIsAppLocked] = useState(false);
   const [appPinState, setAppPinState] = useState<string | null>(HARDCODED_APP_PIN);
 
@@ -374,7 +383,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [appModeState]);
 
  const filteredCategories = useMemo(() => {
-    if (isLoading) return [];
+    if (isLoading) return []; // isLoading for categories might be different now
     return allCategories.filter(cat =>
       !cat.mode || cat.mode === 'all' || cat.mode === appModeState
     );
@@ -383,7 +392,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const assigneesForContext = useMemo(() => {
     if (isLoading) return [];
-    // Since assignees are now only for personal mode, return all if personal, empty if work
     return appModeState === 'personal' ? assignees : [];
   }, [assignees, appModeState, isLoading]);
 
@@ -427,7 +435,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       try {
         new Notification(title, {
           body: description,
-          icon: '/icons/icon-192x192.png', // Make sure this icon exists
+          icon: '/icons/icon-192x192.png',
           lang: locale,
         });
         console.log(`[AppProvider] System notification shown: "${title}"`);
@@ -492,12 +500,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setLockoutEndTimeState(null);
     setSessionExpiryTimestampState(null);
     setHistoryLog([]);
-    setIsAppLocked(false); // Ensure app is unlocked on logout
+    setIsAppLocked(false);
 
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({ type: 'RESET_TIMER', payload: { locale } });
     }
-
 
     if (typeof window !== 'undefined') {
         localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
@@ -505,7 +512,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         localStorage.removeItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
         localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
         sessionStorage.removeItem(SESSION_STORAGE_KEY_HISTORY_LOG);
-        // Do not remove APP_PIN on logout, user might want to keep it
     }
 
     if (logoutChannel) {
@@ -516,108 +522,100 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
  useEffect(() => {
     setIsLoading(true);
     let initialAuth = false;
-    try {
-      const storedPersonalActivities = localStorage.getItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES);
-      if (storedPersonalActivities) setPersonalActivities(JSON.parse(storedPersonalActivities));
 
-      const storedWorkActivities = localStorage.getItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES);
-      if (storedWorkActivities) setWorkActivities(JSON.parse(storedWorkActivities));
+    const fetchInitialCategories = async () => {
+      try {
+        const response = await fetch('/categories'); // Assuming API is at the same origin
+        if (!response.ok) {
+          throw new Error(`Failed to fetch categories: ${response.statusText}`);
+        }
+        const backendCategories: BackendCategory[] = await response.json();
+        const frontendCategories = backendCategories.map(backendToFrontendCategory);
+        setAllCategories(frontendCategories);
+      } catch (err) {
+        console.error("[AppProvider] Failed to load categories from API", err);
+        setError("Failed to load categories.");
+        // Fallback or leave empty: setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName), id: parseInt(cat.id.split('_')[1] || "0") })));
+        setAllCategories([]); // Or some default/error state indication
+        toast({variant: "destructive", title: "Error Loading Categories", description: (err as Error).message });
+      }
+    };
 
-      let loadedCategories: Category[] = [];
-      const storedAllCategoriesString = localStorage.getItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES);
+    const loadOtherData = () => {
+        try {
+            const storedPersonalActivities = localStorage.getItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES);
+            if (storedPersonalActivities) setPersonalActivities(JSON.parse(storedPersonalActivities));
 
-      if (storedAllCategoriesString) {
-          try {
-            const parsedCategories = JSON.parse(storedAllCategoriesString) as Array<Omit<Category, 'icon'>>;
-            if (Array.isArray(parsedCategories) && parsedCategories.length > 0) { 
-              loadedCategories = parsedCategories.map((cat) => ({
-                ...cat,
-                icon: getIconComponent(cat.iconName || 'Package'),
-                mode: cat.mode || 'all'
-              }));
-            } else { 
-              loadedCategories = INITIAL_CATEGORIES.map(cat => ({ ...cat, icon: getIconComponent(cat.iconName) }));
+            const storedWorkActivities = localStorage.getItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES);
+            if (storedWorkActivities) setWorkActivities(JSON.parse(storedWorkActivities));
+            
+            let loadedAssignees: Assignee[] = [];
+            const storedAssigneesString = localStorage.getItem(LOCAL_STORAGE_KEY_ASSIGNEES);
+            if (storedAssigneesString) {
+                try {
+                    const parsedAssignees = JSON.parse(storedAssigneesString) as Assignee[];
+                    if (Array.isArray(parsedAssignees)) {
+                        loadedAssignees = parsedAssignees.map(asg => ({id: asg.id, name: asg.name}));
+                    }
+                } catch (e) {
+                    console.error("[AppProvider] Failed to parse assignees from localStorage, using empty list.", e);
+                }
             }
-          } catch (e) {
-            console.error("[AppProvider] Failed to parse categories from localStorage, using INITIAL_CATEGORIES.", e);
-            loadedCategories = INITIAL_CATEGORIES.map(cat => ({ ...cat, icon: getIconComponent(cat.iconName) }));
-          }
-      } else { 
-        loadedCategories = INITIAL_CATEGORIES.map(cat => ({ ...cat, icon: getIconComponent(cat.iconName) }));
-      }
-      setAllCategories(loadedCategories);
+            setAllAssignees(loadedAssignees);
 
+            const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
+            if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) {
+                setAppModeState(storedAppMode);
+            }
 
-      let loadedAssignees: Assignee[] = [];
-      const storedAssigneesString = localStorage.getItem(LOCAL_STORAGE_KEY_ASSIGNEES);
-      if (storedAssigneesString) {
-          try {
-              const parsedAssignees = JSON.parse(storedAssigneesString) as Assignee[];
-              if (Array.isArray(parsedAssignees)) {
-                  // Assignees no longer have 'mode', so just map id and name
-                  loadedAssignees = parsedAssignees.map(asg => ({id: asg.id, name: asg.name}));
-              }
-          } catch (e) {
-              console.error("[AppProvider] Failed to parse assignees from localStorage, using empty list.", e);
-          }
-      }
-      setAllAssignees(loadedAssignees);
+            const storedAuth = localStorage.getItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
+            const storedExpiry = localStorage.getItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
 
+            if (storedAuth === 'true' && storedExpiry) {
+                const expiryTime = parseInt(storedExpiry, 10);
+                if (Date.now() > expiryTime) {
+                    initialAuth = false;
+                    logout(); 
+                } else {
+                    initialAuth = true;
+                    setSessionExpiryTimestampState(expiryTime);
+                }
+            }
+            setIsAuthenticatedState(initialAuth);
+            if (initialAuth) {
+                const storedHistoryLog = sessionStorage.getItem(SESSION_STORAGE_KEY_HISTORY_LOG);
+                if (storedHistoryLog) setHistoryLog(JSON.parse(storedHistoryLog));
 
-      const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
-      if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) {
-        setAppModeState(storedAppMode);
-      }
+                const storedPin = localStorage.getItem(LOCAL_STORAGE_KEY_APP_PIN);
+                if (storedPin) {
+                    setAppPinState(storedPin);
+                } else if (HARDCODED_APP_PIN) {
+                    setAppPinState(HARDCODED_APP_PIN);
+                }
+            }
 
-      const storedAuth = localStorage.getItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
-      const storedExpiry = localStorage.getItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
+            const storedAttempts = localStorage.getItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
+            setLoginAttemptsState(storedAttempts ? parseInt(storedAttempts, 10) : 0);
 
-      if (storedAuth === 'true' && storedExpiry) {
-        const expiryTime = parseInt(storedExpiry, 10);
-        if (Date.now() > expiryTime) {
-          initialAuth = false;
-          logout(); 
-        } else {
-          initialAuth = true;
-          setSessionExpiryTimestampState(expiryTime);
+            const storedLockoutTime = localStorage.getItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
+            setLockoutEndTimeState(storedLockoutTime ? parseInt(storedLockoutTime, 10) : null);
+
+            const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
+            if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
+
+            if (typeof window !== 'undefined' && 'Notification' in window) {
+                setSystemNotificationPermission(Notification.permission);
+            }
+        } catch (err) {
+            console.error("[AppProvider] Failed to load non-category data from local storage", err);
+            setError((prevError) => prevError ? `${prevError} Failed to load other saved data.` : "Failed to load other saved data.");
         }
-      }
-      setIsAuthenticatedState(initialAuth);
-      if (initialAuth) {
-        const storedHistoryLog = sessionStorage.getItem(SESSION_STORAGE_KEY_HISTORY_LOG);
-        if (storedHistoryLog) setHistoryLog(JSON.parse(storedHistoryLog));
-
-        const storedPin = localStorage.getItem(LOCAL_STORAGE_KEY_APP_PIN);
-        if (storedPin) {
-            setAppPinState(storedPin);
-        } else if (HARDCODED_APP_PIN) { // Fallback to hardcoded if not in LS but defined
-            setAppPinState(HARDCODED_APP_PIN);
-        }
-      }
-
-
-      const storedAttempts = localStorage.getItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
-      setLoginAttemptsState(storedAttempts ? parseInt(storedAttempts, 10) : 0);
-
-      const storedLockoutTime = localStorage.getItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
-      setLockoutEndTimeState(storedLockoutTime ? parseInt(storedLockoutTime, 10) : null);
-
-      const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
-      if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
-
-      if (typeof window !== 'undefined' && 'Notification' in window) {
-        setSystemNotificationPermission(Notification.permission);
-      }
-
-    } catch (err) {
-      console.error("[AppProvider] Failed to load data from local storage", err);
-      setError("Failed to load saved data.");
-       if (!(allCategories && allCategories.length > 0)) {
-        setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName)})));
-      }
-    } finally {
-      setIsLoading(false);
-    }
+    };
+    
+    fetchInitialCategories().finally(() => {
+        loadOtherData();
+        setIsLoading(false);
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
@@ -634,12 +632,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [workActivities, isLoading]);
 
-  useEffect(() => {
-    if (!isLoading) {
-      const serializableCategories = allCategories.map(({ icon, ...rest }) => rest);
-      localStorage.setItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES, JSON.stringify(serializableCategories));
-    }
-  }, [allCategories, isLoading]);
+  // Removed localStorage persistence for allCategories as it's now backend-driven
+  // useEffect(() => {
+  //   if (!isLoading) {
+  //     const serializableCategories = allCategories.map(({ icon, ...rest }) => rest);
+  //     localStorage.setItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES, JSON.stringify(serializableCategories));
+  //   }
+  // }, [allCategories, isLoading]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -827,7 +826,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       console.log('[AppProvider] Message posted to SW controller:', message);
     } else {
       console.warn('[AppProvider] Service Worker controller not active. Pomodoro command ignored:', message);
-      if (message.type !== 'GET_INITIAL_STATE' && !isPomodoroReady) { // Only show toast if not ready and not an init call
+      if (message.type !== 'GET_INITIAL_STATE' && !isPomodoroReady) {
         toast({
             variant: 'destructive',
             title: t('pomodoroErrorTitle') as string,
@@ -835,7 +834,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
       }
     }
-  }, [locale, t, toast, isPomodoroReady]); // isPomodoroReady added here
+  }, [locale, t, toast, isPomodoroReady]);
 
 
   const handleSWMessage = useCallback((event: MessageEvent) => {
@@ -848,7 +847,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 setPomodoroIsRunning(isRunning);
                 setPomodoroCyclesCompleted(cyclesCompleted);
 
-                if (!isPomodoroReady) { // Set ready on the first valid TIMER_STATE
+                if (!isPomodoroReady) {
                     setIsPomodoroReady(true);
                     console.log('[AppProvider] Pomodoro is now READY after first TIMER_STATE from SW.');
                 }
@@ -861,7 +860,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 });
             }
         }
-    }, [isPomodoroReady, toast, t]); // isPomodoroReady added, stableAddUINotification removed for now
+    }, [isPomodoroReady, toast, t]);
 
   useEffect(() => {
     console.log('[AppProvider] SW Effect RUNNING. Current locale:', locale);
@@ -872,20 +871,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
             console.log('[AppProvider] Service Worker registered with scope:', registration.scope);
 
-            await navigator.serviceWorker.ready; // Wait for the SW to be ready
+            await navigator.serviceWorker.ready;
             console.log('[AppProvider] navigator.serviceWorker.ready resolved.');
             
-            // Check if there's an active controller and send GET_INITIAL_STATE
             if (navigator.serviceWorker.controller) {
                 console.log('[AppProvider] SW controller active on ready. Sending GET_INITIAL_STATE.');
-                // Adding a small delay can sometimes help ensure the SW's message listener is set up
                 setTimeout(() => postToServiceWorker({ type: 'GET_INITIAL_STATE' }), 200);
             } else {
                  console.warn('[AppProvider] SW controller not active immediately after .ready. Will wait for controllerchange or next load.');
             }
         } catch (error) {
             console.error('[AppProvider] Service Worker registration failed:', error);
-            setIsPomodoroReady(false); // Ensure it's false if registration fails
+            setIsPomodoroReady(false);
             toast({
                 variant: 'destructive',
                 title: t('pomodoroErrorTitle') as string,
@@ -909,14 +906,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         };
         navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
         
-        // Register SW on load or immediately if already loaded
         if (document.readyState === 'complete') {
             registerAndInitializeSW();
         } else {
             window.addEventListener('load', registerAndInitializeSW, { once: true });
         }
 
-        // Initial check if a controller is already active when AppProvider mounts
         if (navigator.serviceWorker.controller) {
              console.log('[AppProvider] SW controller already active on mount. Sending GET_INITIAL_STATE.');
              setTimeout(() => postToServiceWorker({ type: 'GET_INITIAL_STATE' }), 200);
@@ -931,7 +926,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return () => {
         console.log('[AppProvider] Cleaning up SW listeners.');
         navigator.serviceWorker.removeEventListener('message', handleSWMessage);
-        // Keep controllerchange listener as it's a global navigator property, not instance specific
     };
   }, [locale, postToServiceWorker, handleSWMessage, t, toast]);
 
@@ -1049,17 +1043,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   const addActivity = useCallback((
-      activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences'| 'responsiblePersonIds'> & {
+      activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences'| 'responsiblePersonIds' | 'categoryId'> & {
         todos?: Omit<Todo, 'id' | 'completed'>[];
         time?: string;
         notes?: string;
         recurrence?: RecurrenceRule | null;
         responsiblePersonIds?: string[];
+        categoryId: number;
       },
       customCreatedAt?: number
     ) => {
     const newActivity: Activity = {
-      id: uuidv4(),
+      id: uuidv4(), // This ID will be client-side only if activities are backend-driven
       title: activityData.title,
       categoryId: activityData.categoryId,
       todos: (activityData.todos || []).map(todo => ({ ...todo, id: uuidv4(), completed: false })),
@@ -1072,6 +1067,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       completedOccurrences: {},
       responsiblePersonIds: appModeState === 'personal' ? (activityData.responsiblePersonIds || []) : [],
     };
+    // TODO: Replace with API call for activities
     currentActivitySetter(prev => [...prev, newActivity]);
     addHistoryLogEntry(
       appModeState === 'personal' ? 'historyLogAddActivityPersonal' : 'historyLogAddActivityWork',
@@ -1082,6 +1078,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateActivity = useCallback((activityId: string, updates: Partial<Activity>, originalActivity?: Activity) => {
     let activityTitleForLog = updates.title || originalActivity?.title || 'Unknown Activity';
+    // TODO: Replace with API call for activities
     currentActivitySetter(prev =>
       prev.map(act => {
         if (act.id === activityId) {
@@ -1113,7 +1110,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
          
           const updatedResponsiblePersonIds = appModeState === 'personal'
             ? (updates.responsiblePersonIds !== undefined ? updates.responsiblePersonIds : act.responsiblePersonIds)
-            : []; // Always clear for work mode
+            : [];
 
           return { ...act, ...updates, recurrence: updatedRecurrence as RecurrenceRule | undefined, completedOccurrences: updatedCompletedOccurrences, responsiblePersonIds: updatedResponsiblePersonIds, completedAt: newCompletedAt };
         }
@@ -1134,7 +1131,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (activityToDelete) {
         deletedActivityTitle = activityToDelete.title;
     }
-
+    // TODO: Replace with API call for activities
     currentActivitySetter(prev => prev.filter(act => act.id !== activityId));
     addHistoryLogEntry(
         appModeState === 'personal' ? 'historyLogDeleteActivityPersonal' : 'historyLogDeleteActivityWork',
@@ -1152,6 +1149,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     const occurrenceDateKey = formatISO(new Date(occurrenceDateTimestamp), { representation: 'date' });
+    // TODO: API call might be needed here if completion of instances is server-managed
     currentActivitySetter(prevActivities =>
       prevActivities.map(act => {
         if (act.id === masterActivityId) {
@@ -1176,6 +1174,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const addTodoToActivity = useCallback((activityId: string, todoText: string) => {
     const newTodo: Todo = { id: uuidv4(), text: todoText, completed: false };
+    // TODO: API call for todos
     currentActivitySetter(prev =>
       prev.map(act =>
         act.id === activityId ? { ...act, todos: [...act.todos, newTodo] } : act
@@ -1185,6 +1184,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateTodoInActivity = useCallback(
     (activityId: string, todoId: string, updates: Partial<Todo>) => {
+      // TODO: API call for todos
       currentActivitySetter(prev =>
         prev.map(act =>
           act.id === activityId
@@ -1202,6 +1202,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 
   const deleteTodoFromActivity = useCallback((activityId: string, todoId: string) => {
+    // TODO: API call for todos
     currentActivitySetter(prev =>
       prev.map(act =>
         act.id === activityId
@@ -1212,105 +1213,117 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [currentActivitySetter]);
 
   const getCategoryById = useCallback(
-    (categoryId: string) => {
+    (categoryId: number) => { // Changed to number
       return allCategories.find(cat => cat.id === categoryId)
     },
     [allCategories]
   );
 
-  const addCategory = useCallback((name: string, iconName: string, mode: AppMode | 'all') => {
-    const IconComponent = getIconComponent(iconName);
-    const newCategory: Category = {
-      id: `cat_${uuidv4()}`,
-      name,
-      icon: IconComponent,
-      iconName,
-      mode: mode,
-    };
-    setAllCategories(prev => [...prev, newCategory]);
-    const toastDesc = t('toastCategoryAddedDescription', { categoryName: name });
-    toast({ title: t('toastCategoryAddedTitle'), description: toastDesc });
-
-    let actionKey: HistoryLogActionKey;
-    if (mode === 'personal') actionKey = 'historyLogAddCategoryPersonal';
-    else if (mode === 'work') actionKey = 'historyLogAddCategoryWork';
-    else actionKey = 'historyLogAddCategoryAll';
-    addHistoryLogEntry(actionKey, { name }, 'category');
-
+  const addCategory = useCallback(async (name: string, iconName: string, mode: AppMode | 'all') => {
+    setError(null);
+    const payload: BackendCategoryCreatePayload = { name, icon_name: iconName, mode };
+    try {
+      const response = await fetch('/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(errorData.detail || `Failed to add category: ${response.statusText}`);
+      }
+      const newBackendCategory: BackendCategory = await response.json();
+      const newFrontendCategory = backendToFrontendCategory(newBackendCategory);
+      setAllCategories(prev => [...prev, newFrontendCategory]);
+      
+      toast({ title: t('toastCategoryAddedTitle'), description: t('toastCategoryAddedDescription', { categoryName: name }) });
+      let actionKey: HistoryLogActionKey;
+      if (mode === 'personal') actionKey = 'historyLogAddCategoryPersonal';
+      else if (mode === 'work') actionKey = 'historyLogAddCategoryWork';
+      else actionKey = 'historyLogAddCategoryAll';
+      addHistoryLogEntry(actionKey, { name }, 'category');
+    } catch (err) {
+      console.error("[AppProvider] Failed to add category via API", err);
+      setError((err as Error).message);
+      toast({ variant: "destructive", title: "Error Adding Category", description: (err as Error).message });
+    }
   }, [toast, t, addHistoryLogEntry]);
 
-  const updateCategory = useCallback((categoryId: string, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => {
-    let categoryNameForLog = updates.name;
-    let categoryModeForLog = updates.mode;
-    let oldNameForLog: string | undefined = undefined;
-    let oldModeForLog: Category['mode'] | undefined = undefined;
+  const updateCategory = useCallback(async (categoryId: number, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => {
+    setError(null);
+    const payload: Partial<BackendCategoryCreatePayload> = {};
+    if (updates.name !== undefined) payload.name = updates.name;
+    if (updates.iconName !== undefined) payload.icon_name = updates.iconName;
+    if (updates.mode !== undefined) payload.mode = updates.mode;
 
+    try {
+      const response = await fetch(`/categories/${categoryId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(errorData.detail || `Failed to update category: ${response.statusText}`);
+      }
+      const updatedBackendCategory: BackendCategory = await response.json();
+      const updatedFrontendCategory = backendToFrontendCategory(updatedBackendCategory);
 
-    setAllCategories(prev =>
-      prev.map(cat => {
-        if (cat.id === categoryId) {
-          oldNameForLog = cat.name;
-          oldModeForLog = cat.mode;
-          const newName = updates.name !== undefined ? updates.name : cat.name;
-          const newIconName = updates.iconName !== undefined ? updates.iconName : cat.iconName;
-          const newMode = updates.mode !== undefined ? updates.mode : cat.mode;
+      setAllCategories(prev =>
+        prev.map(cat => (cat.id === categoryId ? updatedFrontendCategory : cat))
+      );
+      
+      const catName = updatedFrontendCategory.name;
+      const catMode = updatedFrontendCategory.mode;
+      toast({ title: t('toastCategoryUpdatedTitle'), description: t('toastCategoryUpdatedDescription', { categoryName: catName }) });
+      
+      let actionKey: HistoryLogActionKey;
+      if (catMode === 'personal') actionKey = 'historyLogUpdateCategoryPersonal';
+      else if (catMode === 'work') actionKey = 'historyLogUpdateCategoryWork';
+      else actionKey = 'historyLogUpdateCategoryAll';
+      addHistoryLogEntry(actionKey, { name: catName, oldName: oldCategoryData?.name !== catName ? oldCategoryData?.name : undefined , oldMode: oldCategoryData?.mode !== catMode ? oldCategoryData?.mode : undefined }, 'category');
 
-          if (!categoryNameForLog) categoryNameForLog = newName;
-          if (!categoryModeForLog) categoryModeForLog = newMode;
-
-          return {
-            ...cat,
-            name: newName,
-            iconName: newIconName,
-            icon: updates.iconName !== undefined ? getIconComponent(newIconName) : cat.icon,
-            mode: newMode,
-          };
-        }
-        return cat;
-      })
-    );
-
-    const catName = categoryNameForLog || oldCategoryData?.name || "Unknown Category";
-    const catMode = categoryModeForLog || oldCategoryData?.mode || "all";
-    const toastDesc = t('toastCategoryUpdatedDescription', { categoryName: catName });
-    toast({ title: t('toastCategoryUpdatedTitle'), description: toastDesc });
-
-    let actionKey: HistoryLogActionKey;
-    if (catMode === 'personal') actionKey = 'historyLogUpdateCategoryPersonal';
-    else if (catMode === 'work') actionKey = 'historyLogUpdateCategoryWork';
-    else actionKey = 'historyLogUpdateCategoryAll';
-    addHistoryLogEntry(actionKey, { name: catName, oldName: oldNameForLog !== catName ? oldNameForLog : undefined , oldMode: oldModeForLog !== catMode ? oldModeForLog : undefined }, 'category');
-
+    } catch (err) {
+      console.error("[AppProvider] Failed to update category via API", err);
+      setError((err as Error).message);
+      toast({ variant: "destructive", title: "Error Updating Category", description: (err as Error).message });
+    }
   }, [toast, t, addHistoryLogEntry]);
 
 
-  const deleteCategory = useCallback((categoryId: string) => {
+  const deleteCategory = useCallback(async (categoryId: number) => {
+    setError(null);
     const categoryToDelete = allCategories.find(cat => cat.id === categoryId);
     if (!categoryToDelete) return;
 
-    addHistoryLogEntry('historyLogDeleteCategory', { name: categoryToDelete.name, mode: categoryToDelete.mode as string }, 'category');
+    try {
+      const response = await fetch(`/categories/${categoryId}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(errorData.detail || `Failed to delete category: ${response.statusText}`);
+      }
+      
+      setAllCategories(prev => prev.filter(cat => cat.id !== categoryId));
+      
+      // TODO: Update activities that used this category. They should refer to categoryId 0 or null.
+      // For now, this might lead to inconsistencies if activities are not re-fetched or updated.
+      // This would be better handled by the backend (e.g. setting category_id to null on activities)
+      // or by re-fetching activities. For simplicity now, just removing from categories list.
 
-
-    setAllCategories(prev => prev.filter(cat => cat.id !== categoryId));
-
-    setPersonalActivities(prevActivities =>
-      prevActivities.map(act =>
-        act.categoryId === categoryId ? { ...act, categoryId: '' } : act
-      )
-    );
-    setWorkActivities(prevActivities =>
-      prevActivities.map(act =>
-        act.categoryId === categoryId ? { ...act, categoryId: '' } : act
-      )
-    );
-    const toastDesc = t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name });
-    toast({ title: t('toastCategoryDeletedTitle'), description: toastDesc });
-  }, [toast, allCategories, t, addHistoryLogEntry]);
+      toast({ title: t('toastCategoryDeletedTitle'), description: t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name }) });
+      addHistoryLogEntry('historyLogDeleteCategory', { name: categoryToDelete.name, mode: categoryToDelete.mode as string }, 'category');
+    } catch (err) {
+      console.error("[AppProvider] Failed to delete category via API", err);
+      setError((err as Error).message);
+      toast({ variant: "destructive", title: "Error Deleting Category", description: (err as Error).message });
+    }
+  }, [allCategories, toast, t, addHistoryLogEntry]);
 
 
   const addAssignee = useCallback((name: string) => {
     const newAssignee: Assignee = { id: `asg_${uuidv4()}`, name };
-    setAllAssignees(prev => [...prev, newAssignee]); // Operates on 'allAssignees' state
+    // TODO: API call for assignees
+    setAllAssignees(prev => [...prev, newAssignee]);
     toast({ title: t('toastAssigneeAddedTitle'), description: t('toastAssigneeAddedDescription', { assigneeName: name }) });
     addHistoryLogEntry('historyLogAddAssignee', { name }, 'assignee');
   }, [t, toast, addHistoryLogEntry]);
@@ -1318,7 +1331,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateAssignee = useCallback((assigneeId: string, updates: Partial<Omit<Assignee, 'id'>>) => {
     let assigneeNameForLog = updates.name;
     let oldNameForLog: string | undefined = undefined;
-
+    // TODO: API call for assignees
     setAllAssignees(prev =>
       prev.map(asg => {
         if (asg.id === assigneeId) {
@@ -1339,10 +1352,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteAssignee = useCallback((assigneeId: string) => {
     const assigneeToDelete = assignees.find(asg => asg.id === assigneeId);
     if (!assigneeToDelete) return;
-
+    // TODO: API call for assignees
     setAllAssignees(prev => prev.filter(asg => asg.id !== assigneeId));
 
-    // Since assignees are personal only, only update personal activities
     setPersonalActivities(prevActivities =>
       prevActivities.map(act =>
         act.responsiblePersonIds?.includes(assigneeId) 
@@ -1374,7 +1386,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setUINotifications([]);
   }, []);
 
-  // App Lock functions
   const unlockApp = useCallback((pinAttempt: string): boolean => {
     if (appPinState && pinAttempt === appPinState) {
       setIsAppLocked(false);
@@ -1390,10 +1401,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         localStorage.setItem(LOCAL_STORAGE_KEY_APP_PIN, pin);
       } else {
         localStorage.removeItem(LOCAL_STORAGE_KEY_APP_PIN);
-        setIsAppLocked(false); // Unlock if PIN is cleared
+        setIsAppLocked(false);
       }
     }
-    // Log this action appropriately (future enhancement)
     console.log("[AppProvider] App PIN set/updated (prototype).");
   }, []);
 
@@ -1455,7 +1465,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addHistoryLogEntry,
         systemNotificationPermission,
         requestSystemNotificationPermission,
-        // Pomodoro
         pomodoroPhase,
         pomodoroTimeRemaining,
         pomodoroIsRunning,
@@ -1467,7 +1476,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         resumePomodoro,
         resetPomodoro,
         isPomodoroReady,
-        // App Lock
         isAppLocked,
         appPinState,
         unlockApp,
@@ -1478,3 +1486,4 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+

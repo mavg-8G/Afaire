@@ -50,7 +50,7 @@ const recurrenceSchema = z.object({
 export default function ActivityEditorPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { addActivity, updateActivity, appMode, assignees, getRawActivities } = useAppStore();
+  const { addActivity, updateActivity, appMode, assignees, getRawActivities, getCategoryById } = useAppStore(); // Added getCategoryById
   const { toast } = useToast();
   const { t, locale } = useTranslations();
 
@@ -60,7 +60,7 @@ export default function ActivityEditorPage() {
   const [activityToEdit, setActivityToEdit] = useState<Activity | undefined>(undefined);
   const [isLoadingActivity, setIsLoadingActivity] = useState(true);
 
-  const activityId = searchParams.get('id');
+  const activityId = searchParams.get('id'); // This will be string from URL
   const initialDateParam = searchParams.get('initialDate');
 
   const dateLocale = useMemo(() => {
@@ -71,7 +71,7 @@ export default function ActivityEditorPage() {
 
   const activityFormSchema = z.object({
     title: z.string().min(1, t('activityTitleLabel')),
-    categoryId: z.string().min(1, t('categoryLabel')),
+    categoryId: z.number({ required_error: t('categoryLabel'), invalid_type_error: t('categoryLabel') }).min(1, t('categoryLabel')), // Changed to number
     activityDate: z.date({ required_error: t('pickADate') }),
     time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, t('invalidTimeFormat24Hour')).optional().or(z.literal('')),
     todos: z.array(todoSchema).optional(),
@@ -96,7 +96,7 @@ export default function ActivityEditorPage() {
     resolver: zodResolver(activityFormSchema),
     defaultValues: {
       title: "",
-      categoryId: "",
+      // categoryId will be set in useEffect based on activityToEdit or default (e.g. first available, or leave empty for user to pick)
       activityDate: defaultInitialDate,
       time: "",
       todos: [],
@@ -113,15 +113,17 @@ export default function ActivityEditorPage() {
 
   useEffect(() => {
     setIsLoadingActivity(true);
-    if (activityId) {
-      const activities = getRawActivities();
-      const foundActivity = activities.find(a => a.id === activityId);
+    const currentActivities = getRawActivities();
+    if (activityId) { // activityId is string from URL
+      // Assuming activity IDs in getRawActivities are strings for now
+      // This might need adjustment if activity IDs also become numbers universally
+      const foundActivity = currentActivities.find(a => String(a.id) === activityId);
       if (foundActivity) {
         setActivityToEdit(foundActivity);
         const baseDate = new Date(foundActivity.createdAt);
         form.reset({
           title: foundActivity.title,
-          categoryId: foundActivity.categoryId,
+          categoryId: foundActivity.categoryId, // This is number
           activityDate: baseDate,
           time: foundActivity.time || "",
           todos: foundActivity.todos?.map(t => ({ id: t.id, text: t.text, completed: t.completed })) || [],
@@ -139,24 +141,27 @@ export default function ActivityEditorPage() {
         router.replace('/');
       }
     } else {
-      form.reset({
-        title: "",
-        categoryId: "",
-        activityDate: defaultInitialDate,
-        time: "",
-        todos: [],
-        notes: "",
-        recurrence: {
-          type: 'none',
-          endDate: null,
-          daysOfWeek: [],
-          dayOfMonth: defaultInitialDate.getDate(),
-        },
-        responsiblePersonIds: [],
-      });
+        // Set a default categoryId if needed, e.g., the first available category
+        // For now, let it be undefined, user must select
+        const firstCategory = getAppStore().categories[0]; // Example
+        form.reset({
+            title: "",
+            categoryId: firstCategory ? firstCategory.id : undefined, // Default if needed
+            activityDate: defaultInitialDate,
+            time: "",
+            todos: [],
+            notes: "",
+            recurrence: {
+            type: 'none',
+            endDate: null,
+            daysOfWeek: [],
+            dayOfMonth: defaultInitialDate.getDate(),
+            },
+            responsiblePersonIds: [],
+        });
     }
     setIsLoadingActivity(false);
-  }, [activityId, getRawActivities, form, defaultInitialDate, router, toast]);
+  }, [activityId, getRawActivities, form, defaultInitialDate, router, toast, getCategoryById]); // Added getCategoryById dependency from useAppStore()
 
 
   const { fields, append, remove } = useFieldArray({
@@ -178,7 +183,7 @@ export default function ActivityEditorPage() {
 
     const activityPayload = {
       title: data.title,
-      categoryId: data.categoryId,
+      categoryId: data.categoryId, // This is number
       todos: data.todos?.map(t => ({
         id: t.id || undefined,
         text: t.text,
@@ -195,11 +200,12 @@ export default function ActivityEditorPage() {
     await new Promise(resolve => setTimeout(resolve, 500)); 
 
     if (activityToEdit) {
-      updateActivity(activityToEdit.id, activityPayload as Partial<Activity>, activityToEdit);
+      // activityToEdit.id is string, ensure updateActivity can handle it or convert
+      updateActivity(String(activityToEdit.id), activityPayload as Partial<Activity>, activityToEdit);
       toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
     } else {
       addActivity(
-        activityPayload as Omit<Activity, 'id' | 'completedOccurrences' | 'responsiblePersonIds'> & { todos?: Omit<Todo, 'id' | 'completed'>[], responsiblePersonIds?: string[] },
+        activityPayload as Omit<Activity, 'id' | 'completedOccurrences' | 'responsiblePersonIds' | 'completed' | 'completedAt' | 'categoryId'> & { todos?: Omit<Todo, 'id' | 'completed'>[], responsiblePersonIds?: string[], categoryId: number },
         data.activityDate.getTime()
       );
       toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
@@ -257,8 +263,8 @@ export default function ActivityEditorPage() {
                   <FormItem>
                     <FormLabel>{t('categoryLabel')}</FormLabel>
                     <CategorySelector
-                      value={field.value}
-                      onChange={field.onChange}
+                      value={field.value !== undefined ? String(field.value) : undefined} // Convert number to string for Select value
+                      onChange={(value) => field.onChange(Number(value))} // Convert string back to number
                       placeholder={t('selectCategoryPlaceholder')}
                     />
                     <FormMessage />
@@ -637,3 +643,4 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
+
