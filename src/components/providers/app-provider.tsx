@@ -3,8 +3,7 @@
 import type { ReactNode } from 'react';
 import React, { createContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Activity, Todo, Category, AppMode, RecurrenceRule, UINotification, HistoryLogEntry, HistoryLogActionKey, Translations, Assignee, PomodoroPhase, BackendCategoryCreatePayload, BackendCategory } from '@/lib/types';
-import { INITIAL_CATEGORIES, HARDCODED_APP_PIN
-} from '@/lib/constants';
+import { HARDCODED_APP_PIN } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -23,6 +22,9 @@ import * as Icons from 'lucide-react';
 import { useTranslations } from '@/contexts/language-context';
 import { enUS, es, fr } from 'date-fns/locale';
 import { useTheme } from 'next-themes';
+
+// Define the API base URL directly
+const API_BASE_URL = 'http://62.171.187.41:10242';
 
 
 export interface AppContextType {
@@ -525,18 +527,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const fetchInitialCategories = async () => {
       try {
-        const response = await fetch('/categories'); // Assuming API is at the same origin
+        console.log(`[AppProvider] Fetching categories from: ${API_BASE_URL}/categories`);
+        const response = await fetch(`${API_BASE_URL}/categories`); 
         if (!response.ok) {
-          throw new Error(`Failed to fetch categories: ${response.statusText}`);
+          let errorDetail = response.statusText;
+          try {
+            const errorData = await response.json();
+            errorDetail = errorData.detail || errorDetail;
+          } catch (e) { /* Ignore if response is not JSON */ }
+          throw new Error(`Failed to fetch categories: ${response.status} ${errorDetail}`);
         }
         const backendCategories: BackendCategory[] = await response.json();
         const frontendCategories = backendCategories.map(backendToFrontendCategory);
         setAllCategories(frontendCategories);
+        console.log("[AppProvider] Categories loaded successfully from API.");
       } catch (err) {
         console.error("[AppProvider] Failed to load categories from API", err);
         setError("Failed to load categories.");
-        // Fallback or leave empty: setAllCategories(INITIAL_CATEGORIES.map(cat => ({...cat, icon: getIconComponent(cat.iconName), id: parseInt(cat.id.split('_')[1] || "0") })));
-        setAllCategories([]); // Or some default/error state indication
+        setAllCategories([]); 
         toast({variant: "destructive", title: "Error Loading Categories", description: (err as Error).message });
       }
     };
@@ -632,13 +640,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [workActivities, isLoading]);
 
-  // Removed localStorage persistence for allCategories as it's now backend-driven
-  // useEffect(() => {
-  //   if (!isLoading) {
-  //     const serializableCategories = allCategories.map(({ icon, ...rest }) => rest);
-  //     localStorage.setItem(LOCAL_STORAGE_KEY_ALL_CATEGORIES, JSON.stringify(serializableCategories));
-  //   }
-  // }, [allCategories, isLoading]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -1223,7 +1224,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setError(null);
     const payload: BackendCategoryCreatePayload = { name, icon_name: iconName, mode };
     try {
-      const response = await fetch('/categories', {
+      const response = await fetch(`${API_BASE_URL}/categories`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -1257,7 +1258,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (updates.mode !== undefined) payload.mode = updates.mode;
 
     try {
-      const response = await fetch(`/categories/${categoryId}`, {
+      const response = await fetch(`${API_BASE_URL}/categories/${categoryId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -1297,7 +1298,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!categoryToDelete) return;
 
     try {
-      const response = await fetch(`/categories/${categoryId}`, { method: 'DELETE' });
+      const response = await fetch(`${API_BASE_URL}/categories/${categoryId}`, { method: 'DELETE' });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: response.statusText }));
         throw new Error(errorData.detail || `Failed to delete category: ${response.statusText}`);
@@ -1305,11 +1306,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       
       setAllCategories(prev => prev.filter(cat => cat.id !== categoryId));
       
-      // TODO: Update activities that used this category. They should refer to categoryId 0 or null.
-      // For now, this might lead to inconsistencies if activities are not re-fetched or updated.
-      // This would be better handled by the backend (e.g. setting category_id to null on activities)
-      // or by re-fetching activities. For simplicity now, just removing from categories list.
-
       toast({ title: t('toastCategoryDeletedTitle'), description: t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name }) });
       addHistoryLogEntry('historyLogDeleteCategory', { name: categoryToDelete.name, mode: categoryToDelete.mode as string }, 'category');
     } catch (err) {
