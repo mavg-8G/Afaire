@@ -306,6 +306,20 @@ const backendToFrontendCategory = (backendCat: BackendCategory): Category => ({
   mode: backendCat.mode,
 });
 
+const createApiErrorToast = (
+    err: unknown,
+    toastFn: (options: any) => void,
+    defaultTitle: string,
+    operationType: 'loading' | 'adding' | 'updating' | 'deleting'
+  ) => {
+    console.error(`[AppProvider] Failed ${operationType} categories via API. This could be due to network issues, the backend server being down, or CORS configuration problems on the server.`, err);
+    let description = (err as Error).message;
+    if (description.toLowerCase().includes('failed to fetch')) {
+      description = `Could not connect to the server (${API_BASE_URL}). Please check your network connection and ensure the backend server is running and accessible. This might also be a CORS issue on the server.`;
+    }
+    toastFn({ variant: "destructive", title: defaultTitle, description });
+};
+
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [personalActivities, setPersonalActivities] = useState<Activity[]>([]);
@@ -542,10 +556,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setAllCategories(frontendCategories);
         console.log("[AppProvider] Categories loaded successfully from API.");
       } catch (err) {
-        console.error("[AppProvider] Failed to load categories from API", err);
-        setError("Failed to load categories.");
+        createApiErrorToast(err, toast, "Error Loading Categories", "loading");
+        setError("Failed to load categories from the server.");
         setAllCategories([]); 
-        toast({variant: "destructive", title: "Error Loading Categories", description: (err as Error).message });
       }
     };
 
@@ -722,7 +735,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       activitiesToScan.forEach(masterActivity => {
         const activityTitle = masterActivity.title;
-        const masterId = masterActivity.id;
+        const masterId = String(masterActivity.id);
 
 
         if (masterActivity.time) {
@@ -1082,7 +1095,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // TODO: Replace with API call for activities
     currentActivitySetter(prev =>
       prev.map(act => {
-        if (act.id === activityId) {
+        if (String(act.id) === activityId) { // Ensure comparison is correct if IDs might be numbers from backend later
           if (!originalActivity) originalActivity = act;
           activityTitleForLog = updates.title || originalActivity.title;
 
@@ -1128,12 +1141,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteActivity = useCallback((activityId: string) => {
     let deletedActivityTitle = 'Unknown Activity';
     const currentActivities = appModeState === 'work' ? workActivities : personalActivities;
-    const activityToDelete = currentActivities.find(act => act.id === activityId);
+    const activityToDelete = currentActivities.find(act => String(act.id) === activityId);
     if (activityToDelete) {
         deletedActivityTitle = activityToDelete.title;
     }
     // TODO: Replace with API call for activities
-    currentActivitySetter(prev => prev.filter(act => act.id !== activityId));
+    currentActivitySetter(prev => prev.filter(act => String(act.id) !== activityId));
     addHistoryLogEntry(
         appModeState === 'personal' ? 'historyLogDeleteActivityPersonal' : 'historyLogDeleteActivityWork',
         { title: deletedActivityTitle },
@@ -1144,7 +1157,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const toggleOccurrenceCompletion = useCallback((masterActivityId: string, occurrenceDateTimestamp: number, completedState: boolean) => {
     let activityTitleForLog = 'Unknown Activity';
     const currentActivities = appModeState === 'work' ? workActivities : personalActivities;
-    const masterActivity = currentActivities.find(act => act.id === masterActivityId);
+    const masterActivity = currentActivities.find(act => String(act.id) === masterActivityId);
     if (masterActivity) {
       activityTitleForLog = masterActivity.title;
     }
@@ -1153,7 +1166,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // TODO: API call might be needed here if completion of instances is server-managed
     currentActivitySetter(prevActivities =>
       prevActivities.map(act => {
-        if (act.id === masterActivityId) {
+        if (String(act.id) === masterActivityId) {
           const updatedOccurrences = { ...act.completedOccurrences };
           if (completedState) {
             updatedOccurrences[occurrenceDateKey] = true;
@@ -1178,7 +1191,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // TODO: API call for todos
     currentActivitySetter(prev =>
       prev.map(act =>
-        act.id === activityId ? { ...act, todos: [...act.todos, newTodo] } : act
+        String(act.id) === activityId ? { ...act, todos: [...act.todos, newTodo] } : act
       )
     );
   }, [currentActivitySetter]);
@@ -1188,7 +1201,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       // TODO: API call for todos
       currentActivitySetter(prev =>
         prev.map(act =>
-          act.id === activityId
+          String(act.id) === activityId
             ? {
                 ...act,
                 todos: act.todos.map(todo =>
@@ -1206,7 +1219,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // TODO: API call for todos
     currentActivitySetter(prev =>
       prev.map(act =>
-        act.id === activityId
+        String(act.id) === activityId
           ? { ...act, todos: act.todos.filter(todo => todo.id !== todoId) }
           : act
       )
@@ -1244,9 +1257,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       else actionKey = 'historyLogAddCategoryAll';
       addHistoryLogEntry(actionKey, { name }, 'category');
     } catch (err) {
-      console.error("[AppProvider] Failed to add category via API", err);
+      createApiErrorToast(err, toast, "Error Adding Category", "adding");
       setError((err as Error).message);
-      toast({ variant: "destructive", title: "Error Adding Category", description: (err as Error).message });
     }
   }, [toast, t, addHistoryLogEntry]);
 
@@ -1285,9 +1297,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       addHistoryLogEntry(actionKey, { name: catName, oldName: oldCategoryData?.name !== catName ? oldCategoryData?.name : undefined , oldMode: oldCategoryData?.mode !== catMode ? oldCategoryData?.mode : undefined }, 'category');
 
     } catch (err) {
-      console.error("[AppProvider] Failed to update category via API", err);
+      createApiErrorToast(err, toast, "Error Updating Category", "updating");
       setError((err as Error).message);
-      toast({ variant: "destructive", title: "Error Updating Category", description: (err as Error).message });
     }
   }, [toast, t, addHistoryLogEntry]);
 
@@ -1309,9 +1320,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       toast({ title: t('toastCategoryDeletedTitle'), description: t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name }) });
       addHistoryLogEntry('historyLogDeleteCategory', { name: categoryToDelete.name, mode: categoryToDelete.mode as string }, 'category');
     } catch (err) {
-      console.error("[AppProvider] Failed to delete category via API", err);
+      createApiErrorToast(err, toast, "Error Deleting Category", "deleting");
       setError((err as Error).message);
-      toast({ variant: "destructive", title: "Error Deleting Category", description: (err as Error).message });
     }
   }, [allCategories, toast, t, addHistoryLogEntry]);
 
@@ -1483,3 +1493,4 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 };
 
+    
