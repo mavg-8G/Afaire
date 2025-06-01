@@ -27,7 +27,7 @@ import { useTranslations } from '@/contexts/language-context';
 import { enUS, es, fr } from 'date-fns/locale';
 import { useTheme } from 'next-themes';
 
-const API_BASE_URL = 'http://62.171.187.41:10242';
+const API_BASE_URL = 'http://localhost:10242';
 
 
 export interface AppContextType {
