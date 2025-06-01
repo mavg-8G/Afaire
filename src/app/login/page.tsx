@@ -26,8 +26,9 @@ const loginFormSchemaBase = z.object({
 
 type LoginFormValues = z.infer<typeof loginFormSchemaBase>;
 
-const MAX_ATTEMPTS_BEFORE_LOCKOUT = 2;
+const MAX_ATTEMPTS_BEFORE_LOCKOUT = 2; // This was 5, changed to 2 for easier testing
 const BASE_LOCKOUT_DURATION_SECONDS = 30;
+const DEFAULT_CREATED_USER_PASSWORD = "P@ssword123"; // Password used for assignees if not specified
 
 export default function LoginPage() {
   const {
@@ -37,10 +38,12 @@ export default function LoginPage() {
     setLoginAttempts,
     lockoutEndTime,
     setLockoutEndTime,
+    assignees, // Get the list of users/assignees
+    isLoading: isAppStoreLoading, // Use this to know if assignees are loaded
   } = useAppStore();
   const router = useRouter();
   const { t } = useTranslations();
-  const [isSubmitting, setIsSubmitting] = useState(false); 
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [remainingLockoutTime, setRemainingLockoutTime] = useState<number | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -51,7 +54,7 @@ export default function LoginPage() {
   }), [t]);
 
   const form = useForm<LoginFormValues>({
-    resolver: useMemo(() => zodResolver(loginFormSchema), [loginFormSchema]), 
+    resolver: useMemo(() => zodResolver(loginFormSchema), [loginFormSchema]),
     defaultValues: {
       username: '',
       password: '',
@@ -61,7 +64,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      router.replace('/'); 
+      router.replace('/');
     }
   }, [isAuthenticated, router]);
 
@@ -75,12 +78,12 @@ export default function LoginPage() {
           setErrorMessage(t('loginLockoutMessage', { seconds: remaining }));
         } else {
           setRemainingLockoutTime(null);
-          setLockoutEndTime(null); 
+          setLockoutEndTime(null);
           setErrorMessage(null);
           if (interval) clearInterval(interval);
         }
       };
-      updateTimer(); 
+      updateTimer();
       interval = setInterval(updateTimer, 1000);
     } else if (lockoutEndTime && lockoutEndTime <= Date.now()) {
       setLockoutEndTime(null);
@@ -102,20 +105,50 @@ export default function LoginPage() {
     setIsSubmitting(true);
     setErrorMessage(null);
 
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
 
+    let loggedIn = false;
+
+    // 1. Check hardcoded superuser credentials
     if (data.username === HARDCODED_USERNAME && data.password === HARDCODED_PASSWORD) {
       setIsAuthenticated(true, data.rememberMe);
       setLoginAttempts(0);
       setLockoutEndTime(null);
       router.replace('/');
+      loggedIn = true;
     } else {
+      // 2. Check against created users (assignees list)
+      // Ensure assignees are loaded before attempting to check
+      if (!isAppStoreLoading && assignees) {
+        const foundUser = assignees.find(
+          (assignee) => assignee.username === data.username
+        );
+
+        // !!! INSECURE PASSWORD CHECK - FOR PROTOTYPING ONLY !!!
+        // This checks against the default password used during assignee creation.
+        // A real application MUST use a backend endpoint for password verification.
+        if (foundUser && data.password === DEFAULT_CREATED_USER_PASSWORD) {
+          setIsAuthenticated(true, data.rememberMe);
+          setLoginAttempts(0);
+          setLockoutEndTime(null);
+          // Potentially store loggedInUser info if needed elsewhere
+          router.replace('/');
+          loggedIn = true;
+        }
+      } else if (isAppStoreLoading) {
+        setErrorMessage("User data is still loading, please try again shortly.");
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    if (!loggedIn) {
       const newAttempts = loginAttempts + 1;
       setLoginAttempts(newAttempts);
       setErrorMessage(t('loginInvalidCredentials'));
 
       if (newAttempts >= MAX_ATTEMPTS_BEFORE_LOCKOUT && newAttempts % MAX_ATTEMPTS_BEFORE_LOCKOUT === 0) {
-        const lockoutMultiplier = newAttempts / MAX_ATTEMPTS_BEFORE_LOCKOUT;
+        const lockoutMultiplier = Math.floor(newAttempts / MAX_ATTEMPTS_BEFORE_LOCKOUT); // ensure integer
         const currentLockoutDurationMs = BASE_LOCKOUT_DURATION_SECONDS * lockoutMultiplier * 1000;
         const newLockoutEndTime = Date.now() + currentLockoutDurationMs;
         setLockoutEndTime(newLockoutEndTime);
@@ -152,7 +185,7 @@ export default function LoginPage() {
                   <FormItem>
                     <FormLabel>{t('loginUsernameLabel')}</FormLabel>
                     <FormControl>
-                      <Input placeholder={t('loginUsernamePlaceholder')} {...field} disabled={isLockedOut} />
+                      <Input placeholder={t('loginUsernamePlaceholder')} {...field} disabled={isLockedOut || isSubmitting} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -170,7 +203,7 @@ export default function LoginPage() {
                           type={showPassword ? "text" : "password"}
                           placeholder={t('loginPasswordPlaceholder')}
                           {...field}
-                          disabled={isLockedOut}
+                          disabled={isLockedOut || isSubmitting}
                           className="pr-10"
                         />
                         <Button
@@ -179,7 +212,7 @@ export default function LoginPage() {
                           size="icon"
                           className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
                           onClick={() => setShowPassword(!showPassword)}
-                          disabled={isLockedOut}
+                          disabled={isLockedOut || isSubmitting}
                           aria-label={showPassword ? t('hidePassword') : t('showPassword')}
                         >
                           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -199,7 +232,7 @@ export default function LoginPage() {
                       <Checkbox
                         checked={field.value}
                         onCheckedChange={field.onChange}
-                        disabled={isLockedOut}
+                        disabled={isLockedOut || isSubmitting}
                         aria-labelledby="remember-me-label"
                       />
                     </FormControl>
@@ -209,7 +242,7 @@ export default function LoginPage() {
                   </FormItem>
                 )}
               />
-              {errorMessage && !isLockedOut && ( 
+              {errorMessage && !isLockedOut && (
                 <Alert variant="destructive">
                   <Terminal className="h-4 w-4" />
                   <AlertTitle>{t('loginErrorTitle')}</AlertTitle>
@@ -223,8 +256,8 @@ export default function LoginPage() {
                   <AlertDescription>{t('loginLockoutMessage', { seconds: remainingLockoutTime })}</AlertDescription>
                 </Alert>
               )}
-              <Button type="submit" className="w-full" disabled={isSubmitting || isLockedOut}>
-                {isSubmitting ? (
+              <Button type="submit" className="w-full" disabled={isSubmitting || isLockedOut || isAppStoreLoading}>
+                {isSubmitting || isAppStoreLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
                   t('loginButtonText')
@@ -240,4 +273,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
     
