@@ -34,27 +34,40 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslations } from '@/contexts/language-context';
 import { useRouter } from 'next/navigation';
 
-// Schema might need username and password if backend requires them for creation/update
-// For simplicity, we'll focus on 'name' for now, and AppProvider handles defaults.
-const assigneeFormSchema = z.object({
-  name: z.string().min(1, "Assignee name is required."),
-  // username: z.string().optional(), // Could add these if UI supports it
-  // password: z.string().optional(),
+const MIN_USERNAME_LENGTH = 3;
+
+const assigneeFormSchemaBase = z.object({
+  name: z.string().min(1, "assigneeNameLabel"), // Placeholder, will be translated
+  username: z.string().optional(), // Optional here, made required conditionally for new users
 });
 
-type AssigneeFormData = z.infer<typeof assigneeFormSchema>;
+type AssigneeFormData = z.infer<typeof assigneeFormSchemaBase>;
 
 export default function ManageAssigneesPage() {
   const { assignees, addAssignee, updateAssignee, deleteAssignee, appMode, isLoading: isAppStoreLoading } = useAppStore();
   const { t } = useTranslations();
   const router = useRouter();
-  const [assigneeToDelete, setAssigneeToDelete] = useState<number | null>(null); // ID is now number
+  const [assigneeToDelete, setAssigneeToDelete] = useState<number | null>(null);
   const [editingAssignee, setEditingAssignee] = useState<Assignee | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const assigneeFormSchema = React.useMemo(() => {
+    return assigneeFormSchemaBase.extend({
+        name: z.string().min(1, t('assigneeNameLabel')),
+        username: editingAssignee
+            ? z.string().optional() // Username not editable for existing users in this UI iteration
+            : z.string()
+                .min(MIN_USERNAME_LENGTH, t('usernameMinLength', { length: MIN_USERNAME_LENGTH }))
+                .min(1,t('usernameIsRequired')), // Ensure not empty
+    });
+  }, [t, editingAssignee]);
+
+
   const form = useForm<AssigneeFormData>({
     resolver: zodResolver(assigneeFormSchema),
-    defaultValues: { name: "" },
+    defaultValues: { name: "", username: "" },
+    // Re-validate on mode change (editingAssignee toggle)
+    context: { editing: !!editingAssignee }, 
   });
 
   useEffect(() => {
@@ -64,28 +77,29 @@ export default function ManageAssigneesPage() {
   }, [appMode, router]);
 
   useEffect(() => {
+    // When editingAssignee changes, reset the form and re-evaluate schema
+    form.trigger(); // This might help re-evaluate schema, or form.reset below does
     if (editingAssignee) {
-      form.reset({ name: editingAssignee.name });
+      form.reset({ name: editingAssignee.name, username: editingAssignee.username || "" });
     } else {
-      form.reset({ name: "" });
+      form.reset({ name: "", username: "" });
     }
-  }, [editingAssignee, form]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingAssignee, form.reset, form.trigger]); // form.reset is stable, form.trigger might be needed if context change doesn't auto-trigger revalidation with the new schema.
+
 
   const onSubmit = async (data: AssigneeFormData) => {
     setIsSubmitting(true);
     try {
       if (editingAssignee) {
-        // Backend update might require more fields (username, password)
-        // AppProvider's updateAssignee will attempt to send what it can.
-        await updateAssignee(editingAssignee.id, { name: data.name });
+        await updateAssignee(editingAssignee.id, { name: data.name /* username not sent for update */ });
         setEditingAssignee(null);
       } else {
-        // AppProvider's addAssignee handles default username/password.
-        await addAssignee(data.name);
+        // For new assignee, username should be present due to schema validation
+        await addAssignee(data.name, data.username);
       }
-      form.reset({ name: "" });
+      form.reset({ name: "", username: "" });
     } catch (error) {
-      // Error is handled by AppProvider's toast
       console.error("Failed to save assignee:", error);
     } finally {
       setIsSubmitting(false);
@@ -99,7 +113,7 @@ export default function ManageAssigneesPage() {
       setAssigneeToDelete(null);
       if (editingAssignee?.id === assigneeId) {
         setEditingAssignee(null);
-        form.reset({ name: "" });
+        form.reset({ name: "", username: "" });
       }
     } catch (error) {
       console.error("Failed to delete assignee:", error);
@@ -114,7 +128,7 @@ export default function ManageAssigneesPage() {
 
   const handleCancelEdit = () => {
     setEditingAssignee(null);
-    form.reset({ name: "" });
+    form.reset({ name: "", username: "" });
   };
 
   return (
@@ -151,6 +165,23 @@ export default function ManageAssigneesPage() {
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={form.control}
+                    name="username"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('usernameLabel')}</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder={t('usernamePlaceholder')} 
+                            {...field} 
+                            disabled={isSubmitting || isAppStoreLoading || !!editingAssignee} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <div className="flex space-x-2">
                     <Button type="submit" className="flex-grow" disabled={isSubmitting || isAppStoreLoading}>
                       {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : (editingAssignee ? <Edit3 className="mr-2 h-5 w-5" /> : <PlusCircle className="mr-2 h-5 w-5" />)}
@@ -182,6 +213,7 @@ export default function ManageAssigneesPage() {
                         <div className="flex items-center gap-3">
                           <Users className="h-5 w-5 text-primary" />
                           <span className="font-medium">{assignee.name}</span>
+                          {assignee.username && <span className="text-xs text-muted-foreground">(@{assignee.username})</span>}
                         </div>
                         <div className="flex items-center">
                           <Button variant="ghost" size="icon" onClick={() => handleEditAssignee(assignee)} className="text-primary hover:text-primary/80" disabled={isSubmitting}>
@@ -228,3 +260,5 @@ export default function ManageAssigneesPage() {
     </div>
   );
 }
+
+    

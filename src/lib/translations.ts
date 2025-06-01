@@ -70,6 +70,10 @@ export type Translations = {
   editAssignee: string;
   assigneeNameLabel: string;
   assigneeNamePlaceholder: string;
+  usernameLabel: string;
+  usernamePlaceholder: string;
+  usernameMinLength: (params: { length: number }) => string;
+  usernameIsRequired: string;
   createAssigneeDescription: string;
   updateAssigneeDetails: string;
   existingAssignees: string;
@@ -398,6 +402,10 @@ export const translations: Record<Locale, Translations> = {
     editAssignee: "Edit Assignee",
     assigneeNameLabel: "Assignee Name",
     assigneeNamePlaceholder: "e.g., John Doe, Partner",
+    usernameLabel: "Username",
+    usernamePlaceholder: "e.g., johndoe",
+    usernameMinLength: (params) => `Username must be at least ${params.length} characters.`,
+    usernameIsRequired: "Username is required.",
     createAssigneeDescription: "Create a new assignee for your tasks.",
     updateAssigneeDetails: "Update the details of this assignee.",
     existingAssignees: "Existing Assignees",
@@ -706,6 +714,10 @@ export const translations: Record<Locale, Translations> = {
     editAssignee: "Editar Asignado",
     assigneeNameLabel: "Nombre del Asignado",
     assigneeNamePlaceholder: "Ej: Juan Pérez, Compañero",
+    usernameLabel: "Nombre de Usuario",
+    usernamePlaceholder: "Ej: juanperez",
+    usernameMinLength: (params) => `El nombre de usuario debe tener al menos ${params.length} caracteres.`,
+    usernameIsRequired: "El nombre de usuario es obligatorio.",
     createAssigneeDescription: "Crea un nuevo asignado para tus tareas.",
     updateAssigneeDetails: "Actualiza los detalles de este asignado.",
     existingAssignees: "Asignados Existentes",
@@ -1014,6 +1026,10 @@ export const translations: Record<Locale, Translations> = {
     editAssignee: "Modifier la Personne Assignée",
     assigneeNameLabel: "Nom de la Personne Assignée",
     assigneeNamePlaceholder: "Ex : Jean Dupont, Partenaire",
+    usernameLabel: "Nom d'utilisateur",
+    usernamePlaceholder: "Ex : jeandupont",
+    usernameMinLength: (params) => `Le nom d'utilisateur doit comporter au moins ${params.length} caractères.`,
+    usernameIsRequired: "Le nom d'utilisateur est requis.",
     createAssigneeDescription: "Créez une nouvelle personne assignée pour vos tâches.",
     updateAssigneeDetails: "Mettez à jour les détails de cette personne assignée.",
     existingAssignees: "Personnes Assignées Existantes",
@@ -1273,3 +1289,4 @@ type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
 
+    

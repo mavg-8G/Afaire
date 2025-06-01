@@ -27,7 +27,7 @@ import { useTranslations } from '@/contexts/language-context';
 import { enUS, es, fr } from 'date-fns/locale';
 import { useTheme } from 'next-themes';
 
-const API_BASE_URL = 'https://afaire.is-cool.dev/api';
+const API_BASE_URL = 'http://62.171.187.41:10242/';
 
 
 export interface AppContextType {
@@ -60,7 +60,7 @@ export interface AppContextType {
   updateCategory: (categoryId: number, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => Promise<void>;
   deleteCategory: (categoryId: number) => Promise<void>;
   addAssignee: (name: string, username?: string, password?: string) => Promise<void>; // Now async, takes more params
-  updateAssignee: (assigneeId: number, updates: Partial<Omit<Assignee, 'id'>>) => Promise<void>; // Now async
+  updateAssignee: (assigneeId: number, updates: Partial<Omit<Assignee, 'id' | 'username'>>) => Promise<void>; // username excluded from direct update here
   deleteAssignee: (assigneeId: number) => Promise<void>; // Now async
   getAssigneeById: (assigneeId: number) => Assignee | undefined; // ID is number
   isLoading: boolean;
@@ -108,15 +108,15 @@ export interface AppContextType {
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities_v3_api'; // Incremented version
-const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities_v3_api'; // Incremented version
+const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities_v3_api';
+const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities_v3_api';
 const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode';
 const LOCAL_STORAGE_KEY_IS_AUTHENTICATED = 'todoFlowIsAuthenticated';
 const LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS = 'todoFlowLoginAttempts';
 const LOCAL_STORAGE_KEY_LOCKOUT_END_TIME = 'todoFlowLockoutEndTime';
 const LOCAL_STORAGE_KEY_SESSION_EXPIRY = 'todoFlowSessionExpiry';
 const LOCAL_STORAGE_KEY_UI_NOTIFICATIONS = 'todoFlowUINotifications_v1';
-const SESSION_STORAGE_KEY_HISTORY_LOG = 'todoFlowHistoryLog_v2_api'; // Incremented version
+const SESSION_STORAGE_KEY_HISTORY_LOG = 'todoFlowHistoryLog_v2_api';
 const LOCAL_STORAGE_KEY_APP_PIN = 'todoFlowAppPin';
 
 
@@ -308,9 +308,9 @@ const backendToFrontendAssignee = (backendUser: BackendUser): Assignee => ({
 
 const backendToFrontendActivity = (backendActivity: BackendActivity, currentAppMode: AppMode): Activity => {
   const recurrence: RecurrenceRule = {
-    type: backendActivity.repeat_mode as RecurrenceType, // Assuming direct mapping
+    type: backendActivity.repeat_mode as RecurrenceType,
     endDate: backendActivity.end_date ? parseISO(backendActivity.end_date).getTime() : null,
-    daysOfWeek: backendActivity.days_of_week ? backendActivity.days_of_week.split(',').map(Number) : [],
+    daysOfWeek: backendActivity.days_of_week ? backendActivity.days_of_week.split(',').map(dayStr => parseInt(dayStr, 10)) : [],
     dayOfMonth: backendActivity.day_of_month ?? undefined,
   };
 
@@ -321,16 +321,15 @@ const backendToFrontendActivity = (backendActivity: BackendActivity, currentAppM
     todos: backendActivity.todos.map(bt => ({
       id: bt.id,
       text: bt.text,
-      completed: false, // Backend doesn't store completion; default to false
+      completed: false,
     })),
     createdAt: parseISO(backendActivity.start_date).getTime(),
     time: backendActivity.time,
-    // completed & completedAt are client-side or derived for non-recurring
     notes: backendActivity.notes ?? undefined,
     recurrence: recurrence.type === 'none' ? { type: 'none' } : recurrence,
-    completedOccurrences: {}, // To be managed client-side
+    completedOccurrences: {},
     responsiblePersonIds: backendActivity.responsibles.map(r => r.id),
-    appMode: backendActivity.mode === 'both' ? currentAppMode : backendActivity.mode, // If 'both', use current appMode, else specific
+    appMode: backendActivity.mode === 'both' ? currentAppMode : backendActivity.mode,
   };
 };
 
@@ -340,21 +339,21 @@ const frontendToBackendActivityPayload = (
 ): BackendActivityCreatePayload | BackendActivityUpdatePayload => {
   const payload: Partial<BackendActivityCreatePayload & BackendActivityUpdatePayload> = {
     title: activity.title,
-    start_date: formatISO(new Date(activity.createdAt)),
-    time: activity.time || "00:00", // Backend requires time
+    start_date: formatISO(new Date(activity.createdAt)), // Backend expects datetime string
+    time: activity.time || "00:00",
     category_id: activity.categoryId,
     notes: activity.notes,
-    mode: activity.appMode === 'personal' ? 'personal' : 'work', // Map AppMode to CategoryMode
+    mode: activity.appMode === 'personal' ? 'personal' : 'work',
     responsible_ids: activity.responsiblePersonIds || [],
   };
 
   if (activity.recurrence && activity.recurrence.type !== 'none') {
     payload.repeat_mode = activity.recurrence.type as BackendRepeatMode;
     if (activity.recurrence.endDate) {
-      payload.end_date = formatISO(new Date(activity.recurrence.endDate));
+      payload.end_date = formatISO(new Date(activity.recurrence.endDate)); // Backend expects datetime string
     }
     if (activity.recurrence.type === 'weekly' && activity.recurrence.daysOfWeek) {
-      payload.days_of_week = activity.recurrence.daysOfWeek.map(String);
+      payload.days_of_week = activity.recurrence.daysOfWeek.map(String); // Backend expects array of strings
     }
     if (activity.recurrence.type === 'monthly' && activity.recurrence.dayOfMonth) {
       payload.day_of_month = activity.recurrence.dayOfMonth;
@@ -363,11 +362,9 @@ const frontendToBackendActivityPayload = (
     payload.repeat_mode = 'none';
   }
 
-  if (!isUpdate) { // For create
-    (payload as BackendActivityCreatePayload).todos = (activity.todos || []).map(t => ({ text: t.text }));
+  if (!isUpdate && activity.todos) { // For create
+    (payload as BackendActivityCreatePayload).todos = activity.todos.map(t => ({ text: t.text }));
   }
-  // For updates, todos are handled differently by the backend (not simple field update).
-  // The current backend PUT /activities doesn't seem to update todos.
 
   return payload as BackendActivityCreatePayload | BackendActivityUpdatePayload;
 };
@@ -378,25 +375,26 @@ const backendToFrontendHistory = (backendHistory: BackendHistory): HistoryLogEnt
   actionKey: 'historyLogLogin', // Placeholder, needs mapping from backendHistory.action
   backendAction: backendHistory.action,
   backendUserId: backendHistory.user_id,
-  scope: 'account', // Default, may need more logic based on action
+  scope: 'account',
 });
 
 
 const createApiErrorToast = (
     err: unknown,
     toastFn: (options: any) => void,
-    defaultTitle: string,
-    operationType: 'loading' | 'adding' | 'updating' | 'deleting'
+    defaultTitleKey: keyof Translations,
+    operationType: 'loading' | 'adding' | 'updating' | 'deleting',
+    translationFn: (key: keyof Translations, params?: any) => string
   ) => {
     const error = err as Error;
     console.error(`[AppProvider] Failed ${operationType}. API: ${API_BASE_URL}. Error:`, error);
     let description = error.message || `An unknown error occurred while ${operationType}.`;
     if (error.message.toLowerCase().includes('failed to fetch')) {
-      description = `Could not connect to the server (${API_BASE_URL}). Please check your network connection, ensure the backend server is running and accessible, and verify CORS configuration on the server.`;
+      description = `Could not connect to the server. Please check network, server status, and CORS: ${API_BASE_URL}.`;
     } else if (error.message.includes("Unexpected token '<'")) {
-      description = `The server returned HTML instead of JSON, indicating a server-side error or incorrect endpoint. Check the server logs. API: ${API_BASE_URL}`;
+      description = `Server returned HTML instead of JSON. Check server logs or if API endpoint exists: ${API_BASE_URL}.`;
     }
-    toastFn({ variant: "destructive", title: defaultTitle, description });
+    toastFn({ variant: "destructive", title: translationFn(defaultTitleKey), description });
 };
 
 
@@ -406,11 +404,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [assignees, setAllAssignees] = useState<Assignee[]>([]);
   const [appModeState, setAppModeState] = useState<AppMode>('personal');
-  const [isLoading, setIsLoading] = useState<boolean>(true); // Combined loading state
+  const [isLoadingState, setIsLoadingState] = useState<boolean>(true);
   const [isCategoriesLoading, setIsCategoriesLoading] = useState(true);
   const [isAssigneesLoading, setIsAssigneesLoading] = useState(true);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
-  // Activities are loaded from localStorage primarily, so no specific loading state for them yet
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const { t, locale } = useTranslations();
@@ -437,7 +434,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
   useEffect(() => {
-    if (typeof window === 'undefined' || isLoading) return;
+    if (typeof window === 'undefined' || isLoadingState) return;
     const timerId = setTimeout(() => {
         const computedStyle = getComputedStyle(document.documentElement);
         const backgroundHslString = computedStyle.getPropertyValue('--background').trim();
@@ -456,7 +453,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, 0);
     return () => clearTimeout(timerId);
-  }, [theme, resolvedTheme, appModeState, isLoading]);
+  }, [theme, resolvedTheme, appModeState, isLoadingState]);
 
   const getRawActivities = useCallback(() => {
     return appModeState === 'work' ? workActivities : personalActivities;
@@ -479,10 +476,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [assignees, appModeState, isAssigneesLoading]);
 
   const addHistoryLogEntry = useCallback((actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope: HistoryLogEntry['scope'] = 'account') => {
-    // This will mostly add to client-side history log.
-    // True backend history is through GET /history or server-side triggers.
     const newEntry: HistoryLogEntry = {
-      id: Math.random(), // Temporary ID for client-side display if not synced
+      id: Date.now() + Math.random(), // Temporary ID
       timestamp: Date.now(),
       actionKey,
       details,
@@ -545,7 +540,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setLoginAttemptsState(0);
     setLockoutEndTimeState(null);
     setSessionExpiryTimestampState(null);
-    setHistoryLog([]); // Clear client-side history log on logout
+    setHistoryLog([]);
     setIsAppLocked(false);
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({ type: 'RESET_TIMER', payload: { locale } });
@@ -560,55 +555,66 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (logoutChannel) logoutChannel.postMessage('logout_event');
   }, [addHistoryLogEntry, locale]);
 
+  // Combined initial data loading effect
  useEffect(() => {
-    setIsLoading(true); // Overall loading
+    setIsLoadingState(true);
     setIsCategoriesLoading(true);
     setIsAssigneesLoading(true);
     setIsHistoryLoading(true);
     let initialAuth = false;
 
-    const fetchInitialData = async () => {
+    const fetchInitialCategories = async () => {
       try {
-        // Fetch Categories
-        const catResponse = await fetch(`${API_BASE_URL}/categories`);
-        if (!catResponse.ok) throw new Error(`Failed to fetch categories: ${catResponse.status} ${catResponse.statusText}`);
-        const backendCategories: BackendCategory[] = await catResponse.json();
+        const response = await fetch(`${API_BASE_URL}categories`);
+        if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to fetch categories: HTTP ${response.status}`);}
+        const backendCategories: BackendCategory[] = await response.json();
         setAllCategories(backendCategories.map(backendToFrontendCategory));
       } catch (err) {
-        createApiErrorToast(err, toast, "Error Loading Categories", "loading");
+        createApiErrorToast(err, toast, "toastCategoryDeletedTitle", "loading", t); // Example using a generic error title key
         setError(prev => prev ? `${prev} Categories failed. ` : "Categories failed. ");
         setAllCategories([]);
       } finally {
         setIsCategoriesLoading(false);
       }
+    };
 
+    const fetchInitialAssignees = async () => {
       try {
-        // Fetch Assignees (Users)
-        const userResponse = await fetch(`${API_BASE_URL}/users`);
-        if (!userResponse.ok) throw new Error(`Failed to fetch users: ${userResponse.status} ${userResponse.statusText}`);
-        const backendUsers: BackendUser[] = await userResponse.json();
+        const response = await fetch(`${API_BASE_URL}users`);
+        if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to fetch users: HTTP ${response.status}`);}
+        const backendUsers: BackendUser[] = await response.json();
         setAllAssignees(backendUsers.map(backendToFrontendAssignee));
       } catch (err) {
-        createApiErrorToast(err, toast, "Error Loading Assignees", "loading");
+        createApiErrorToast(err, toast, "toastAssigneeDeletedTitle", "loading", t); // Example using a generic error title key
         setError(prev => prev ? `${prev} Assignees failed. ` : "Assignees failed. ");
         setAllAssignees([]);
       } finally {
         setIsAssigneesLoading(false);
       }
-      
+    };
+
+    const fetchInitialHistory = async () => {
       try {
-        // Load Activities (from localStorage, as no GET /activities endpoint)
+        const response = await fetch(`${API_BASE_URL}history`);
+        if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to fetch history: HTTP ${response.status}`);}
+        const backendHistoryItems: BackendHistory[] = await response.json();
+        setHistoryLog(backendHistoryItems.map(backendToFrontendHistory));
+      } catch (err) {
+        createApiErrorToast(err, toast, "historyPageTitle", "loading", t); // Example
+        setError(prev => prev ? `${prev} History failed. ` : "History failed. ");
+        setHistoryLog([]);
+      } finally {
+        setIsHistoryLoading(false);
+      }
+    };
+
+    const loadClientSideData = () => {
+      try {
         const storedPersonalActivities = localStorage.getItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES);
         if (storedPersonalActivities) setPersonalActivities(JSON.parse(storedPersonalActivities));
         const storedWorkActivities = localStorage.getItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES);
         if (storedWorkActivities) setWorkActivities(JSON.parse(storedWorkActivities));
-      } catch (e) {
-        console.error("[AppProvider] Failed to parse activities from localStorage.", e);
-        setError(prev => prev ? `${prev} Local activities failed. ` : "Local activities failed. ");
-      }
-
-
-      // Load other local storage items (auth, settings, etc.)
+      } catch (e) { console.error("[AppProvider] Failed to parse activities from localStorage.", e); setError(prev => prev ? `${prev} Local activities failed. ` : "Local activities failed. ");}
       const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
       if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) setAppModeState(storedAppMode);
       const storedAuth = localStorage.getItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
@@ -619,27 +625,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           else { initialAuth = true; setSessionExpiryTimestampState(expiryTime); }
       }
       setIsAuthenticatedState(initialAuth);
-
-      if (initialAuth) {
-        try {
-          const historyResponse = await fetch(`${API_BASE_URL}/history`);
-          if (!historyResponse.ok) throw new Error(`Failed to fetch history: ${historyResponse.status} ${historyResponse.statusText}`);
-          const backendHistoryItems: BackendHistory[] = await historyResponse.json();
-          setHistoryLog(backendHistoryItems.map(backendToFrontendHistory));
-        } catch (err) {
-          createApiErrorToast(err, toast, "Error Loading History", "loading");
-          setError(prev => prev ? `${prev} History failed. ` : "History failed. ");
-          setHistoryLog([]); // Fallback to empty or try session storage if needed
-        } finally {
-          setIsHistoryLoading(false);
-        }
-        const storedPin = localStorage.getItem(LOCAL_STORAGE_KEY_APP_PIN);
-        if (storedPin) setAppPinState(storedPin);
-        else if (HARDCODED_APP_PIN) setAppPinState(HARDCODED_APP_PIN);
-      } else {
-        setIsHistoryLoading(false); // No auth, no history to load from backend
-      }
-
       const storedAttempts = localStorage.getItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
       setLoginAttemptsState(storedAttempts ? parseInt(storedAttempts, 10) : 0);
       const storedLockoutTime = localStorage.getItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
@@ -647,47 +632,55 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
       if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
       if (typeof window !== 'undefined' && 'Notification' in window) setSystemNotificationPermission(Notification.permission);
-
-      setIsLoading(false); // Overall loading finished
+      const storedPin = localStorage.getItem(LOCAL_STORAGE_KEY_APP_PIN);
+      if (storedPin) setAppPinState(storedPin); else if (HARDCODED_APP_PIN) setAppPinState(HARDCODED_APP_PIN);
     };
 
-    fetchInitialData();
+    constfetchAll = async () => {
+        loadClientSideData(); // Load local storage stuff first, auth determines if history is fetched
+        await Promise.all([fetchInitialCategories(), fetchInitialAssignees()]);
+        if (initialAuth) { // Fetch history only if initially authenticated from localStorage
+            await fetchInitialHistory();
+        } else {
+            setIsHistoryLoading(false); // Not authenticated, no history to load from backend
+        }
+        setIsLoadingState(false); // All initial loading done
+    };
+    fetchAll();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
 
   useEffect(() => {
-    if (!isLoading) { // Persist activities to localStorage as primary display source
+    if (!isLoadingState) {
       localStorage.setItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES, JSON.stringify(personalActivities));
     }
-  }, [personalActivities, isLoading]);
+  }, [personalActivities, isLoadingState]);
 
   useEffect(() => {
-    if (!isLoading) {
+    if (!isLoadingState) {
       localStorage.setItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES, JSON.stringify(workActivities));
     }
-  }, [workActivities, isLoading]);
+  }, [workActivities, isLoadingState]);
 
   useEffect(() => {
-    if (!isLoading) {
+    if (!isLoadingState) {
       localStorage.setItem(LOCAL_STORAGE_KEY_APP_MODE, appModeState);
       const root = document.documentElement;
       root.classList.remove('mode-personal', 'mode-work');
       root.classList.add(appModeState === 'work' ? 'mode-work' : 'mode-personal');
     }
-  }, [appModeState, isLoading]);
+  }, [appModeState, isLoadingState]);
 
-  // Other useEffects for localStorage (auth, login attempts, etc.) remain similar
-  useEffect(() => { if (!isLoading) { if (isAuthenticated) localStorage.setItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED, 'true'); else localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);}}, [isAuthenticated, isLoading]);
-  useEffect(() => { if (!isLoading) localStorage.setItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS, String(loginAttempts));}, [loginAttempts, isLoading]);
-  useEffect(() => { if (!isLoading) { if (lockoutEndTime === null) localStorage.removeItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME); else localStorage.setItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME, String(lockoutEndTime));}}, [lockoutEndTime, isLoading]);
-  useEffect(() => { if (!isLoading) { if (sessionExpiryTimestamp === null) localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY); else localStorage.setItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY, String(sessionExpiryTimestamp));}}, [sessionExpiryTimestamp, isLoading]);
-  useEffect(() => { if(!isLoading) localStorage.setItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS, JSON.stringify(uiNotifications));}, [uiNotifications, isLoading]);
-  // History log is primarily from backend if authenticated, or sessionStorage for client-side only actions
-  // useEffect(() => { if (!isLoading && isAuthenticated) { /* sessionStorage.setItem(SESSION_STORAGE_KEY_HISTORY_LOG, JSON.stringify(historyLog)); */ }}, [historyLog, isLoading, isAuthenticated]);
+  useEffect(() => { if (!isLoadingState) { if (isAuthenticated) localStorage.setItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED, 'true'); else localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);}}, [isAuthenticated, isLoadingState]);
+  useEffect(() => { if (!isLoadingState) localStorage.setItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS, String(loginAttempts));}, [loginAttempts, isLoadingState]);
+  useEffect(() => { if (!isLoadingState) { if (lockoutEndTime === null) localStorage.removeItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME); else localStorage.setItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME, String(lockoutEndTime));}}, [lockoutEndTime, isLoadingState]);
+  useEffect(() => { if (!isLoadingState) { if (sessionExpiryTimestamp === null) localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY); else localStorage.setItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY, String(sessionExpiryTimestamp));}}, [sessionExpiryTimestamp, isLoadingState]);
+  useEffect(() => { if(!isLoadingState) localStorage.setItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS, JSON.stringify(uiNotifications));}, [uiNotifications, isLoadingState]);
+
 
   useEffect(() => {
-    if (isLoading || !isAuthenticated) return;
+    if (isLoadingState || !isAuthenticated) return;
     const intervalId = setInterval(() => {
       const now = new Date();
       const today = getStartOfDayUtil(now);
@@ -754,7 +747,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       });
     }, 60000);
     return () => clearInterval(intervalId);
-  }, [personalActivities, workActivities, appModeState, isLoading, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, stableAddUINotification, dateFnsLocale, showSystemNotification, locale]);
+  }, [personalActivities, workActivities, appModeState, isLoadingState, isAuthenticated, toast, t, lastNotificationCheckDay, notifiedToday, stableAddUINotification, dateFnsLocale, showSystemNotification, locale]);
 
   useEffect(() => {
     if (!logoutChannel) return;
@@ -846,13 +839,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setError(null);
     const payload: BackendCategoryCreatePayload = { name, icon_name: iconName, mode: frontendToBackendCategoryMode(mode) };
     try {
-      const response = await fetch(`${API_BASE_URL}/categories`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await fetch(`${API_BASE_URL}categories`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to add category: HTTP ${response.status}`);}
       const newBackendCategory: BackendCategory = await response.json();
       setAllCategories(prev => [...prev, backendToFrontendCategory(newBackendCategory)]);
       toast({ title: t('toastCategoryAddedTitle'), description: t('toastCategoryAddedDescription', { categoryName: name }) });
       addHistoryLogEntry(mode === 'personal' ? 'historyLogAddCategoryPersonal' : mode === 'work' ? 'historyLogAddCategoryWork' : 'historyLogAddCategoryAll', { name }, 'category');
-    } catch (err) { createApiErrorToast(err, toast, "Error Adding Category", "adding"); setError((err as Error).message); throw err; }
+    } catch (err) { createApiErrorToast(err, toast, "toastCategoryAddedTitle", "adding", t); setError((err as Error).message); throw err; }
   }, [toast, t, addHistoryLogEntry]);
 
   const updateCategory = useCallback(async (categoryId: number, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => {
@@ -862,7 +855,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (updates.iconName !== undefined) payload.icon_name = updates.iconName;
     if (updates.mode !== undefined) payload.mode = frontendToBackendCategoryMode(updates.mode);
     try {
-      const response = await fetch(`${API_BASE_URL}/categories/${categoryId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await fetch(`${API_BASE_URL}categories/${categoryId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to update category: HTTP ${response.status}`);}
       const updatedBackendCategory: BackendCategory = await response.json();
       const updatedFrontendCategory = backendToFrontendCategory(updatedBackendCategory);
@@ -872,7 +865,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (updatedFrontendCategory.mode === 'personal') actionKey = 'historyLogUpdateCategoryPersonal';
       else if (updatedFrontendCategory.mode === 'work') actionKey = 'historyLogUpdateCategoryWork';
       addHistoryLogEntry(actionKey, { name: updatedFrontendCategory.name, oldName: oldCategoryData?.name !== updatedFrontendCategory.name ? oldCategoryData?.name : undefined , oldMode: oldCategoryData?.mode !== updatedFrontendCategory.mode ? oldCategoryData?.mode : undefined }, 'category');
-    } catch (err) { createApiErrorToast(err, toast, "Error Updating Category", "updating"); setError((err as Error).message); throw err; }
+    } catch (err) { createApiErrorToast(err, toast, "toastCategoryUpdatedTitle", "updating", t); setError((err as Error).message); throw err; }
   }, [toast, t, addHistoryLogEntry]);
 
   const deleteCategory = useCallback(async (categoryId: number) => {
@@ -880,59 +873,53 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const categoryToDelete = allCategories.find(cat => cat.id === categoryId);
     if (!categoryToDelete) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/categories/${categoryId}`, { method: 'DELETE' });
+      const response = await fetch(`${API_BASE_URL}categories/${categoryId}`, { method: 'DELETE' });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to delete category: HTTP ${response.status}`);}
       setAllCategories(prev => prev.filter(cat => cat.id !== categoryId));
       toast({ title: t('toastCategoryDeletedTitle'), description: t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name }) });
       addHistoryLogEntry('historyLogDeleteCategory', { name: categoryToDelete.name, mode: categoryToDelete.mode as string }, 'category');
-    } catch (err) { createApiErrorToast(err, toast, "Error Deleting Category", "deleting"); setError((err as Error).message); throw err; }
+    } catch (err) { createApiErrorToast(err, toast, "toastCategoryDeletedTitle", "deleting", t); setError((err as Error).message); throw err; }
   }, [allCategories, toast, t, addHistoryLogEntry]);
 
   // --- Assignee (User) API Methods ---
-  const addAssignee = useCallback(async (name: string, username?: string, password?: string) => {
+  const addAssignee = useCallback(async (name: string, usernameFromForm?: string, password?: string) => {
     setError(null);
-    const finalUsername = username || name.toLowerCase().replace(/\s+/g, '') + Math.floor(Math.random() * 1000);
-    const finalPassword = password || "P@ssword123"; // Placeholder
+    const finalUsername = (usernameFromForm && usernameFromForm.trim() !== "")
+      ? usernameFromForm.trim()
+      : name.toLowerCase().replace(/\s+/g, '') + Math.floor(Math.random() * 1000);
+    const finalPassword = password || "P@ssword123";
     const payload: BackendUserCreatePayload = { name, username: finalUsername, password: finalPassword };
     try {
-      const response = await fetch(`${API_BASE_URL}/users`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await fetch(`${API_BASE_URL}users`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to add assignee: HTTP ${response.status}`);}
       const newBackendUser: BackendUser = await response.json();
       setAllAssignees(prev => [...prev, backendToFrontendAssignee(newBackendUser)]);
       toast({ title: t('toastAssigneeAddedTitle'), description: t('toastAssigneeAddedDescription', { assigneeName: name }) });
       addHistoryLogEntry('historyLogAddAssignee', { name }, 'assignee');
-    } catch (err) { createApiErrorToast(err, toast, "Error Adding Assignee", "adding"); setError((err as Error).message); throw err; }
+    } catch (err) { createApiErrorToast(err, toast, "toastAssigneeAddedTitle", "adding", t); setError((err as Error).message); throw err; }
   }, [toast, t, addHistoryLogEntry]);
 
-  const updateAssignee = useCallback(async (assigneeId: number, updates: Partial<Omit<Assignee, 'id'>>) => {
+  const updateAssignee = useCallback(async (assigneeId: number, updates: Partial<Omit<Assignee, 'id' | 'username'>>) => {
     setError(null);
     const currentAssignee = assignees.find(a => a.id === assigneeId);
-    // Backend PUT /users requires name, username, password as Form data.
-    // This is a mismatch with frontend's partial JSON update intention.
-    // For now, sending only name if provided. This might require backend adjustment.
-    const payload: BackendUserUpdatePayload = { name: updates.name };
-    // If you need to update username/password, the frontend form and this payload need to be more complex.
-    // And use FormData for the request.
+    // Backend PUT /users expects Form data for name, username, password.
+    // Frontend is sending JSON with only name. This will likely require backend adjustment or frontend using FormData.
+    // For now, this attempts to update only the name.
+    const payload: Partial<BackendUserUpdatePayload> = { name: updates.name };
+
     try {
-      // Simulating JSON PUT, which might fail if backend strictly expects Form.
-      const response = await fetch(`${API_BASE_URL}/users/${assigneeId}`, {
+      const response = await fetch(`${API_BASE_URL}users/${assigneeId}`, {
          method: 'PUT',
-         headers: { 'Content-Type': 'application/json' }, // Sending as JSON
+         headers: { 'Content-Type': 'application/json' },
          body: JSON.stringify(payload)
       });
-      // If using FormData:
-      // const formData = new FormData();
-      // if (updates.name) formData.append('name', updates.name);
-      // if (currentAssignee?.username) formData.append('username', currentAssignee.username); // Or new username
-      // formData.append('password', 'newPlaceholderPassword'); // Required by backend Form
-      // const response = await fetch(`${API_BASE_URL}/users/${assigneeId}`, { method: 'PUT', body: formData });
 
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to update assignee: HTTP ${response.status}`);}
       const updatedBackendUser: BackendUser = await response.json();
       setAllAssignees(prev => prev.map(asg => (asg.id === assigneeId ? backendToFrontendAssignee(updatedBackendUser) : asg)));
       toast({ title: t('toastAssigneeUpdatedTitle'), description: t('toastAssigneeUpdatedDescription', { assigneeName: updatedBackendUser.name }) });
       addHistoryLogEntry('historyLogUpdateAssignee', { name: updatedBackendUser.name, oldName: currentAssignee?.name !== updatedBackendUser.name ? currentAssignee?.name : undefined }, 'assignee');
-    } catch (err) { createApiErrorToast(err, toast, "Error Updating Assignee", "updating"); setError((err as Error).message); throw err; }
+    } catch (err) { createApiErrorToast(err, toast, "toastAssigneeUpdatedTitle", "updating", t); setError((err as Error).message); throw err; }
   }, [assignees, toast, t, addHistoryLogEntry]);
 
   const deleteAssignee = useCallback(async (assigneeId: number) => {
@@ -940,15 +927,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const assigneeToDelete = assignees.find(asg => asg.id === assigneeId);
     if (!assigneeToDelete) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/users/${assigneeId}`, { method: 'DELETE' });
+      const response = await fetch(`${API_BASE_URL}users/${assigneeId}`, { method: 'DELETE' });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to delete assignee: HTTP ${response.status}`);}
       setAllAssignees(prev => prev.filter(asg => asg.id !== assigneeId));
-      // Also remove from activities' responsiblePersonIds (client-side update)
       setPersonalActivities(prevActs => prevActs.map(act => ({ ...act, responsiblePersonIds: act.responsiblePersonIds?.filter(id => id !== assigneeId) })));
       setWorkActivities(prevActs => prevActs.map(act => ({ ...act, responsiblePersonIds: act.responsiblePersonIds?.filter(id => id !== assigneeId) })));
       toast({ title: t('toastAssigneeDeletedTitle'), description: t('toastAssigneeDeletedDescription', { assigneeName: assigneeToDelete.name }) });
       addHistoryLogEntry('historyLogDeleteAssignee', { name: assigneeToDelete.name }, 'assignee');
-    } catch (err) { createApiErrorToast(err, toast, "Error Deleting Assignee", "deleting"); setError((err as Error).message); throw err; }
+    } catch (err) { createApiErrorToast(err, toast, "toastAssigneeDeletedTitle", "deleting", t); setError((err as Error).message); throw err; }
   }, [assignees, toast, t, addHistoryLogEntry]);
 
 
@@ -960,10 +946,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     ) => {
     setError(null);
     const frontendActivityShell: Activity = {
-      // Temporary ID for optimistic update, will be replaced by backend ID
-      // However, since we're using localStorage as primary GET, we might just keep client ID.
-      // For now, let's assume backend ID becomes the source of truth if call succeeds.
-      id: Date.now(), // Placeholder, will be replaced by backend
+      id: Date.now(), // Placeholder ID
       title: activityData.title,
       categoryId: activityData.categoryId,
       todos: (activityData.todos || []).map(t => ({ ...t, id: Date.now() + Math.random(), completed: false })), // Placeholder IDs
@@ -979,15 +962,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const payload = frontendToBackendActivityPayload(frontendActivityShell) as BackendActivityCreatePayload;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/activities`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await fetch(`${API_BASE_URL}activities`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to add activity: HTTP ${response.status}`);}
       const newBackendActivity: BackendActivity = await response.json();
       const newFrontendActivity = backendToFrontendActivity(newBackendActivity, appModeState);
       
-      currentActivitySetter(prev => [...prev, newFrontendActivity]); // Add to localStorage-backed state
+      currentActivitySetter(prev => [...prev, newFrontendActivity]);
       toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
       addHistoryLogEntry(appModeState === 'personal' ? 'historyLogAddActivityPersonal' : 'historyLogAddActivityWork', { title: newFrontendActivity.title }, appModeState);
-    } catch (err) { createApiErrorToast(err, toast, "Error Adding Activity", "adding"); setError((err as Error).message); throw err; }
+    } catch (err) { createApiErrorToast(err, toast, "toastActivityAddedTitle", "adding", t); setError((err as Error).message); throw err; }
   }, [currentActivitySetter, appModeState, toast, t, addHistoryLogEntry]);
 
   const updateActivity = useCallback(async (activityId: number, updates: Partial<Omit<Activity, 'id'>>, originalActivity?: Activity) => {
@@ -999,17 +982,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return;
     }
 
-    // Merge updates with existing activity to form a complete frontend shell
     const updatedFrontendShell: Activity = { ...activityToUpdate, ...updates };
     const payload = frontendToBackendActivityPayload(updatedFrontendShell, true) as BackendActivityUpdatePayload;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/activities/${activityId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await fetch(`${API_BASE_URL}activities/${activityId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to update activity: HTTP ${response.status}`);}
       const updatedBackendActivity: BackendActivity = await response.json();
       const finalFrontendActivity = backendToFrontendActivity(updatedBackendActivity, appModeState);
 
-      // Client-side only properties need to be preserved if not part of backend response
       finalFrontendActivity.completedOccurrences = activityToUpdate.completedOccurrences;
       if (updates.completedOccurrences) finalFrontendActivity.completedOccurrences = updates.completedOccurrences;
       if (updates.completed !== undefined) finalFrontendActivity.completed = updates.completed;
@@ -1019,7 +1000,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       currentActivitySetter(prev => prev.map(act => (act.id === activityId ? finalFrontendActivity : act)));
       toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
       addHistoryLogEntry(appModeState === 'personal' ? 'historyLogUpdateActivityPersonal' : 'historyLogUpdateActivityWork', { title: finalFrontendActivity.title }, appModeState);
-    } catch (err) { createApiErrorToast(err, toast, "Error Updating Activity", "updating"); setError((err as Error).message); throw err; }
+    } catch (err) { createApiErrorToast(err, toast, "toastActivityUpdatedTitle", "updating", t); setError((err as Error).message); throw err; }
   }, [currentActivitySetter, appModeState, personalActivities, workActivities, toast, t, addHistoryLogEntry]);
 
   const deleteActivity = useCallback(async (activityId: number) => {
@@ -1028,16 +1009,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!activityToDelete) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/activities/${activityId}`, { method: 'DELETE' });
+      const response = await fetch(`${API_BASE_URL}activities/${activityId}`, { method: 'DELETE' });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to delete activity: HTTP ${response.status}`);}
       currentActivitySetter(prev => prev.filter(act => act.id !== activityId));
       toast({ title: t('toastActivityDeletedTitle'), description: t('toastActivityDeletedDescription', { activityTitle: activityToDelete.title }) });
       addHistoryLogEntry(appModeState === 'personal' ? 'historyLogDeleteActivityPersonal' : 'historyLogDeleteActivityWork', { title: activityToDelete.title }, appModeState);
-    } catch (err) { createApiErrorToast(err, toast, "Error Deleting Activity", "deleting"); setError((err as Error).message); throw err; }
+    } catch (err) { createApiErrorToast(err, toast, "toastActivityDeletedTitle", "deleting", t); setError((err as Error).message); throw err; }
   }, [currentActivitySetter, appModeState, personalActivities, workActivities, toast, t, addHistoryLogEntry]);
 
 
-  // Todo operations remain largely client-side, but should mark activity as 'dirty' for potential sync
   const addTodoToActivity = useCallback((activityId: number, todoText: string) => {
     const newTodo: Todo = { id: Date.now() + Math.random(), text: todoText, completed: false };
     currentActivitySetter(prev =>
@@ -1045,7 +1025,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         act.id === activityId ? { ...act, todos: [...act.todos, newTodo] } : act
       )
     );
-    // Consider triggering updateActivity if backend supports full todo list updates
   }, [currentActivitySetter]);
 
   const updateTodoInActivity = useCallback((activityId: number, todoId: number, updates: Partial<Todo>) => {
@@ -1072,7 +1051,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     let activityTitleForLog = 'Unknown Activity';
     const masterActivity = getRawActivities().find(act => act.id === masterActivityId);
     if (masterActivity) activityTitleForLog = masterActivity.title;
-    const occurrenceDateKey = formatDateFns(new Date(occurrenceDateTimestamp), 'yyyy-MM-dd'); // Use date-fns format
+    const occurrenceDateKey = formatDateFns(new Date(occurrenceDateTimestamp), 'yyyy-MM-dd');
     currentActivitySetter(prevActivities =>
       prevActivities.map(act => {
         if (act.id === masterActivityId) {
@@ -1105,7 +1084,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [isAuthenticated, appPinState]);
 
-  const combinedIsLoading = isLoading || isCategoriesLoading || isAssigneesLoading || (isAuthenticated && isHistoryLoading);
+  const combinedIsLoading = isLoadingState || isCategoriesLoading || isAssigneesLoading || (isAuthenticated && isHistoryLoading);
 
   return (
     <AppContext.Provider
@@ -1129,3 +1108,5 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+
+    
