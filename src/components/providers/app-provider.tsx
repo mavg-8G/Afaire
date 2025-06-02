@@ -29,7 +29,7 @@ import { useTranslations } from '@/contexts/language-context';
 import { enUS, es, fr } from 'date-fns/locale';
 import { useTheme } from 'next-themes';
 
-const API_BASE_URL = 'https://afaire.is-cool.dev/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://afaire.is-cool.dev/api';
 const JWT_SECRET_KEY_FOR_DECODING = process.env.NEXT_PUBLIC_JWT_SECRET_KEY || DEFAULT_JWT_SECRET_KEY;
 
 export interface AppContextType {
