@@ -81,6 +81,8 @@ export type Translations = {
   confirmDeleteAssigneeDescription: (params: { assigneeName: string }) => string;
   assigneesCount: (params: { count: number }) => string;
   noAssigneesYet: string;
+  usernameTakenErrorTitle: string;
+  usernameTakenErrorDescription: (params: { username: string }) => string;
 
 
   // ActivityEditorPage (formerly ActivityModal)
@@ -290,7 +292,7 @@ export type Translations = {
   historyLogSwitchToWorkMode: string;
   historyLogPasswordChange: string;
   historyLogAddAssignee: (params: { name: string }) => string;
-  historyLogUpdateAssignee: (params: { name: string, oldName?: string }) => string;
+  historyLogUpdateAssignee: (params: { name: string, oldName?: string, oldUsername?: string, newUsername?: string }) => string;
   historyLogDeleteAssignee: (params: { name: string }) => string;
   historyScopeAccount: string;
   historyScopePersonal: string;
@@ -403,7 +405,7 @@ export const translations: Record<Locale, Translations> = {
     assigneeNameLabel: "Assignee Name",
     assigneeNamePlaceholder: "e.g., John Doe, Partner",
     usernameLabel: "Username",
-    usernamePlaceholder: "e.g., johndoe",
+    usernamePlaceholder: "e.g., johndoe (min 3 chars)",
     usernameMinLength: (params) => `Username must be at least ${params.length} characters.`,
     usernameIsRequired: "Username is required.",
     createAssigneeDescription: "Create a new assignee for your tasks.",
@@ -413,6 +415,8 @@ export const translations: Record<Locale, Translations> = {
     confirmDeleteAssigneeDescription: (params) => `This action will delete the assignee "${params.assigneeName}". Activities assigned to them will become unassigned. This cannot be undone.`,
     assigneesCount: (params) => `You have ${params.count} assignee${params.count === 1 ? '' : 's'}.`,
     noAssigneesYet: "No assignees added yet. Use the form to add your first assignee.",
+    usernameTakenErrorTitle: "Username Unavailable",
+    usernameTakenErrorDescription: (params) => `The username "${params.username}" is already taken. Please choose another one.`,
     editActivityTitle: "Edit Activity",
     addActivityTitle: "Add New Activity",
     editActivityDescription: (params) => `Update the details of your activity. Default date: ${params.formattedInitialDate}.`,
@@ -599,7 +603,7 @@ export const translations: Record<Locale, Translations> = {
     historyLogSwitchToWorkMode: "Switched to Work Mode.",
     historyLogPasswordChange: "Password changed.",
     historyLogAddAssignee: (params) => `Added Assignee: "${params.name}".`,
-    historyLogUpdateAssignee: (params) => `Updated Assignee: "${params.oldName ? params.oldName + ' to ' : ''}${params.name}".`,
+    historyLogUpdateAssignee: (params) => `Updated Assignee: "${params.oldName ? params.oldName + ' to ' : ''}${params.name}"${params.newUsername ? ` (Username: ${params.oldUsername ? params.oldUsername + ' to ' : ''}${params.newUsername})` : ''}.`,
     historyLogDeleteAssignee: (params) => `Deleted Assignee: "${params.name}".`,
     historyScopeAccount: "Account",
     historyScopePersonal: "Personal",
@@ -715,7 +719,7 @@ export const translations: Record<Locale, Translations> = {
     assigneeNameLabel: "Nombre del Asignado",
     assigneeNamePlaceholder: "Ej: Juan Pérez, Compañero",
     usernameLabel: "Nombre de Usuario",
-    usernamePlaceholder: "Ej: juanperez",
+    usernamePlaceholder: "Ej: juanperez (mín 3 car.)",
     usernameMinLength: (params) => `El nombre de usuario debe tener al menos ${params.length} caracteres.`,
     usernameIsRequired: "El nombre de usuario es obligatorio.",
     createAssigneeDescription: "Crea un nuevo asignado para tus tareas.",
@@ -725,6 +729,8 @@ export const translations: Record<Locale, Translations> = {
     confirmDeleteAssigneeDescription: (params) => `Esta acción eliminará al asignado "${params.assigneeName}". Las actividades asignadas a esta persona quedarán sin asignar. Esto no se puede deshacer.`,
     assigneesCount: (params) => `Tienes ${params.count} asignado${params.count === 1 ? '' : 's'}.`,
     noAssigneesYet: "Aún no has añadido asignados. Usa el formulario para añadir tu primer asignado.",
+    usernameTakenErrorTitle: "Nombre de Usuario No Disponible",
+    usernameTakenErrorDescription: (params) => `El nombre de usuario "${params.username}" ya está en uso. Por favor, elige otro.`,
     editActivityTitle: "Editar Actividad",
     addActivityTitle: "Añadir Nueva Actividad",
     editActivityDescription: (params) => `Actualiza los detalles de tu actividad. Fecha por defecto: ${params.formattedInitialDate}.`,
@@ -911,7 +917,7 @@ export const translations: Record<Locale, Translations> = {
     historyLogSwitchToWorkMode: "Cambiado a Modo Trabajo.",
     historyLogPasswordChange: "Contraseña cambiada.",
     historyLogAddAssignee: (params) => `Asignado añadido: "${params.name}".`,
-    historyLogUpdateAssignee: (params) => `Asignado actualizado: "${params.oldName ? params.oldName + ' a ' : ''}${params.name}".`,
+    historyLogUpdateAssignee: (params) => `Asignado actualizado: "${params.oldName ? params.oldName + ' a ' : ''}${params.name}"${params.newUsername ? ` (Usuario: ${params.oldUsername ? params.oldUsername + ' a ' : ''}${params.newUsername})` : ''}.`,
     historyLogDeleteAssignee: (params) => `Asignado eliminado: "${params.name}".`,
     historyScopeAccount: "Cuenta",
     historyScopePersonal: "Personal",
@@ -1027,7 +1033,7 @@ export const translations: Record<Locale, Translations> = {
     assigneeNameLabel: "Nom de la Personne Assignée",
     assigneeNamePlaceholder: "Ex : Jean Dupont, Partenaire",
     usernameLabel: "Nom d'utilisateur",
-    usernamePlaceholder: "Ex : jeandupont",
+    usernamePlaceholder: "Ex : jeandupont (min 3 cars)",
     usernameMinLength: (params) => `Le nom d'utilisateur doit comporter au moins ${params.length} caractères.`,
     usernameIsRequired: "Le nom d'utilisateur est requis.",
     createAssigneeDescription: "Créez une nouvelle personne assignée pour vos tâches.",
@@ -1037,6 +1043,8 @@ export const translations: Record<Locale, Translations> = {
     confirmDeleteAssigneeDescription: (params) => `Cette action supprimera la personne assignée "${params.assigneeName}". Les activités qui lui sont assignées deviendront non assignées. Cette action est irréversible.`,
     assigneesCount: (params) => `Vous avez ${params.count} personne${params.count === 1 ? '' : 's'} assignée${params.count === 1 ? '' : 's'}.`,
     noAssigneesYet: "Aucune personne assignée pour le moment. Utilisez le formulaire pour en ajouter.",
+    usernameTakenErrorTitle: "Nom d'utilisateur Indisponible",
+    usernameTakenErrorDescription: (params) => `Le nom d'utilisateur "${params.username}" est déjà pris. Veuillez en choisir un autre.`,
     editActivityTitle: "Modifier l'activité",
     addActivityTitle: "Ajouter une nouvelle activité",
     editActivityDescription: (params) => `Mettez à jour les détails de votre activité. Date par défaut : ${params.formattedInitialDate}.`,
@@ -1223,7 +1231,7 @@ export const translations: Record<Locale, Translations> = {
     historyLogSwitchToWorkMode: "Passé en mode Travail.",
     historyLogPasswordChange: "Mot de passe changé.",
     historyLogAddAssignee: (params) => `Personne assignée ajoutée : "${params.name}".`,
-    historyLogUpdateAssignee: (params) => `Personne assignée mise à jour : "${params.oldName ? params.oldName + ' à ' : ''}${params.name}".`,
+    historyLogUpdateAssignee: (params) => `Personne assignée mise à jour : "${params.oldName ? params.oldName + ' à ' : ''}${params.name}"${params.newUsername ? ` (Nom d'utilisateur : ${params.oldUsername ? params.oldUsername + ' à ' : ''}${params.newUsername})` : ''}.`,
     historyLogDeleteAssignee: (params) => `Personne assignée supprimée : "${params.name}".`,
     historyScopeAccount: "Compte",
     historyScopePersonal: "Personnel",

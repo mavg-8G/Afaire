@@ -38,7 +38,7 @@ const MIN_USERNAME_LENGTH = 3;
 
 const assigneeFormSchemaBase = z.object({
   name: z.string().min(1, "assigneeNameLabel"), // Placeholder, will be translated
-  username: z.string().optional(), // Optional here, made required conditionally for new users
+  username: z.string().min(MIN_USERNAME_LENGTH, "usernameMinLength"),
 });
 
 type AssigneeFormData = z.infer<typeof assigneeFormSchemaBase>;
@@ -54,19 +54,16 @@ export default function ManageAssigneesPage() {
   const assigneeFormSchema = React.useMemo(() => {
     return assigneeFormSchemaBase.extend({
         name: z.string().min(1, t('assigneeNameLabel')),
-        username: editingAssignee
-            ? z.string().optional() // Username not editable for existing users in this UI iteration
-            : z.string()
+        username: z.string()
                 .min(MIN_USERNAME_LENGTH, t('usernameMinLength', { length: MIN_USERNAME_LENGTH }))
-                .min(1,t('usernameIsRequired')), // Ensure not empty
+                .min(1,t('usernameIsRequired')), // Ensure not empty, applies to both create and edit
     });
-  }, [t, editingAssignee]);
+  }, [t]);
 
 
   const form = useForm<AssigneeFormData>({
     resolver: zodResolver(assigneeFormSchema),
     defaultValues: { name: "", username: "" },
-    // Re-validate on mode change (editingAssignee toggle)
     context: { editing: !!editingAssignee }, 
   });
 
@@ -77,29 +74,29 @@ export default function ManageAssigneesPage() {
   }, [appMode, router]);
 
   useEffect(() => {
-    // When editingAssignee changes, reset the form and re-evaluate schema
-    form.trigger(); // This might help re-evaluate schema, or form.reset below does
+    form.trigger(); 
     if (editingAssignee) {
       form.reset({ name: editingAssignee.name, username: editingAssignee.username || "" });
     } else {
       form.reset({ name: "", username: "" });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingAssignee, form.reset, form.trigger]); // form.reset is stable, form.trigger might be needed if context change doesn't auto-trigger revalidation with the new schema.
+  }, [editingAssignee, form.reset, form.trigger]);
 
 
   const onSubmit = async (data: AssigneeFormData) => {
     setIsSubmitting(true);
     try {
       if (editingAssignee) {
-        await updateAssignee(editingAssignee.id, { name: data.name /* username not sent for update */ });
+        // Pass both name and username for update
+        await updateAssignee(editingAssignee.id, { name: data.name, username: data.username });
         setEditingAssignee(null);
       } else {
-        // For new assignee, username should be present due to schema validation
         await addAssignee(data.name, data.username);
       }
       form.reset({ name: "", username: "" });
     } catch (error) {
+      // Error should be handled by AppProvider's toast, but console.error is still good
       console.error("Failed to save assignee:", error);
     } finally {
       setIsSubmitting(false);
@@ -175,7 +172,7 @@ export default function ManageAssigneesPage() {
                           <Input 
                             placeholder={t('usernamePlaceholder')} 
                             {...field} 
-                            disabled={isSubmitting || isAppStoreLoading || !!editingAssignee} 
+                            disabled={isSubmitting || isAppStoreLoading} // Username is now editable
                           />
                         </FormControl>
                         <FormMessage />
