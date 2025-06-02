@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label"; // Not used directly, FormLabel is preferred
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PlusCircle, Trash2, CalendarIcon, Clock, X, Loader2, ArrowLeft } from 'lucide-react';
 import { useAppStore } from '@/hooks/use-app-store';
@@ -35,7 +35,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import Link from 'next/link';
 
 const todoSchema = z.object({
-  id: z.number().optional(), // ID will be number from backend if synced
+  id: z.number().optional(),
   text: z.string().min(1, "Todo text cannot be empty."),
   completed: z.boolean().optional(),
 });
@@ -51,16 +51,17 @@ const recurrenceSchema = z.object({
 export default function ActivityEditorPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Correctly destructure from useAppStore()
   const {
     addActivity,
     updateActivity,
+    addTodoToActivity,
+    deleteTodoFromActivity,
     appMode,
     assignees,
     getRawActivities,
-    getCategoryById, 
+    getCategoryById,
     isLoading: isAppStoreLoading,
-    categories 
+    categories
   } = useAppStore();
   const { toast } = useToast();
   const { t, locale } = useTranslations();
@@ -69,7 +70,7 @@ export default function ActivityEditorPage() {
   const [isRecurrenceEndDatePopoverOpen, setIsRecurrenceEndDatePopoverOpen] = useState(false);
   const [isSubmittingForm, setIsSubmittingForm] = useState(false);
   const [activityToEdit, setActivityToEdit] = useState<Activity | undefined>(undefined);
-  const [isLoadingActivity, setIsLoadingActivity] = useState(true); // For loading existing activity
+  const [isLoadingActivity, setIsLoadingActivity] = useState(true);
 
   const activityIdParam = searchParams.get('id');
   const activityId = activityIdParam ? parseInt(activityIdParam, 10) : undefined;
@@ -126,10 +127,10 @@ export default function ActivityEditorPage() {
           categoryId: foundActivity.categoryId,
           activityDate: baseDate,
           time: foundActivity.time || "",
-          todos: foundActivity.todos?.map(t => ({ 
-            id: t.id, 
-            text: t.text, 
-            completed: !!t.completed // Ensure boolean
+          todos: foundActivity.todos?.map(t => ({
+            id: t.id,
+            text: t.text,
+            completed: !!t.completed
           })) || [],
           notes: foundActivity.notes || "",
           recurrence: {
@@ -177,12 +178,6 @@ export default function ActivityEditorPage() {
     const activityPayloadBase = {
       title: data.title,
       categoryId: data.categoryId,
-      // Map todos for submission, ensuring new todos don't have an ID yet
-      todos: data.todos?.map(t => ({ 
-        id: t.id, // Pass ID if it exists (for updates/tracking)
-        text: t.text, 
-        completed: !!t.completed // Ensure boolean for client-side state
-      })) || [],
       time: data.time === "" ? undefined : data.time,
       notes: data.notes,
       recurrence: recurrenceRule,
@@ -192,17 +187,37 @@ export default function ActivityEditorPage() {
 
     try {
       if (activityToEdit && activityToEdit.id !== undefined) {
+        const formTodos = data.todos || [];
+        const originalTodos = activityToEdit.todos || [];
+
+        const newTodosFromForm = formTodos.filter(ft => ft.id === undefined || ft.id === null || typeof ft.id !== 'number');
+        for (const newTodo of newTodosFromForm) {
+          if (newTodo.text.trim() !== "") {
+            await addTodoToActivity(activityToEdit.id, newTodo.text);
+          }
+        }
+
+        const deletedTodoIds = originalTodos
+          .filter(ot => !formTodos.some(ft => ft.id === ot.id))
+          .map(ot => ot.id);
+        for (const todoId of deletedTodoIds) {
+          if (typeof todoId === 'number') { // Ensure ID is a number before calling API
+             await deleteTodoFromActivity(activityToEdit.id, todoId);
+          }
+        }
+        
         const updatePayload = {
             ...activityPayloadBase,
-            createdAt: data.activityDate.getTime(), // This updates the original start_date if modified
+            createdAt: data.activityDate.getTime(),
+            todos: formTodos.map(t => ({ id: t.id, text: t.text, completed: !!t.completed })),
         };
         await updateActivity(activityToEdit.id, updatePayload as Partial<Omit<Activity, 'id'>>, activityToEdit);
         toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
+
       } else {
-        // For adding, we map todos to Omit<Todo, 'id'|'completed'> as backend assigns ID and completion is client-side init
         const addPayload = {
             ...activityPayloadBase,
-            todos: data.todos?.map(t => ({ text: t.text })), // Only text for new todos
+            todos: data.todos?.map(t => ({ text: t.text })),
         };
         await addActivity(
           addPayload as Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId'| 'appMode'| 'masterActivityId' | 'isRecurringInstance' | 'originalInstanceDate'> & { todos?: Omit<Todo, 'id'|'completed'>[], time?: string, notes?: string, recurrence?: RecurrenceRule | null, responsiblePersonIds?: number[], categoryId: number, appMode: AppMode },
@@ -213,8 +228,6 @@ export default function ActivityEditorPage() {
       router.replace('/');
     } catch (error) {
       console.error("Failed to save activity:", error);
-      // Error toast might be handled by AppProvider or here if specific
-    } finally {
       setIsSubmittingForm(false);
     }
   };
@@ -484,7 +497,3 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
-
-    
-
-    

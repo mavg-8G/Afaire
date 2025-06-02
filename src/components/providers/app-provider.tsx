@@ -20,7 +20,7 @@ import {
   setDate as setDayOfMonthFn,
   addYears, isEqual,
   formatDistanceToNowStrict,
-  format as formatDateFns, // Renamed to avoid conflict
+  format as formatDateFns,
 } from 'date-fns';
 import * as Icons from 'lucide-react';
 import { useTranslations } from '@/contexts/language-context';
@@ -37,8 +37,8 @@ export interface AppContextType {
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
   addActivity: (
-    activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId' | 'appMode' | 'masterActivityId' | 'isRecurringInstance' | 'originalInstanceDate'> & {
-      todos?: Omit<Todo, 'id' | 'completed'>[]; // Todo IDs will be numbers from backend
+    activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId'| 'appMode'| 'masterActivityId' | 'isRecurringInstance' | 'originalInstanceDate'> & {
+      todos?: Omit<Todo, 'id' | 'completed'>[];
       time?: string;
       notes?: string;
       recurrence?: RecurrenceRule | null;
@@ -52,8 +52,8 @@ export interface AppContextType {
   deleteActivity: (activityId: number) => Promise<void>;
   toggleOccurrenceCompletion: (masterActivityId: number, occurrenceDateTimestamp: number, completed: boolean) => void;
   addTodoToActivity: (activityId: number, todoText: string) => Promise<void>;
-  updateTodoInActivity: (activityId: number, todoId: number, updates: Partial<Todo>) => void; // IDs are numbers
-  deleteTodoFromActivity: (activityId: number, todoId: number) => Promise<void>; // IDs are numbers
+  updateTodoInActivity: (activityId: number, todoId: number, updates: Partial<Todo>) => void;
+  deleteTodoFromActivity: (activityId: number, todoId: number) => Promise<void>;
   getCategoryById: (categoryId: number) => Category | undefined;
   addCategory: (name: string, iconName: string, mode: AppMode | 'all') => Promise<void>;
   updateCategory: (categoryId: number, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => Promise<void>;
@@ -187,14 +187,14 @@ function generateFutureInstancesForNotifications(
 
   const seriesEndDate = recurrence.endDate ? new Date(recurrence.endDate) : null;
   let iterations = 0;
-  const maxIterations = 366 * 1; // Check for 1 year of occurrences
+  const maxIterations = 366 * 1;
 
   while (iterations < maxIterations && !isAfter(currentDate, rangeEndDate)) {
     iterations++;
     if (seriesEndDate && isAfter(currentDate, seriesEndDate)) break;
     if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
         if (recurrence.type === 'daily') currentDate = addDays(currentDate, 1);
-        else if (recurrence.type === 'weekly') currentDate = addDays(currentDate, 1); // Iterate daily for weekly, check day later
+        else if (recurrence.type === 'weekly') currentDate = addDays(currentDate, 1);
         else if (recurrence.type === 'monthly') {
             const nextMonth = addMonths(currentDate, 1);
             currentDate = recurrence.dayOfMonth ? setDayOfMonthFn(nextMonth, recurrence.dayOfMonth) : nextMonth;
@@ -307,7 +307,6 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
   const activityIdForLog = (backendActivity && typeof backendActivity.id === 'number')
     ? backendActivity.id
     : 'ID_MISSING_OR_INVALID_IN_BACKEND_RESPONSE';
-  const startDateFromBackend = backendActivity ? backendActivity.start_date : undefined;
 
   if (!backendActivity || typeof backendActivity !== 'object') {
     console.error(`[AppProvider] CRITICAL: backendToFrontendActivity received invalid backendActivity object for ID '${activityIdForLog}'. Received type: ${typeof backendActivity}, value:`, typeof backendActivity === 'object' ? JSON.stringify(backendActivity) : backendActivity);
@@ -322,6 +321,7 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
     };
   }
 
+  const startDateFromBackend = backendActivity.start_date;
   let createdAtTimestamp: number;
 
   if (typeof startDateFromBackend === 'string' && startDateFromBackend.trim() !== '') {
@@ -330,20 +330,19 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
       if (isNaN(createdAtTimestamp)) throw new Error("Parsed timestamp is NaN");
     } catch (e) {
       console.warn(`[AppProvider] Warning: Failed to parse start_date "${startDateFromBackend}" from backend for activity ID ${activityIdForLog}. Error:`, e instanceof Error ? e.message : String(e), ". Using fallback createdAt to Date.now().");
-      createdAtTimestamp = Date.now(); // Fallback
+      createdAtTimestamp = Date.now();
     }
   } else {
     console.warn(`[AppProvider] Warning: backendActivity.start_date is missing, null, or invalid in response for activity ID ${activityIdForLog}:`, startDateFromBackend === undefined ? 'FIELD_MISSING' : startDateFromBackend, ". Using fallback createdAt to Date.now().");
-    createdAtTimestamp = Date.now(); // Fallback
+    createdAtTimestamp = Date.now();
   }
   
   let daysOfWeekArray: number[] = [];
   if (backendActivity.days_of_week && typeof backendActivity.days_of_week === 'string') {
     daysOfWeekArray = backendActivity.days_of_week.split(',').map(dayStr => parseInt(dayStr.trim(), 10)).filter(num => !isNaN(num));
-  } else if (Array.isArray(backendActivity.days_of_week)) { // Handle if backend sends it as array of numbers/strings
+  } else if (Array.isArray(backendActivity.days_of_week)) {
     daysOfWeekArray = backendActivity.days_of_week.map(dayStr => parseInt(String(dayStr).trim(), 10)).filter(num => !isNaN(num));
   }
-
 
   const recurrenceRule: RecurrenceRule = {
     type: backendActivity.repeat_mode as RecurrenceType,
@@ -352,9 +351,9 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
     dayOfMonth: backendActivity.day_of_month ?? undefined,
   };
   
-  const todos: Todo[] = (backendActivity && Array.isArray(backendActivity.todos))
+ const todos: Todo[] = (Array.isArray(backendActivity.todos))
     ? backendActivity.todos.map((bt: BackendTodo, index: number) => {
-        const todoId = typeof bt?.id === 'number' ? bt.id : Date.now() + Math.random() + index; // Ensure unique temp ID if backend ID is missing
+        const todoId = typeof bt?.id === 'number' ? bt.id : Date.now() + Math.random() + index;
         if (typeof bt?.id !== 'number') {
             console.warn(`[AppProvider] Warning: Todo at index ${index} for activity ID ${activityIdForLog} is missing a valid 'id' from backend. Using temporary ID ${todoId}. Backend todo:`, bt);
         }
@@ -364,23 +363,22 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
         return {
           id: todoId,
           text: bt?.text || 'Untitled Todo from Backend',
-          completed: false, // Initialize all backend todos as not completed
+          completed: false,
         };
       })
     : [];
 
-  if (!(backendActivity && Array.isArray(backendActivity.todos))) {
-     console.warn(`[AppProvider] Warning: backendActivity.todos is missing or not an array for activity ID ${activityIdForLog}. Defaulting to empty array. Received:`, backendActivity ? backendActivity.todos : 'backendActivity_is_undefined_or_null');
+  if (!(Array.isArray(backendActivity.todos))) {
+     console.warn(`[AppProvider] Warning: backendActivity.todos is missing or not an array for activity ID ${activityIdForLog}. Defaulting to empty array. Received:`, backendActivity.todos);
   }
   
- const responsiblePersonIds = (backendActivity && Array.isArray(backendActivity.responsibles))
+ const responsiblePersonIds = (Array.isArray(backendActivity.responsibles))
     ? backendActivity.responsibles.map(r => r.id)
     : [];
 
-  if (!(backendActivity && Array.isArray(backendActivity.responsibles))) {
-    console.warn(`[AppProvider] Warning: backendActivity.responsibles is missing or not an array for activity ID ${activityIdForLog}. Defaulting to empty array. Received:`, backendActivity && backendActivity.responsibles !== undefined ? JSON.stringify(backendActivity.responsibles) : 'FIELD_MISSING_OR_UNDEFINED');
+  if (!(Array.isArray(backendActivity.responsibles))) {
+    console.warn(`[AppProvider] Warning: backendActivity.responsibles is missing or not an array for activity ID ${activityIdForLog}. Defaulting to empty array. Received:`, backendActivity.responsibles !== undefined ? JSON.stringify(backendActivity.responsibles) : 'FIELD_MISSING_OR_UNDEFINED');
   }
-
 
   const idToUse = typeof backendActivity?.id === 'number' ? backendActivity.id : Date.now() + Math.random(); 
   if (typeof backendActivity?.id !== 'number') {
@@ -403,7 +401,7 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
 };
 
 const frontendToBackendActivityPayload = (
-  activity: Omit<Activity, 'id' | 'todos' | 'completedOccurrences' | 'isRecurringInstance' | 'originalInstanceDate' | 'masterActivityId'> & { todos?: Omit<Todo, 'id' | 'completed'>[] },
+  activity: Omit<Activity, 'id' | 'completedOccurrences' | 'isRecurringInstance' | 'originalInstanceDate' | 'masterActivityId'> & { todos?: Omit<Todo, 'id' | 'completed'>[] },
   isUpdate: boolean = false
 ): BackendActivityCreatePayload | BackendActivityUpdatePayload => {
   const payload: Partial<BackendActivityCreatePayload & BackendActivityUpdatePayload> = {
@@ -413,7 +411,6 @@ const frontendToBackendActivityPayload = (
     category_id: activity.categoryId,
     notes: activity.notes,
     mode: activity.appMode === 'all' ? 'both' : activity.appMode,
-    responsible_ids: activity.responsiblePersonIds || [],
   };
 
   if (activity.recurrence && activity.recurrence.type !== 'none') {
@@ -428,13 +425,18 @@ const frontendToBackendActivityPayload = (
     payload.day_of_month = null;
   }
 
+  if (activity.responsiblePersonIds !== undefined) {
+    payload.responsible_ids = activity.responsiblePersonIds;
+  } else if (!isUpdate) {
+    payload.responsible_ids = [];
+  }
+
 
   if (!isUpdate && activity.todos && activity.todos.length > 0) {
     (payload as BackendActivityCreatePayload).todos = activity.todos.map(t => ({ text: t.text }));
   } else if (!isUpdate) {
-    (payload as BackendActivityCreatePayload).todos = []; // Ensure todos is an empty array if not provided for creation
+    (payload as BackendActivityCreatePayload).todos = [];
   }
-
 
   return payload as BackendActivityCreatePayload | BackendActivityUpdatePayload;
 };
@@ -445,8 +447,8 @@ const backendToFrontendHistory = (backendHistory: BackendHistory): HistoryLogEnt
   actionKey: backendHistory.action as HistoryLogActionKey,
   backendAction: backendHistory.action,
   backendUserId: backendHistory.user_id,
-  scope: 'account', // Default scope, can be refined if backend provides more info
-  details: { rawBackendAction: backendHistory.action } // Generic detail
+  scope: 'account',
+  details: { rawBackendAction: backendHistory.action }
 });
 
 const formatBackendError = (errorData: any, defaultMessage: string): string => {
@@ -454,8 +456,8 @@ const formatBackendError = (errorData: any, defaultMessage: string): string => {
     if (Array.isArray(errorData.detail)) {
       return errorData.detail
         .map((validationError: any) => {
-          const loc = validationError.loc && Array.isArray(validationError.loc) 
-            ? validationError.loc.filter((item: any) => item !== 'body').join(' > ') 
+          const loc = validationError.loc && Array.isArray(validationError.loc)
+            ? validationError.loc.filter((item: any) => item !== 'body').join(' > ')
             : 'Field';
           return `${loc}: ${validationError.msg}`;
         })
@@ -467,7 +469,6 @@ const formatBackendError = (errorData: any, defaultMessage: string): string => {
   return defaultMessage;
 };
 
-
 const createApiErrorToast = (
     err: unknown,
     toastFn: (options: any) => void,
@@ -477,16 +478,15 @@ const createApiErrorToast = (
     endpoint?: string
   ) => {
     const error = err as Error & { cause?: unknown, name?: string };
-    let consoleMessage = `[AppProvider] Failed ${operationType} for endpoint: ${endpoint || 'N/A'}. 
+    let consoleMessage = `[AppProvider] Failed ${operationType} for endpoint: ${endpoint || 'N/A'}.
 Error Name: ${error.name || 'UnknownError'}
 Error Message: ${error.message || 'No message'}.`;
     if (error.stack) consoleMessage += `\nStack: ${error.stack}`;
 
-    // More detailed logging of the cause if it's an object
     if (error.cause && typeof error.cause === 'object' && error.cause !== null) {
         try {
             consoleMessage += `\nCause: ${JSON.stringify(error.cause, Object.getOwnPropertyNames(error.cause))}`;
-        } catch (e) { // Fallback if stringify fails (e.g., circular structures)
+        } catch (e) {
             consoleMessage += `\nCause (could not stringify): ${error.cause}`;
         }
     } else if (error.cause) {
@@ -503,9 +503,9 @@ Error Message: ${error.message || 'No message'}.`;
       descriptionKey = 'toastFailedToFetchErrorDescription';
       descriptionParams = { endpoint: endpoint || API_BASE_URL };
     } else if (error.message && error.message.toLowerCase().includes("unexpected token '<'") && error.message.toLowerCase().includes("html")) {
-      descriptionKey = 'toastInvalidJsonErrorDescription'; // More specific for HTML responses
+      descriptionKey = 'toastInvalidJsonErrorDescription';
       descriptionParams = { endpoint: endpoint || API_BASE_URL };
-    } else if (error.message) { // Use the error's message directly if available and not a generic fetch/parse error
+    } else if (error.message) {
         customDescription = error.message;
     }
     
@@ -742,21 +742,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             console.warn("[AppProvider] Encountered a null or undefined activity object from backend GET /activities.");
             return;
           }
-          const feAct = backendToFrontendActivity(beAct, beAct.mode as AppMode); // Use actual mode from backend if available
+          const feAct = backendToFrontendActivity(beAct, beAct.mode as AppMode);
           if (feAct.appMode === 'personal') newPersonalActivities.push(feAct);
           else if (feAct.appMode === 'work') newWorkActivities.push(feAct);
         });
         setPersonalActivities(newPersonalActivities);
         setWorkActivities(newWorkActivities);
 
-      } catch (err) {
-        createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`);
-        setError(prev => prev ? `${prev} Activities failed. ` : "Activities failed. ");
-      } finally {
+      } catch (err) { createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`); setError(prev => prev ? `${prev} Activities failed. ` : "Activities failed. "); }
+      finally {
         setIsActivitiesLoading(false);
       }
     };
-
 
     const fetchInitialCategories = async () => {
       setIsCategoriesLoading(true);
@@ -792,18 +789,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     
     const fetchAllData = async () => {
-        loadClientSideData(); // Load client-side data first (localStorage, etc.)
-        // Then fetch from API
+        loadClientSideData();
         await Promise.all([fetchInitialActivities(), fetchInitialCategories(), fetchInitialAssignees()]);
-        if (initialAuth) { // Only fetch history if initially authenticated
+        if (initialAuth) {
             await fetchInitialHistory();
         } else {
-            setIsHistoryLoading(false); // If not auth, no need to load history
+            setIsHistoryLoading(false);
         }
-        setIsLoadingState(false); // Overall loading done
+        setIsLoadingState(false);
     };
     fetchAllData();
-  }, [logout, t, toast]); // Dependencies for main setup effect
+  }, [logout, t, toast]);
 
 
   useEffect(() => {
@@ -1214,16 +1210,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
   const addActivity = useCallback(async (
-      activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId' | 'appMode' | 'masterActivityId' | 'isRecurringInstance' | 'originalInstanceDate'> & {
+      activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId'| 'appMode'| 'masterActivityId' | 'isRecurringInstance' | 'originalInstanceDate'> & {
         todos?: Omit<Todo, 'id' | 'completed'>[]; time?: string; notes?: string; recurrence?: RecurrenceRule | null; responsiblePersonIds?: number[]; categoryId: number; appMode: AppMode;
       }, customCreatedAt?: number
     ) => {
     setError(null);
     const frontendActivityShell: Activity = {
-      id: 0, 
+      id: 0,
       title: activityData.title,
       categoryId: activityData.categoryId,
-      todos: (activityData.todos || []).map(t => ({ id: 0, text: t.text, completed: false })), 
+      todos: (activityData.todos || []).map(t => ({ id: 0, text: t.text, completed: false })),
       createdAt: customCreatedAt !== undefined ? customCreatedAt : Date.now(),
       time: activityData.time,
       notes: activityData.notes,
@@ -1240,7 +1236,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add activity: HTTP ${response.status}`));}
       
       const newBackendActivity: BackendActivity | null | undefined = await response.json().catch(() => null);
-      
       const newFrontendActivity = backendToFrontendActivity(newBackendActivity, appModeState);
       
       if (newFrontendActivity.appMode === 'personal') {
@@ -1279,20 +1274,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const updatedBackendActivity: BackendActivity = await response.json();
       
       let processedActivityFromBackend = backendToFrontendActivity(updatedBackendActivity, appModeState);
-
-      // Preserve client-side todos if the backend PUT response doesn't include them
-      if (activityToUpdate && (!processedActivityFromBackend.todos || processedActivityFromBackend.todos.length === 0) && activityToUpdate.todos.length > 0) {
-          processedActivityFromBackend.todos = activityToUpdate.todos;
-      }
-
-      // If the 'updates' object (e.g., from form save) contains a 'todos' array, it's the most current.
+      
+      // If 'updates' (from form submission) contains 'todos', prioritize it for local state.
+      // Otherwise, if backend didn't send todos, keep original client todos.
       if (updates.todos && Array.isArray(updates.todos)) {
-         processedActivityFromBackend.todos = updates.todos;
+         processedActivityFromBackend.todos = updates.todos.map(t => ({
+            id: t.id as number, // Assume ID exists for updates if passed
+            text: t.text,
+            completed: !!t.completed
+         }));
+      } else if (activityToUpdate && (!processedActivityFromBackend.todos || processedActivityFromBackend.todos.length === 0) && activityToUpdate.todos.length > 0) {
+          processedActivityFromBackend.todos = activityToUpdate.todos;
       }
       
       const finalFrontendActivity = {
         ...processedActivityFromBackend,
-        completedOccurrences: activityToUpdate.completedOccurrences || {}, // Carry over from original
+        completedOccurrences: activityToUpdate.completedOccurrences || {},
         completed: updates.completed !== undefined ? updates.completed : activityToUpdate.completed,
         completedAt: updates.completedAt !== undefined ? updates.completedAt : activityToUpdate.completedAt,
       };
@@ -1359,7 +1356,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (typeof newBackendTodo?.id !== 'number') {
         console.warn(`[AppProvider] Todo added for activity ${activityId} but backend did not return a valid ID. Using temporary ID. Backend response:`, newBackendTodo);
       }
-
 
       const updateInList = (list: Activity[], setter: React.Dispatch<React.SetStateAction<Activity[]>>) => {
           const activityIndex = list.findIndex(act => act.id === activityId);
@@ -1496,5 +1492,3 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
-
-    
