@@ -303,7 +303,20 @@ const backendToFrontendAssignee = (backendUser: BackendUser): Assignee => ({
   username: backendUser.username,
 });
 
-const backendToFrontendActivity = (backendActivity: BackendActivity, currentAppMode: AppMode): Activity => {
+const backendToFrontendActivity = (backendActivity: BackendActivity | null | undefined, currentAppMode: AppMode): Activity => {
+  if (!backendActivity || typeof backendActivity !== 'object') {
+    console.error('[AppProvider] CRITICAL: backendToFrontendActivity received invalid backendActivity object:', backendActivity);
+    return {
+      id: Date.now() + Math.random(), 
+      title: 'Error: Invalid Activity Data from Backend',
+      categoryId: 0, 
+      todos: [],
+      createdAt: Date.now(),
+      appMode: currentAppMode,
+      completedOccurrences: {},
+    };
+  }
+
   let daysOfWeekArray: number[] = [];
   if (backendActivity.days_of_week && typeof backendActivity.days_of_week === 'string') {
     daysOfWeekArray = backendActivity.days_of_week.split(',').map(dayStr => parseInt(dayStr.trim(), 10)).filter(num => !isNaN(num));
@@ -319,7 +332,9 @@ const backendToFrontendActivity = (backendActivity: BackendActivity, currentAppM
   };
 
   let createdAtTimestamp: number;
-  const activityIdForLog = (backendActivity && typeof backendActivity.id === 'number') ? backendActivity.id : 'ID_MISSING_OR_INVALID_IN_BACKEND_RESPONSE';
+  const activityIdForLog = (backendActivity && typeof backendActivity.id === 'number') 
+    ? backendActivity.id 
+    : 'ID_MISSING_OR_INVALID_IN_BACKEND_RESPONSE';
   const startDateFromBackend = backendActivity ? backendActivity.start_date : undefined;
 
   if (typeof startDateFromBackend === 'string' && startDateFromBackend.trim() !== '') {
@@ -330,7 +345,7 @@ const backendToFrontendActivity = (backendActivity: BackendActivity, currentAppM
       createdAtTimestamp = Date.now(); // Fallback
     }
   } else {
-    console.error(`[AppProvider] Critical: backendActivity.start_date is missing, null, or invalid in response for activity ID ${activityIdForLog}:`, startDateFromBackend === undefined ? 'FIELD_MISSING' : startDateFromBackend);
+    console.warn(`[AppProvider] Warning: backendActivity.start_date is missing, null, or invalid in response for activity ID ${activityIdForLog}. Using fallback. Received:`, startDateFromBackend === undefined ? 'FIELD_MISSING' : startDateFromBackend);
     createdAtTimestamp = Date.now(); // Fallback
   }
   
@@ -343,11 +358,12 @@ const backendToFrontendActivity = (backendActivity: BackendActivity, currentAppM
 
   const todos = (backendActivity && Array.isArray(backendActivity.todos))
     ? backendActivity.todos.map((bt: BackendTodo) => ({
-        id: typeof bt?.id === 'number' ? bt.id : Date.now() + Math.random(), // Fallback for todo ID
+        id: typeof bt?.id === 'number' ? bt.id : Date.now() + Math.random(), 
         text: bt?.text || 'Untitled Todo from Backend',
         completed: false, 
       }))
     : [];
+
   if (!(backendActivity && Array.isArray(backendActivity.todos))) {
      console.warn(`[AppProvider] Warning: backendActivity.todos is missing or not an array for activity ID ${activityIdForLog}. Defaulting to empty array. Received:`, backendActivity ? backendActivity.todos : 'backendActivity_is_undefined_or_null');
   }
@@ -362,8 +378,7 @@ const backendToFrontendActivity = (backendActivity: BackendActivity, currentAppM
       });
   }
 
-
-  const idToUse = typeof backendActivity?.id === 'number' ? backendActivity.id : Date.now() + Math.random(); // Fallback ID, highly problematic
+  const idToUse = typeof backendActivity?.id === 'number' ? backendActivity.id : Date.now() + Math.random(); 
   if (typeof backendActivity?.id !== 'number') {
       console.error(`[AppProvider] CRITICAL: Backend activity response did not contain a valid 'id'. Using fallback ID ${idToUse}. Received:`, backendActivity);
   }
@@ -371,7 +386,7 @@ const backendToFrontendActivity = (backendActivity: BackendActivity, currentAppM
   return {
     id: idToUse,
     title: backendActivity?.title || 'Untitled Activity',
-    categoryId: typeof backendActivity?.category_id === 'number' ? backendActivity.category_id : 0, // Assuming 0 is an invalid/placeholder category_id
+    categoryId: typeof backendActivity?.category_id === 'number' ? backendActivity.category_id : 0, 
     todos: todos,
     createdAt: createdAtTimestamp,
     time: backendActivity?.time || "00:00",
@@ -706,8 +721,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const newWorkActivities: Activity[] = [];
         
         backendActivities.forEach(beAct => {
-          if (!beAct) { // Add null/undefined check for beAct itself
-            console.warn("[AppProvider] Encountered a null or undefined activity object from backend.");
+          if (!beAct) { 
+            console.warn("[AppProvider] Encountered a null or undefined activity object from backend GET /activities.");
             return; 
           }
           const feAct = backendToFrontendActivity(beAct, beAct.mode as AppMode); 
@@ -1206,7 +1221,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const response = await fetch(`${API_BASE_URL}/activities`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add activity: HTTP ${response.status}`));}
-      const newBackendActivity: BackendActivity = await response.json();
+      
+      const newBackendActivity: BackendActivity | null | undefined = await response.json().catch(() => null);
+      
       const newFrontendActivity = backendToFrontendActivity(newBackendActivity, appModeState); 
       
       if (newFrontendActivity.appMode === 'personal') {
@@ -1306,8 +1323,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add todo: HTTP ${response.status}`));}
       const newBackendTodo: BackendTodo = await response.json();
       const newFrontendTodo: Todo = { 
-        id: typeof newBackendTodo?.id === 'number' ? newBackendTodo.id : Date.now() + Math.random(), // Fallback for ID
-        text: newBackendTodo?.text || todoText, // Fallback for text
+        id: typeof newBackendTodo?.id === 'number' ? newBackendTodo.id : Date.now() + Math.random(), 
+        text: newBackendTodo?.text || todoText, 
         completed: false 
       };
       if (typeof newBackendTodo?.id !== 'number') {
@@ -1461,5 +1478,3 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
-
-    
