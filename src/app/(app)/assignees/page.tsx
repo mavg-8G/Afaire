@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/form";
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Assignee } from '@/lib/types';
-import { Trash2, PlusCircle, Edit3, XCircle, ArrowLeft, Users, Loader2, ShieldCheck } from 'lucide-react';
+import { Trash2, PlusCircle, Edit3, XCircle, ArrowLeft, Users, Loader2, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,10 +37,13 @@ import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 
 const MIN_USERNAME_LENGTH = 3;
+const MIN_PASSWORD_LENGTH = 6; // Align with ChangePasswordModal
 
 const assigneeFormSchemaBase = z.object({
-  name: z.string().min(1, "assigneeNameLabel"), // Placeholder, will be translated
+  name: z.string().min(1, "assigneeNameLabel"),
   username: z.string().min(MIN_USERNAME_LENGTH, "usernameMinLength"),
+  password: z.string().optional(), // Optional for edit, required for create
+  confirmPassword: z.string().optional(),
   isAdmin: z.boolean().optional().default(false),
 });
 
@@ -53,22 +56,42 @@ export default function ManageAssigneesPage() {
   const [assigneeToDelete, setAssigneeToDelete] = useState<number | null>(null);
   const [editingAssignee, setEditingAssignee] = useState<Assignee | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
 
   const assigneeFormSchema = React.useMemo(() => {
     return assigneeFormSchemaBase.extend({
         name: z.string().min(1, t('assigneeNameLabel')),
         username: z.string()
                 .min(MIN_USERNAME_LENGTH, t('usernameMinLength', { length: MIN_USERNAME_LENGTH }))
-                .min(1,t('usernameIsRequired')), // Ensure not empty, applies to both create and edit
+                .min(1,t('usernameIsRequired')),
+        password: z.string().optional(), // Keep optional base
+        confirmPassword: z.string().optional(),
         isAdmin: z.boolean().optional().default(false),
+    }).refine(data => { // Conditional validation for password on create
+        if (!editingAssignee && (!data.password || data.password.length < MIN_PASSWORD_LENGTH)) {
+            return false;
+        }
+        return true;
+    }, {
+        message: t('passwordMinLength', { length: MIN_PASSWORD_LENGTH }),
+        path: ['password'],
+    }).refine(data => {
+        if ((!editingAssignee && data.password) || (editingAssignee && data.password)) { // If password is being set/changed
+            return data.password === data.confirmPassword;
+        }
+        return true; // No password change, no need to confirm
+    }, {
+        message: t('passwordUpdateErrorPasswordsDoNotMatch'),
+        path: ['confirmPassword'],
     });
-  }, [t]);
+  }, [t, editingAssignee]);
 
 
   const form = useForm<AssigneeFormData>({
     resolver: zodResolver(assigneeFormSchema),
-    defaultValues: { name: "", username: "", isAdmin: false },
-    context: { editing: !!editingAssignee }, 
+    defaultValues: { name: "", username: "", password: "", confirmPassword: "", isAdmin: false },
   });
 
   useEffect(() => {
@@ -80,9 +103,15 @@ export default function ManageAssigneesPage() {
   useEffect(() => {
     form.trigger(); 
     if (editingAssignee) {
-      form.reset({ name: editingAssignee.name, username: editingAssignee.username || "", isAdmin: !!editingAssignee.isAdmin });
+      form.reset({ 
+        name: editingAssignee.name, 
+        username: editingAssignee.username || "", 
+        isAdmin: !!editingAssignee.isAdmin,
+        password: "", // Clear password fields on edit
+        confirmPassword: "" 
+      });
     } else {
-      form.reset({ name: "", username: "", isAdmin: false });
+      form.reset({ name: "", username: "", password: "", confirmPassword: "", isAdmin: false });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingAssignee, form.reset, form.trigger]);
@@ -92,16 +121,22 @@ export default function ManageAssigneesPage() {
     setIsSubmitting(true);
     try {
       if (editingAssignee) {
-        // Pass name, username, and isAdmin for update
-        // Note: Backend currently doesn't support isAdmin update. This is for frontend consistency if backend is updated.
-        await updateAssignee(editingAssignee.id, { name: data.name, username: data.username, isAdmin: data.isAdmin });
+        await updateAssignee(editingAssignee.id, { 
+          name: data.name, 
+          username: data.username, 
+          isAdmin: data.isAdmin 
+        }, data.password && data.password.length >= MIN_PASSWORD_LENGTH ? data.password : undefined);
         setEditingAssignee(null);
       } else {
-        await addAssignee(data.name, data.username, data.password, data.isAdmin); // Added data.isAdmin
+        if (!data.password) { // Should be caught by zod, but as a safeguard
+            form.setError("password", { type: "manual", message: t('passwordIsRequiredForCreation') });
+            setIsSubmitting(false);
+            return;
+        }
+        await addAssignee(data.name, data.username, data.password, data.isAdmin);
       }
-      form.reset({ name: "", username: "", isAdmin: false });
+      form.reset({ name: "", username: "", password: "", confirmPassword: "", isAdmin: false });
     } catch (error) {
-      // Error should be handled by AppProvider's toast, but console.error is still good
       console.error("Failed to save assignee:", error);
     } finally {
       setIsSubmitting(false);
@@ -115,7 +150,7 @@ export default function ManageAssigneesPage() {
       setAssigneeToDelete(null);
       if (editingAssignee?.id === assigneeId) {
         setEditingAssignee(null);
-        form.reset({ name: "", username: "", isAdmin: false });
+        form.reset({ name: "", username: "", password: "", confirmPassword: "", isAdmin: false });
       }
     } catch (error) {
       console.error("Failed to delete assignee:", error);
@@ -130,7 +165,7 @@ export default function ManageAssigneesPage() {
 
   const handleCancelEdit = () => {
     setEditingAssignee(null);
-    form.reset({ name: "", username: "", isAdmin: false });
+    form.reset({ name: "", username: "", password: "", confirmPassword: "", isAdmin: false });
   };
 
   return (
@@ -186,6 +221,68 @@ export default function ManageAssigneesPage() {
                   />
                   <FormField
                     control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{editingAssignee ? t('newPasswordOptionalLabel') : t('passwordLabel')}</FormLabel>
+                        <FormControl>
+                           <div className="relative">
+                            <Input 
+                                type={showPassword ? "text" : "password"}
+                                placeholder={editingAssignee ? t('leaveBlankToKeepCurrent') : t('enterPasswordPlaceholder')} 
+                                {...field} 
+                                disabled={isSubmitting || isAppStoreLoading}
+                                className="pr-10"
+                            />
+                            <Button
+                              type="button" variant="ghost" size="icon"
+                              className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
+                              onClick={() => setShowPassword(!showPassword)}
+                              disabled={isSubmitting || isAppStoreLoading}
+                            >
+                              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </Button>
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  {/* Confirm Password Field - shown if password field has content */}
+                 {(form.watch('password') || !editingAssignee) && (
+                    <FormField
+                        control={form.control}
+                        name="confirmPassword"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>{t('confirmPasswordLabel')}</FormLabel>
+                            <FormControl>
+                            <div className="relative">
+                                <Input 
+                                    type={showConfirmPassword ? "text" : "password"}
+                                    placeholder={t('confirmPasswordPlaceholder')} 
+                                    {...field} 
+                                    disabled={isSubmitting || isAppStoreLoading}
+                                    className="pr-10"
+                                />
+                                 <Button
+                                  type="button" variant="ghost" size="icon"
+                                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
+                                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                  disabled={isSubmitting || isAppStoreLoading}
+                                >
+                                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                </Button>
+                            </div>
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                 )}
+
+                  <FormField
+                    control={form.control}
                     name="isAdmin"
                     render={({ field }) => (
                       <FormItem className="flex flex-row items-center space-x-2 space-y-0">
@@ -193,7 +290,7 @@ export default function ManageAssigneesPage() {
                           <Checkbox
                             checked={field.value}
                             onCheckedChange={field.onChange}
-                            disabled={isSubmitting || isAppStoreLoading || (!!editingAssignee)} // Disable for editing until backend supports it
+                            disabled={isSubmitting || isAppStoreLoading} 
                             aria-labelledby="is-admin-label"
                           />
                         </FormControl>
@@ -204,9 +301,6 @@ export default function ManageAssigneesPage() {
                       </FormItem>
                     )}
                   />
-                  {editingAssignee && (
-                    <p className="text-xs text-muted-foreground">{t('adminStatusEditDisabled')}</p>
-                  )}
                   <div className="flex space-x-2">
                     <Button type="submit" className="flex-grow" disabled={isSubmitting || isAppStoreLoading}>
                       {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : (editingAssignee ? <Edit3 className="mr-2 h-5 w-5" /> : <PlusCircle className="mr-2 h-5 w-5" />)}
@@ -286,4 +380,3 @@ export default function ManageAssigneesPage() {
     </div>
   );
 }
-    

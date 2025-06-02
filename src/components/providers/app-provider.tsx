@@ -4,11 +4,13 @@ import type { ReactNode } from 'react';
 import React, { createContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type {
   Activity, Todo, Category, AppMode, RecurrenceRule, UINotification, HistoryLogEntry, HistoryLogActionKey, Translations, Assignee, PomodoroPhase,
-  BackendCategoryCreatePayload, BackendCategory, BackendUser, BackendUserCreatePayload, BackendUserUpdatePayload, BackendActivityCreatePayload, BackendActivityUpdatePayload, BackendActivity, BackendTodoCreate, BackendHistory, RecurrenceType, BackendCategoryMode, BackendRepeatMode, BackendTodo
+  BackendCategoryCreatePayload, BackendCategory, BackendUser, BackendUserCreatePayload, BackendUserUpdatePayload, BackendActivityCreatePayload, BackendActivityUpdatePayload, BackendActivity, BackendTodoCreate, BackendHistory, RecurrenceType, BackendCategoryMode, BackendRepeatMode, BackendTodo,
+  Token, DecodedToken, BackendHistoryCreatePayload, BackendCategoryUpdatePayload
 } from '@/lib/types';
-import { HARDCODED_APP_PIN } from '@/lib/constants';
+import { HARDCODED_APP_PIN, DEFAULT_JWT_SECRET_KEY } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
+import * as jose from 'jose';
 import {
   isSameDay, formatISO, parseISO,
   addDays, addWeeks, addMonths,
@@ -28,6 +30,7 @@ import { enUS, es, fr } from 'date-fns/locale';
 import { useTheme } from 'next-themes';
 
 const API_BASE_URL = 'https://afaire.is-cool.dev/api';
+const JWT_SECRET_KEY_FOR_DECODING = process.env.NEXT_PUBLIC_JWT_SECRET_KEY || DEFAULT_JWT_SECRET_KEY;
 
 export interface AppContextType {
   activities: Activity[];
@@ -51,29 +54,26 @@ export interface AppContextType {
   updateActivity: (activityId: number, updates: Partial<Omit<Activity, 'id'>>, originalActivity?: Activity) => Promise<void>;
   deleteActivity: (activityId: number) => Promise<void>;
   toggleOccurrenceCompletion: (masterActivityId: number, occurrenceDateTimestamp: number, completed: boolean) => void;
-  addTodoToActivity: (activityId: number, todoText: string) => Promise<void>;
-  updateTodoInActivity: (activityId: number, todoId: number, updates: Partial<Todo>) => void;
+  addTodoToActivity: (activityId: number, todoText: string, completed?: boolean) => Promise<void>;
+  updateTodoInActivity: (activityId: number, todoId: number, updates: Partial<Todo>) => Promise<void>;
   deleteTodoFromActivity: (activityId: number, todoId: number) => Promise<void>;
   getCategoryById: (categoryId: number) => Category | undefined;
   addCategory: (name: string, iconName: string, mode: AppMode | 'all') => Promise<void>;
   updateCategory: (categoryId: number, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => Promise<void>;
   deleteCategory: (categoryId: number) => Promise<void>;
-  addAssignee: (name: string, username?: string, password?: string, isAdmin?: boolean) => Promise<void>;
-  updateAssignee: (assigneeId: number, updates: Partial<Pick<Assignee, 'name' | 'username' | 'isAdmin'>>) => Promise<void>;
+  addAssignee: (name: string, username: string, password?: string, isAdmin?: boolean) => Promise<void>;
+  updateAssignee: (assigneeId: number, updates: Partial<Pick<Assignee, 'name' | 'username' | 'isAdmin'>>, newPassword?: string) => Promise<void>;
   deleteAssignee: (assigneeId: number) => Promise<void>;
   getAssigneeById: (assigneeId: number) => Assignee | undefined;
   isLoading: boolean;
   error: string | null;
 
   isAuthenticated: boolean;
-  setIsAuthenticated: (value: boolean, rememberMe?: boolean) => void;
-  loginAttempts: number;
-  setLoginAttempts: (attempts: number) => void;
-  lockoutEndTime: number | null;
-  setLockoutEndTime: (timestamp: number | null) => void;
-  sessionExpiryTimestamp: number | null;
+  login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
-  logPasswordChange: () => void;
+  changePassword: (oldPassword: string, newPassword: string) => Promise<boolean>;
+  getCurrentUserId: () => number | null;
+
 
   uiNotifications: UINotification[];
   addUINotification: (data: Omit<UINotification, 'id' | 'timestamp' | 'read'>) => void;
@@ -82,7 +82,7 @@ export interface AppContextType {
   clearAllUINotifications: () => void;
 
   historyLog: HistoryLogEntry[];
-  addHistoryLogEntry: (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope?: HistoryLogEntry['scope']) => void;
+  addHistoryLogEntry: (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope?: HistoryLogEntry['scope']) => Promise<void>;
 
   systemNotificationPermission: NotificationPermission | null;
   requestSystemNotificationPermission: () => Promise<void>;
@@ -107,19 +107,10 @@ export interface AppContextType {
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities_v3_api_backend_driven';
-const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities_v3_api_backend_driven';
-const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode';
-const LOCAL_STORAGE_KEY_IS_AUTHENTICATED = 'todoFlowIsAuthenticated';
-const LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS = 'todoFlowLoginAttempts';
-const LOCAL_STORAGE_KEY_LOCKOUT_END_TIME = 'todoFlowLockoutEndTime';
-const LOCAL_STORAGE_KEY_SESSION_EXPIRY = 'todoFlowSessionExpiry';
-const LOCAL_STORAGE_KEY_UI_NOTIFICATIONS = 'todoFlowUINotifications_v1';
-const LOCAL_STORAGE_KEY_APP_PIN = 'todoFlowAppPin';
-
-
-const SESSION_DURATION_24_HOURS_MS = 24 * 60 * 60 * 1000;
-const SESSION_DURATION_30_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode_v2';
+const LOCAL_STORAGE_KEY_JWT = 'todoFlowJWT_v1';
+const LOCAL_STORAGE_KEY_UI_NOTIFICATIONS = 'todoFlowUINotifications_v2';
+const LOCAL_STORAGE_KEY_APP_PIN = 'todoFlowAppPin_v2';
 
 
 const getIconComponent = (iconName: string): Icons.LucideIcon => {
@@ -130,7 +121,7 @@ const getIconComponent = (iconName: string): Icons.LucideIcon => {
 
 let logoutChannel: BroadcastChannel | null = null;
 if (typeof window !== 'undefined') {
-  logoutChannel = new BroadcastChannel('todoFlowLogoutChannel');
+  logoutChannel = new BroadcastChannel('todoFlowLogoutChannel_v2');
 }
 
 const getStartOfDayUtil = (date: Date): Date => {
@@ -279,11 +270,6 @@ function hslToHex(h: number, s: number, l: number): string {
   return `#${toHexByte(f(0))}${toHexByte(f(8))}${toHexByte(f(4))}`;
 }
 
-const POMODORO_WORK_DURATION_SECONDS = 25 * 60;
-const POMODORO_SHORT_BREAK_DURATION_SECONDS = 5 * 60;
-const POMODORO_LONG_BREAK_DURATION_SECONDS = 15 * 60;
-const POMODORO_CYCLES_BEFORE_LONG_BREAK = 4;
-
 const backendToFrontendCategory = (backendCat: BackendCategory): Category => ({
   id: backendCat.id,
   name: backendCat.name,
@@ -301,7 +287,7 @@ const backendToFrontendAssignee = (backendUser: BackendUser): Assignee => ({
   id: backendUser.id,
   name: backendUser.name,
   username: backendUser.username,
-  isAdmin: backendUser.is_admin || false, // Map is_admin, default to false
+  isAdmin: backendUser.is_admin || false,
 });
 
 const backendToFrontendActivity = (backendActivity: BackendActivity | null | undefined, currentAppMode: AppMode): Activity => {
@@ -310,7 +296,7 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
     : 'ID_MISSING_OR_INVALID_IN_BACKEND_RESPONSE';
 
   if (!backendActivity || typeof backendActivity !== 'object') {
-    console.error(`[AppProvider] CRITICAL: backendToFrontendActivity received invalid backendActivity object for ID '${activityIdForLog}'. Using fallback. Received type: ${typeof backendActivity}, value:`, typeof backendActivity === 'object' ? JSON.stringify(backendActivity) : backendActivity);
+    console.error(`[AppProvider] CRITICAL: backendToFrontendActivity received invalid backendActivity object for ID '${activityIdForLog}'. Using fallback. Received:`, typeof backendActivity === 'object' ? JSON.stringify(backendActivity) : backendActivity);
     return {
       id: Date.now() + Math.random(),
       title: 'Error: Invalid Activity Data from Backend',
@@ -335,27 +321,24 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
     }
   } else {
     console.warn(`[AppProvider] Warning: backendActivity.start_date is missing, null, or invalid in response for activity ID ${activityIdForLog}:`, startDateFromBackend === undefined ? 'FIELD_MISSING' : startDateFromBackend, ". Using fallback createdAt to Date.now().");
-    createdAtTimestamp = Date.now(); // Fallback
+    createdAtTimestamp = Date.now();
   }
   
   let daysOfWeekArray: number[] = [];
   if (backendActivity.days_of_week && typeof backendActivity.days_of_week === 'string') {
-    daysOfWeekArray = backendActivity.days_of_week.split(',').map(dayStr => parseInt(dayStr.trim(), 10)).filter(num => !isNaN(num));
-  } else if (Array.isArray(backendActivity.days_of_week)) {
-    // Handle if backend sends it as an array of numbers or strings directly
-    daysOfWeekArray = backendActivity.days_of_week.map(day => parseInt(String(day).trim(), 10)).filter(num => !isNaN(num));
+    daysOfWeekArray = backendActivity.days_of_week.split(',').map(dayStr => parseInt(dayStr.trim(), 10)).filter(num => !isNaN(num) && num >= 0 && num <=6);
   }
 
 
   const recurrenceRule: RecurrenceRule = {
-    type: backendActivity.repeat_mode as RecurrenceType,
+    type: backendActivity.repeat_mode as RecurrenceType, // Assuming BackendRepeatMode and RecurrenceType are compatible
     endDate: backendActivity.end_date ? parseISO(backendActivity.end_date).getTime() : null,
-    daysOfWeek: daysOfWeekArray,
+    daysOfWeek: daysOfWeekArray.length > 0 ? daysOfWeekArray : undefined, // Only set if there are valid days
     dayOfMonth: backendActivity.day_of_month ?? undefined,
   };
   
  const todos: Todo[] = [];
- if (Array.isArray(backendActivity.todos)) {
+  if (Array.isArray(backendActivity.todos)) {
     backendActivity.todos.forEach((bt: BackendTodo, index: number) => {
         const todoId = typeof bt?.id === 'number' ? bt.id : Date.now() + Math.random() + index;
         if (typeof bt?.id !== 'number') {
@@ -367,7 +350,7 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
         todos.push({
           id: todoId,
           text: bt?.text || 'Untitled Todo from Backend',
-          completed: false, 
+          completed: bt?.complete || false, // Use 'complete' from backend
         });
       });
   } else {
@@ -403,9 +386,9 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
 };
 
 const frontendToBackendActivityPayload = (
-  activity: Omit<Activity, 'id' | 'completedOccurrences' | 'isRecurringInstance' | 'originalInstanceDate' | 'masterActivityId'> & { todos?: Omit<Todo, 'id' | 'completed'>[] },
+  activity: Omit<Activity, 'id' | 'completedOccurrences' | 'isRecurringInstance' | 'originalInstanceDate' | 'masterActivityId'> & { todos?: BackendTodoCreate[] },
   isUpdate: boolean = false
-): BackendActivityCreatePayload | BackendActivityUpdatePayload => {
+): Partial<BackendActivityCreatePayload | BackendActivityUpdatePayload> => {
   const payload: Partial<BackendActivityCreatePayload & BackendActivityUpdatePayload> = {
     title: activity.title,
     start_date: new Date(activity.createdAt).toISOString(),
@@ -418,6 +401,7 @@ const frontendToBackendActivityPayload = (
   if (activity.recurrence && activity.recurrence.type !== 'none') {
     payload.repeat_mode = activity.recurrence.type as BackendRepeatMode;
     payload.end_date = activity.recurrence.endDate ? new Date(activity.recurrence.endDate).toISOString() : null;
+    // Backend expects list of strings for days_of_week
     payload.days_of_week = activity.recurrence.type === 'weekly' ? (activity.recurrence.daysOfWeek || []).map(String) : null;
     payload.day_of_month = activity.recurrence.type === 'monthly' ? (activity.recurrence.dayOfMonth ?? null) : null;
   } else {
@@ -435,21 +419,21 @@ const frontendToBackendActivityPayload = (
 
 
   if (!isUpdate && activity.todos && activity.todos.length > 0) {
-    (payload as BackendActivityCreatePayload).todos = activity.todos.map(t => ({ text: t.text }));
+    (payload as BackendActivityCreatePayload).todos = activity.todos.map(t => ({ text: t.text, complete: t.completed }));
   } else if (!isUpdate) {
     (payload as BackendActivityCreatePayload).todos = [];
   }
 
-  return payload as BackendActivityCreatePayload | BackendActivityUpdatePayload;
+  return payload;
 };
 
 const backendToFrontendHistory = (backendHistory: BackendHistory): HistoryLogEntry => ({
   id: backendHistory.id,
   timestamp: parseISO(backendHistory.timestamp).getTime(),
-  actionKey: backendHistory.action as HistoryLogActionKey,
+  actionKey: backendHistory.action as HistoryLogActionKey, // Assuming backend actions match keys
   backendAction: backendHistory.action,
   backendUserId: backendHistory.user_id,
-  scope: 'account',
+  scope: 'account', // Default scope, can be refined if backend provides more info
   details: { rawBackendAction: backendHistory.action }
 });
 
@@ -475,11 +459,11 @@ const createApiErrorToast = (
     err: unknown,
     toastFn: (options: any) => void,
     defaultTitleKey: keyof Translations,
-    operationType: 'loading' | 'adding' | 'updating' | 'deleting',
+    operationType: 'loading' | 'adding' | 'updating' | 'deleting' | 'authenticating' | 'logging',
     translationFn: (key: keyof Translations, params?: any) => string,
     endpoint?: string
   ) => {
-    const error = err as Error & { cause?: unknown, name?: string };
+    const error = err as Error & { cause?: unknown, name?: string, response?: Response };
     let consoleMessage = `[AppProvider] Failed ${operationType} for endpoint: ${endpoint || 'N/A'}.
 Error Name: ${error.name || 'UnknownError'}
 Error Message: ${error.message || 'No message'}.`;
@@ -493,6 +477,10 @@ Error Message: ${error.message || 'No message'}.`;
         }
     } else if (error.cause) {
         consoleMessage += `\nCause: ${String(error.cause)}`;
+    }
+     if (error.response && error.response.status === 401 && operationType !== 'authenticating') {
+       // Handled by global 401 check, no separate toast here
+       return;
     }
 
     console.error(consoleMessage);
@@ -525,6 +513,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [assignees, setAllAssignees] = useState<Assignee[]>([]);
   const [appModeState, setAppModeState] = useState<AppMode>('personal');
+  const [jwtToken, setJwtToken] = useState<string | null>(null);
+  const [decodedJwt, setDecodedJwt] = useState<DecodedToken | null>(null);
 
   const [isLoadingState, setIsLoadingState] = useState<boolean>(true);
   const [isActivitiesLoading, setIsActivitiesLoading] = useState(true);
@@ -539,10 +529,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const dateFnsLocale = useMemo(() => (locale === 'es' ? es : locale === 'fr' ? fr : enUS), [locale]);
   const [lastNotificationCheckDay, setLastNotificationCheckDay] = useState<number | null>(null);
   const [notifiedToday, setNotifiedToday] = useState<Set<string>>(new Set());
-  const [isAuthenticated, setIsAuthenticatedState] = useState<boolean>(false);
-  const [loginAttempts, setLoginAttemptsState] = useState<number>(0);
-  const [lockoutEndTime, setLockoutEndTimeState] = useState<number | null>(null);
-  const [sessionExpiryTimestamp, setSessionExpiryTimestampState] = useState<number | null>(null);
+  
   const [uiNotifications, setUINotifications] = useState<UINotification[]>([]);
   const [historyLog, setHistoryLog] = useState<HistoryLogEntry[]>([]);
   const { theme, resolvedTheme } = useTheme();
@@ -557,6 +544,110 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [isAppLocked, setIsAppLocked] = useState(false);
   const [appPinState, setAppPinState] = useState<string | null>(HARDCODED_APP_PIN);
+
+  const isAuthenticated = !!jwtToken;
+
+
+  const decodeAndSetToken = useCallback(async (token: string | null) => {
+    if (!token) {
+      setJwtToken(null);
+      setDecodedJwt(null);
+      if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
+      return;
+    }
+    try {
+      const secret = new TextEncoder().encode(JWT_SECRET_KEY_FOR_DECODING);
+      const { payload } = await jose.jwtVerify(token, secret, { algorithms: ['HS256'] });
+      setJwtToken(token);
+      setDecodedJwt(payload as DecodedToken);
+      if (typeof window !== 'undefined') localStorage.setItem(LOCAL_STORAGE_KEY_JWT, token);
+    } catch (e) {
+      console.error("[AppProvider] Failed to verify/decode JWT:", e);
+      setJwtToken(null);
+      setDecodedJwt(null);
+      if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
+      // Optionally logout or show error
+    }
+  }, []);
+  
+  const getCurrentUserId = useCallback((): number | null => {
+    return decodedJwt?.sub ? parseInt(decodedJwt.sub, 10) : null;
+  }, [decodedJwt]);
+
+
+  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}): Promise<Response> => {
+    if (!jwtToken) {
+      // This case should ideally not be hit if isAuthenticated guards are used properly
+      // but as a fallback, force logout.
+      // logout(); // This creates a loop if called during initial data fetch when token is null
+      throw new Error("No JWT token available for authenticated request.");
+    }
+
+    const headers = new Headers(options.headers || {});
+    headers.append('Authorization', `Bearer ${jwtToken}`);
+    if (!(options.body instanceof FormData)) { // Don't set Content-Type for FormData
+        if (!headers.has('Content-Type') && options.method && ['POST', 'PUT', 'PATCH'].includes(options.method.toUpperCase())) {
+             headers.append('Content-Type', 'application/json');
+        }
+    }
+
+
+    const response = await fetch(url, { ...options, headers });
+
+    if (response.status === 401) {
+        logout(); // Token is invalid or expired, log out
+        throw new Error(`Unauthorized: ${response.statusText}`); // Propagate error
+    }
+    return response;
+  }, [jwtToken]);
+
+
+  const logout = useCallback(() => {
+    addHistoryLogEntry('historyLogLogout', undefined, 'account');
+    decodeAndSetToken(null); // Clears token from state and localStorage
+    setIsAppLocked(false); // Unlock app on logout
+
+    // Clear other session-related data if any, e.g., history, notifications for privacy
+    setHistoryLog([]);
+    setUINotifications([]);
+
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'RESET_TIMER', payload: { locale } });
+    }
+    if (logoutChannel) logoutChannel.postMessage('logout_event_v2');
+  }, [decodeAndSetToken, locale]); // addHistoryLogEntry removed from deps to avoid cycle, it will use getCurrentUserId
+
+  const addHistoryLogEntry = useCallback(async (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope: HistoryLogEntry['scope'] = 'account') => {
+    const currentUserId = getCurrentUserId();
+    if (!currentUserId) {
+        console.warn("[AppProvider] Cannot add history log: User ID not available.");
+        return;
+    }
+
+    const payload: BackendHistoryCreatePayload = {
+        action: actionKey, // Assuming actionKey matches backend's expected action string
+        user_id: currentUserId,
+    };
+    // Add details to action string if needed, or send separately if backend supports
+    const actionWithDetails = details ? `${actionKey} ${JSON.stringify(details)}` : actionKey;
+    payload.action = actionWithDetails.substring(0, 255); // Truncate if too long for backend
+
+    try {
+        const response = await fetchWithAuth(`${API_BASE_URL}/history`, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+            throw new Error(formatBackendError(errorData, `Failed to log history: HTTP ${response.status}`));
+        }
+        const newBackendHistoryEntry: BackendHistory = await response.json();
+        setHistoryLog(prevLog => [backendToFrontendHistory(newBackendHistoryEntry), ...prevLog.slice(0, 99)]);
+    } catch (err) {
+        // Don't show toast for history logging failure to avoid spamming user
+        console.error(`[AppProvider] Failed logging history for action ${actionKey}:`, (err as Error).message);
+    }
+  }, [fetchWithAuth, getCurrentUserId]);
 
 
   useEffect(() => {
@@ -601,18 +692,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (isAssigneesLoading) return [];
     return assignees;
   }, [assignees, isAssigneesLoading]);
-
-
-  const addHistoryLogEntry = useCallback((actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope: HistoryLogEntry['scope'] = 'account') => {
-    const newEntry: HistoryLogEntry = {
-      id: Date.now() + Math.random(),
-      timestamp: Date.now(),
-      actionKey,
-      details,
-      scope,
-    };
-    setHistoryLog(prevLog => [newEntry, ...prevLog.slice(0, 99)]);
-  }, []);
 
   const stableAddUINotification = useCallback((data: Omit<UINotification, 'id' | 'timestamp' | 'read'>) => {
     const newNotification: UINotification = {
@@ -664,157 +743,79 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [t, toast, showSystemNotification]);
 
-  const logout = useCallback(() => {
-    addHistoryLogEntry('historyLogLogout', undefined, 'account');
-    setIsAuthenticatedState(false);
-    setLoginAttemptsState(0);
-    setLockoutEndTimeState(null);
-    setSessionExpiryTimestampState(null);
-    setIsAppLocked(false);
-
-    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({ type: 'RESET_TIMER', payload: { locale } });
-    }
-
-    if (typeof window !== 'undefined') {
-        localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
-        localStorage.removeItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
-        localStorage.removeItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
-        localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
-    }
-    if (logoutChannel) logoutChannel.postMessage('logout_event');
-  }, [addHistoryLogEntry, locale]);
 
  useEffect(() => {
-    let initialAuth = false;
-    const loadClientSideData = () => {
-      try {
-        const storedPersonalActivities = localStorage.getItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES);
-        if (storedPersonalActivities) setPersonalActivities(JSON.parse(storedPersonalActivities));
-        const storedWorkActivities = localStorage.getItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES);
-        if (storedWorkActivities) setWorkActivities(JSON.parse(storedWorkActivities));
-      } catch (e) { console.error("[AppProvider] Failed to parse activities from localStorage.", e); setError(prev => prev ? `${prev} Local activities failed. ` : "Local activities failed. ");}
-
+    const loadClientSideDataAndFetchInitial = async () => {
+      setIsLoadingState(true);
+      
       const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
       if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) setAppModeState(storedAppMode);
 
-      const storedAuth = localStorage.getItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);
-      const storedExpiry = localStorage.getItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY);
-      if (storedAuth === 'true' && storedExpiry) {
-          const expiryTime = parseInt(storedExpiry, 10);
-          if (Date.now() > expiryTime) {
-            initialAuth = false;
-            logout();
-          } else {
-            initialAuth = true;
-            setSessionExpiryTimestampState(expiryTime);
-          }
-      } else {
-        initialAuth = false;
+      const storedToken = localStorage.getItem(LOCAL_STORAGE_KEY_JWT);
+      if (storedToken) {
+        await decodeAndSetToken(storedToken); // This sets jwtToken and decodedJwt
       }
-      setIsAuthenticatedState(initialAuth);
-
-      const storedAttempts = localStorage.getItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
-      setLoginAttemptsState(storedAttempts ? parseInt(storedAttempts, 10) : 0);
-      const storedLockoutTime = localStorage.getItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME);
-      setLockoutEndTimeState(storedLockoutTime ? parseInt(storedLockoutTime, 10) : null);
 
       const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
       if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
-
       if (typeof window !== 'undefined' && 'Notification' in window) setSystemNotificationPermission(Notification.permission);
-
       const storedPin = localStorage.getItem(LOCAL_STORAGE_KEY_APP_PIN);
       if (storedPin) setAppPinState(storedPin);
       else if (HARDCODED_APP_PIN) setAppPinState(HARDCODED_APP_PIN);
-    };
-    
-    const fetchInitialActivities = async () => {
-      setIsActivitiesLoading(true);
-      try {
-        const response = await fetch(`${API_BASE_URL}/activities`);
-        if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to fetch activities: HTTP ${response.status}`));}
-        const backendActivities: BackendActivity[] = await response.json();
-        
-        const newPersonalActivities: Activity[] = [];
-        const newWorkActivities: Activity[] = [];
-        
-        backendActivities.forEach(beAct => {
-          if (!beAct) {
-            console.warn("[AppProvider] Encountered a null or undefined activity object from backend GET /activities.");
-            return;
-          }
-          const feAct = backendToFrontendActivity(beAct, beAct.mode as AppMode);
-          if (feAct.appMode === 'personal') newPersonalActivities.push(feAct);
-          else if (feAct.appMode === 'work') newWorkActivities.push(feAct);
-        });
-        setPersonalActivities(newPersonalActivities);
-        setWorkActivities(newWorkActivities);
 
-      } catch (err) { createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`); setError(prev => prev ? `${prev} Activities failed. ` : "Activities failed. "); }
-      finally {
-        setIsActivitiesLoading(false);
+      // Fetch initial data if token is now set (meaning it was valid or just obtained)
+      if (jwtToken || storedToken) { // Check against current jwtToken OR storedToken if decodeAndSetToken is async
+        try {
+            setIsActivitiesLoading(true);
+            const actResponse = await fetchWithAuth(`${API_BASE_URL}/activities`);
+            if (!actResponse.ok) throw new Error(`Activities fetch failed: ${actResponse.statusText}`);
+            const backendActivities: BackendActivity[] = await actResponse.json();
+            const newPersonal: Activity[] = [], newWork: Activity[] = [];
+            backendActivities.forEach(beAct => {
+                if (!beAct) return;
+                const feAct = backendToFrontendActivity(beAct, beAct.mode as AppMode);
+                if (feAct.appMode === 'personal') newPersonal.push(feAct); else newWork.push(feAct);
+            });
+            setPersonalActivities(newPersonal); setWorkActivities(newWork);
+        } catch (err) { createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`); }
+        finally { setIsActivitiesLoading(false); }
+
+        try {
+            setIsCategoriesLoading(true);
+            const catResponse = await fetchWithAuth(`${API_BASE_URL}/categories`);
+            if (!catResponse.ok) throw new Error(`Categories fetch failed: ${catResponse.statusText}`);
+            const backendCategories: BackendCategory[] = await catResponse.json();
+            setAllCategories(backendCategories.map(cat => backendToFrontendCategory(cat)));
+        } catch (err) { createApiErrorToast(err, toast, "toastCategoryLoadErrorTitle", "loading", t, `${API_BASE_URL}/categories`); }
+        finally { setIsCategoriesLoading(false); }
+
+        try {
+            setIsAssigneesLoading(true);
+            const userResponse = await fetchWithAuth(`${API_BASE_URL}/users`);
+            if (!userResponse.ok) throw new Error(`Users fetch failed: ${userResponse.statusText}`);
+            const backendUsers: BackendUser[] = await userResponse.json();
+            setAllAssignees(backendUsers.map(user => backendToFrontendAssignee(user)));
+        } catch (err) { createApiErrorToast(err, toast, "toastAssigneeLoadErrorTitle", "loading", t, `${API_BASE_URL}/users`); }
+        finally { setIsAssigneesLoading(false); }
+
+        try {
+            setIsHistoryLoading(true);
+            const histResponse = await fetchWithAuth(`${API_BASE_URL}/history`);
+            if (!histResponse.ok) throw new Error(`History fetch failed: ${histResponse.statusText}`);
+            const backendHistoryItems: BackendHistory[] = await histResponse.json();
+            setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
+        } catch (err) { createApiErrorToast(err, toast, "historyLoadErrorTitle", "loading", t, `${API_BASE_URL}/history`); }
+        finally { setIsHistoryLoading(false); }
+      } else {
+        // No token, so skip fetching protected resources
+        setIsActivitiesLoading(false); setIsCategoriesLoading(false); setIsAssigneesLoading(false); setIsHistoryLoading(false);
       }
-    };
-
-    const fetchInitialCategories = async () => {
-      setIsCategoriesLoading(true);
-      try {
-        const response = await fetch(`${API_BASE_URL}/categories`);
-        if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to fetch categories: HTTP ${response.status}`));}
-        const backendCategories: BackendCategory[] = await response.json();
-        setAllCategories(backendCategories.map(cat => backendToFrontendCategory(cat)));
-      } catch (err) { createApiErrorToast(err, toast, "toastCategoryLoadErrorTitle", "loading", t, `${API_BASE_URL}/categories`); setError(prev => prev ? `${prev} Categories failed. ` : "Categories failed. "); setAllCategories([]); }
-      finally { setIsCategoriesLoading(false); }
-    };
-
-    const fetchInitialAssignees = async () => {
-      setIsAssigneesLoading(true);
-      try {
-        const response = await fetch(`${API_BASE_URL}/users`);
-        if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to fetch users: HTTP ${response.status}`));}
-        const backendUsers: BackendUser[] = await response.json();
-        setAllAssignees(backendUsers.map(user => backendToFrontendAssignee(user)));
-      } catch (err) { createApiErrorToast(err, toast, "toastAssigneeLoadErrorTitle", "loading", t, `${API_BASE_URL}/users`); setError(prev => prev ? `${prev} Assignees failed. ` : "Assignees failed. "); setAllAssignees([]); }
-      finally { setIsAssigneesLoading(false); }
-    };
-
-    const fetchInitialHistory = async () => {
-      setIsHistoryLoading(true);
-      try {
-        const response = await fetch(`${API_BASE_URL}/history`);
-        if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to fetch history: HTTP ${response.status}`));}
-        const backendHistoryItems: BackendHistory[] = await response.json();
-        setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
-      } catch (err) { createApiErrorToast(err, toast, "historyLoadErrorTitle", "loading", t, `${API_BASE_URL}/history`); setError(prev => prev ? `${prev} History failed. ` : "History failed. "); setHistoryLog([]);}
-      finally { setIsHistoryLoading(false); }
+      setIsLoadingState(false);
     };
     
-    const fetchAllData = async () => {
-        loadClientSideData();
-        await Promise.all([fetchInitialActivities(), fetchInitialCategories(), fetchInitialAssignees()]);
-        if (initialAuth) {
-            await fetchInitialHistory();
-        } else {
-            setIsHistoryLoading(false);
-        }
-        setIsLoadingState(false);
-    };
-    fetchAllData();
-  }, [logout, t, toast]);
+    loadClientSideDataAndFetchInitial();
+  }, [decodeAndSetToken, fetchWithAuth, t, toast, jwtToken]); // jwtToken dependency ensures re-fetch if token changes (e.g. after login)
 
-
-  useEffect(() => {
-    if (!isLoadingState && !isActivitiesLoading) {
-      localStorage.setItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES, JSON.stringify(personalActivities));
-    }
-  }, [personalActivities, isLoadingState, isActivitiesLoading]);
-
-  useEffect(() => {
-    if (!isLoadingState && !isActivitiesLoading) {
-      localStorage.setItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES, JSON.stringify(workActivities));
-    }
-  }, [workActivities, isLoadingState, isActivitiesLoading]);
 
   useEffect(() => {
     if (!isLoadingState) {
@@ -825,10 +826,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [appModeState, isLoadingState]);
 
-  useEffect(() => { if (!isLoadingState) { if (isAuthenticated) localStorage.setItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED, 'true'); else localStorage.removeItem(LOCAL_STORAGE_KEY_IS_AUTHENTICATED);}}, [isAuthenticated, isLoadingState]);
-  useEffect(() => { if (!isLoadingState) localStorage.setItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS, String(loginAttempts));}, [loginAttempts, isLoadingState]);
-  useEffect(() => { if (!isLoadingState) { if (lockoutEndTime === null) localStorage.removeItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME); else localStorage.setItem(LOCAL_STORAGE_KEY_LOCKOUT_END_TIME, String(lockoutEndTime));}}, [lockoutEndTime, isLoadingState]);
-  useEffect(() => { if (!isLoadingState) { if (sessionExpiryTimestamp === null) localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY); else localStorage.setItem(LOCAL_STORAGE_KEY_SESSION_EXPIRY, String(sessionExpiryTimestamp));}}, [sessionExpiryTimestamp, isLoadingState]);
   useEffect(() => { if(!isLoadingState) localStorage.setItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS, JSON.stringify(uiNotifications));}, [uiNotifications, isLoadingState]);
 
   useEffect(() => {
@@ -928,7 +925,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     if (!logoutChannel) return;
-    const handleLogoutMessage = (event: MessageEvent) => { if (event.data === 'logout_event' && isAuthenticated) logout();};
+    const handleLogoutMessage = (event: MessageEvent) => { if (event.data === 'logout_event_v2' && isAuthenticated) logout();}; // Use new event name
     logoutChannel.addEventListener('message', handleLogoutMessage);
     return () => { if (logoutChannel) logoutChannel.removeEventListener('message', handleLogoutMessage);};
   }, [isAuthenticated, logout]);
@@ -1014,7 +1011,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         if (phaseThatEnded === 'work') {
             titleKey = 'pomodoroWorkSessionEnded';
-            descriptionKey = (pomodoroCyclesCompleted > 0 && pomodoroCyclesCompleted % POMODORO_CYCLES_BEFORE_LONG_BREAK === 0)
+            descriptionKey = (pomodoroCyclesCompleted > 0 && pomodoroCyclesCompleted % 4 === 0) // Assuming 4 cycles for long break
                              ? 'pomodoroTakeALongBreak'
                              : 'pomodoroTakeAShortBreak';
         } else if (phaseThatEnded === 'shortBreak') {
@@ -1052,54 +1049,127 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     setAppModeState(mode);
   }, [appModeState, addHistoryLogEntry]);
+  
+  const login = useCallback(async (username: string, password: string): Promise<boolean> => {
+    setError(null);
+    const formData = new URLSearchParams();
+    formData.append('username', username);
+    formData.append('password', password);
 
-  const setIsAuthenticated = useCallback((value: boolean, rememberMe: boolean = false) => {
-    const wasAuthenticated = isAuthenticated;
-    setIsAuthenticatedState(value);
-    if (value && !wasAuthenticated) {
-        addHistoryLogEntry('historyLogLogin', undefined, 'account');
-        setHistoryLog([]);
-        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === "granted") {
-            const title = t('loginSuccessNotificationTitle');
-            const description = t('loginSuccessNotificationDescription');
-            stableAddUINotification({ title, description });
-            showSystemNotification(title, description);
+    try {
+      const response = await fetch(`${API_BASE_URL}/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formData.toString(),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(formatBackendError(errorData, `Login failed: HTTP ${response.status}`));
+      }
+      const tokenData: Token = await response.json();
+      await decodeAndSetToken(tokenData.access_token);
+      
+      // After successful login and token set, fetch initial data
+        setIsActivitiesLoading(true);
+        const actResponse = await fetchWithAuth(`${API_BASE_URL}/activities`);
+        if (!actResponse.ok) throw new Error(`Activities fetch failed: ${actResponse.statusText}`);
+        const backendActivities: BackendActivity[] = await actResponse.json();
+        const newPersonal: Activity[] = [], newWork: Activity[] = [];
+        backendActivities.forEach(beAct => {
+            if (!beAct) return;
+            const feAct = backendToFrontendActivity(beAct, beAct.mode as AppMode); // Use the mode from backend for initial sort
+            if (feAct.appMode === 'personal') newPersonal.push(feAct); else newWork.push(feAct);
+        });
+        setPersonalActivities(newPersonal); setWorkActivities(newWork);
+        setIsActivitiesLoading(false);
+
+        setIsCategoriesLoading(true);
+        const catResponse = await fetchWithAuth(`${API_BASE_URL}/categories`);
+        if (!catResponse.ok) throw new Error(`Categories fetch failed: ${catResponse.statusText}`);
+        const backendCategories: BackendCategory[] = await catResponse.json();
+        setAllCategories(backendCategories.map(cat => backendToFrontendCategory(cat)));
+        setIsCategoriesLoading(false);
+
+        setIsAssigneesLoading(true);
+        const userResponse = await fetchWithAuth(`${API_BASE_URL}/users`);
+        if (!userResponse.ok) throw new Error(`Users fetch failed: ${userResponse.statusText}`);
+        const backendUsers: BackendUser[] = await userResponse.json();
+        setAllAssignees(backendUsers.map(user => backendToFrontendAssignee(user)));
+        setIsAssigneesLoading(false);
+
+        setIsHistoryLoading(true);
+        const histResponse = await fetchWithAuth(`${API_BASE_URL}/history`);
+        if (!histResponse.ok) throw new Error(`History fetch failed: ${histResponse.statusText}`);
+        const backendHistoryItems: BackendHistory[] = await histResponse.json();
+        setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
+        setIsHistoryLoading(false);
+
+
+      addHistoryLogEntry('historyLogLogin', undefined, 'account');
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === "granted") {
+        const title = t('loginSuccessNotificationTitle');
+        const description = t('loginSuccessNotificationDescription');
+        stableAddUINotification({ title, description });
+        showSystemNotification(title, description);
+      }
+      return true;
+    } catch (err) {
+      createApiErrorToast(err, toast, "loginErrorTitle", "authenticating", t, `${API_BASE_URL}/token`);
+      setError((err as Error).message);
+      return false;
+    }
+  }, [decodeAndSetToken, fetchWithAuth, addHistoryLogEntry, t, toast, stableAddUINotification, showSystemNotification]);
+
+  const changePassword = useCallback(async (oldPassword: string, newPassword: string): Promise<boolean> => {
+    const currentUserId = getCurrentUserId();
+    if (!currentUserId) {
+        toast({ variant: "destructive", title: t('loginErrorTitle'), description: "User not identified for password change."});
+        return false;
+    }
+    setError(null);
+    const payload = { old_password: oldPassword, new_password: newPassword };
+    try {
+        const response = await fetchWithAuth(`${API_BASE_URL}/users/${currentUserId}/change-password`, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+            throw new Error(formatBackendError(errorData, `Password change failed: HTTP ${response.status}`));
         }
+        addHistoryLogEntry('historyLogPasswordChangeAttempt', undefined, 'account'); // Renamed key
+        toast({ title: t('passwordUpdateSuccessTitle'), description: t('passwordUpdateSuccessDescription') });
+        return true;
+    } catch (err) {
+        createApiErrorToast(err, toast, "changePasswordModalTitle", "updating", t, `${API_BASE_URL}/users/${currentUserId}/change-password`);
+        setError((err as Error).message);
+        return false;
     }
-    if (value) {
-        const newExpiryTimestamp = Date.now() + (rememberMe ? SESSION_DURATION_30_DAYS_MS : SESSION_DURATION_24_HOURS_MS);
-        setSessionExpiryTimestampState(newExpiryTimestamp);
-    } else {
-        setSessionExpiryTimestampState(null);
-    }
-  }, [isAuthenticated, addHistoryLogEntry, t, stableAddUINotification, showSystemNotification]);
+  }, [fetchWithAuth, getCurrentUserId, addHistoryLogEntry, t, toast]);
 
-  const logPasswordChange = useCallback(() => addHistoryLogEntry('historyLogPasswordChange', undefined, 'account'), [addHistoryLogEntry]);
-  const setLoginAttempts = useCallback((attempts: number) => setLoginAttemptsState(attempts), []);
-  const setLockoutEndTime = useCallback((timestamp: number | null) => setLockoutEndTimeState(timestamp), []);
 
   const addCategory = useCallback(async (name: string, iconName: string, mode: AppMode | 'all') => {
     setError(null);
     const payload: BackendCategoryCreatePayload = { name, icon_name: iconName, mode: frontendToBackendCategoryMode(mode) };
     try {
-      const response = await fetch(`${API_BASE_URL}/categories`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await fetchWithAuth(`${API_BASE_URL}/categories`, { method: 'POST', body: JSON.stringify(payload) });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add category: HTTP ${response.status}`));}
       const newBackendCategory: BackendCategory = await response.json();
       setAllCategories(prev => [...prev, backendToFrontendCategory(newBackendCategory)]);
       toast({ title: t('toastCategoryAddedTitle'), description: t('toastCategoryAddedDescription', { categoryName: name }) });
       addHistoryLogEntry(mode === 'personal' ? 'historyLogAddCategoryPersonal' : mode === 'work' ? 'historyLogAddCategoryWork' : 'historyLogAddCategoryAll', { name }, 'category');
     } catch (err) { createApiErrorToast(err, toast, "toastCategoryAddedTitle", "adding", t, `${API_BASE_URL}/categories`); setError((err as Error).message); throw err; }
-  }, [toast, t, addHistoryLogEntry]);
+  }, [fetchWithAuth, toast, t, addHistoryLogEntry]);
 
   const updateCategory = useCallback(async (categoryId: number, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => {
     setError(null);
-    const payload: Partial<BackendCategoryCreatePayload> = {};
+    const payload: BackendCategoryUpdatePayload = {};
     if (updates.name !== undefined) payload.name = updates.name;
     if (updates.iconName !== undefined) payload.icon_name = updates.iconName;
     if (updates.mode !== undefined) payload.mode = frontendToBackendCategoryMode(updates.mode);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/categories/${categoryId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await fetchWithAuth(`${API_BASE_URL}/categories/${categoryId}`, { method: 'PUT', body: JSON.stringify(payload) });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to update category: HTTP ${response.status}`));}
       const updatedBackendCategory: BackendCategory = await response.json();
       const updatedFrontendCategory = backendToFrontendCategory(updatedBackendCategory);
@@ -1110,89 +1180,66 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       else if (updatedFrontendCategory.mode === 'work') actionKey = 'historyLogUpdateCategoryWork';
       addHistoryLogEntry(actionKey, { name: updatedFrontendCategory.name, oldName: oldCategoryData?.name !== updatedFrontendCategory.name ? oldCategoryData?.name : undefined , oldMode: oldCategoryData?.mode !== updatedFrontendCategory.mode ? oldCategoryData?.mode : undefined }, 'category');
     } catch (err) { createApiErrorToast(err, toast, "toastCategoryUpdatedTitle", "updating", t, `${API_BASE_URL}/categories/${categoryId}`); setError((err as Error).message); throw err; }
-  }, [toast, t, addHistoryLogEntry]);
+  }, [fetchWithAuth, toast, t, addHistoryLogEntry]);
 
   const deleteCategory = useCallback(async (categoryId: number) => {
     setError(null);
     const categoryToDelete = allCategories.find(cat => cat.id === categoryId);
     if (!categoryToDelete) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/categories/${categoryId}`, { method: 'DELETE' });
+      const response = await fetchWithAuth(`${API_BASE_URL}/categories/${categoryId}`, { method: 'DELETE' });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete category: HTTP ${response.status}`));}
       setAllCategories(prev => prev.filter(cat => cat.id !== categoryId));
       toast({ title: t('toastCategoryDeletedTitle'), description: t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name }) });
       addHistoryLogEntry('historyLogDeleteCategory', { name: categoryToDelete.name, mode: categoryToDelete.mode as string }, 'category');
     } catch (err) { createApiErrorToast(err, toast, "toastCategoryDeletedTitle", "deleting", t, `${API_BASE_URL}/categories/${categoryId}`); setError((err as Error).message); throw err; }
-  }, [allCategories, toast, t, addHistoryLogEntry]);
+  }, [fetchWithAuth, allCategories, toast, t, addHistoryLogEntry]);
 
-  const addAssignee = useCallback(async (name: string, username?: string, password?: string, isAdmin?: boolean) => {
+  const addAssignee = useCallback(async (name: string, username: string, password?: string, isAdmin?: boolean) => {
     setError(null);
-    const finalUsername = username || name.toLowerCase().replace(/\s+/g, '') + Math.floor(Math.random() * 1000);
-    const finalPassword = password || "P@ssword123"; // Default password, only for prototype
-    const payload: BackendUserCreatePayload = { 
-        name, 
-        username: finalUsername, 
-        password: finalPassword,
-        is_admin: isAdmin || false, // Include isAdmin, default to false
-    };
+    if (!password) { // Backend requires password for UserCreate
+        toast({variant: "destructive", title: t('loginErrorTitle'), description: "Password is required to create a user."});
+        throw new Error("Password is required to create a user.");
+    }
+    const payload: BackendUserCreatePayload = { name, username, password, is_admin: isAdmin || false };
 
     try {
-      const response = await fetch(`${API_BASE_URL}/users`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await fetchWithAuth(`${API_BASE_URL}/users`, { method: 'POST', body: JSON.stringify(payload) });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add assignee: HTTP ${response.status}`));}
       const newBackendUser: BackendUser = await response.json();
       setAllAssignees(prev => [...prev, backendToFrontendAssignee(newBackendUser)]);
       toast({ title: t('toastAssigneeAddedTitle'), description: t('toastAssigneeAddedDescription', { assigneeName: name }) });
       addHistoryLogEntry('historyLogAddAssignee', { name, isAdmin: newBackendUser.is_admin ? 1 : 0 }, 'assignee');
     } catch (err) { createApiErrorToast(err, toast, "toastAssigneeAddedTitle", "adding", t, `${API_BASE_URL}/users`); setError((err as Error).message); throw err; }
-  }, [toast, t, addHistoryLogEntry]);
+  }, [fetchWithAuth, toast, t, addHistoryLogEntry]);
 
-  const updateAssignee = useCallback(async (assigneeId: number, updates: Partial<Pick<Assignee, 'name' | 'username' | 'isAdmin'>>) => {
+  const updateAssignee = useCallback(async (assigneeId: number, updates: Partial<Pick<Assignee, 'name' | 'username' | 'isAdmin'>>, newPassword?: string) => {
     setError(null);
     const currentAssignee = assignees.find(a => a.id === assigneeId);
     
-    if (updates.username && updates.username !== currentAssignee?.username) {
-      const existingUserWithNewUsername = assignees.find(a => a.username === updates.username && a.id !== assigneeId);
-      if (existingUserWithNewUsername) {
-        const errorMsg = t('usernameTakenErrorDescription', { username: updates.username });
-        toast({ variant: "destructive", title: t('usernameTakenErrorTitle'), description: errorMsg });
-        setError(errorMsg);
-        throw new Error(errorMsg);
-      }
-    }
+    const payload: BackendUserUpdatePayload = { ...updates };
+    if (newPassword) payload.password = newPassword;
 
-    const formData = new FormData();
-    if (updates.name) formData.append('name', updates.name);
-    if (updates.username) formData.append('username', updates.username);
-    // Note: Backend's PUT /users/{user_id} does not currently accept 'is_admin' via Form.
-    // If backend is updated to accept is_admin (e.g., via JSON payload or another Form field), this needs adjustment.
-    // For now, isAdmin updates are only reflected client-side if the backend doesn't strip it.
 
     try {
-      const response = await fetch(`${API_BASE_URL}/users/${assigneeId}`, {
+      const response = await fetchWithAuth(`${API_BASE_URL}/users/${assigneeId}`, {
          method: 'PUT',
-         body: formData 
+         body: JSON.stringify(payload) 
       });
 
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to update assignee: HTTP ${response.status}`));}
       const updatedBackendUser: BackendUser = await response.json();
       const frontendAssignee = backendToFrontendAssignee(updatedBackendUser);
-      // If the backend doesn't return is_admin, but we intended to change it, reflect client-side intent.
-      if (updates.isAdmin !== undefined && frontendAssignee.isAdmin !== updates.isAdmin) {
-        frontendAssignee.isAdmin = updates.isAdmin;
-      }
-
+      
       setAllAssignees(prev => prev.map(asg => (asg.id === assigneeId ? frontendAssignee : asg)));
       toast({ title: t('toastAssigneeUpdatedTitle'), description: t('toastAssigneeUpdatedDescription', { assigneeName: updatedBackendUser.name }) });
       
       const historyDetails: Record<string, string | number | undefined> = { name: updatedBackendUser.name };
-      if (currentAssignee?.name !== updatedBackendUser.name) {
-        historyDetails.oldName = currentAssignee?.name;
-      }
+      if (currentAssignee?.name !== updatedBackendUser.name) historyDetails.oldName = currentAssignee?.name;
       if (updates.username && currentAssignee?.username !== updatedBackendUser.username) {
         historyDetails.oldUsername = currentAssignee?.username;
         historyDetails.newUsername = updatedBackendUser.username;
       }
-      // Log isAdmin change if it was part of the update intent
       if (updates.isAdmin !== undefined && currentAssignee?.isAdmin !== updates.isAdmin) {
         historyDetails.isAdmin = updates.isAdmin ? 1 : 0;
         historyDetails.oldIsAdmin = currentAssignee?.isAdmin ? 1 : 0;
@@ -1205,14 +1252,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
         setError((err as Error).message); throw err;
     }
-  }, [assignees, toast, t, addHistoryLogEntry]);
+  }, [fetchWithAuth, assignees, toast, t, addHistoryLogEntry]);
 
   const deleteAssignee = useCallback(async (assigneeId: number) => {
     setError(null);
     const assigneeToDelete = assignees.find(asg => asg.id === assigneeId);
     if (!assigneeToDelete) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/users/${assigneeId}`, { method: 'DELETE' });
+      const response = await fetchWithAuth(`${API_BASE_URL}/users/${assigneeId}`, { method: 'DELETE' });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete assignee: HTTP ${response.status}`));}
       setAllAssignees(prev => prev.filter(asg => asg.id !== assigneeId));
       const updateActivities = (acts: Activity[]) =>
@@ -1226,7 +1273,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       toast({ title: t('toastAssigneeDeletedTitle'), description: t('toastAssigneeDeletedDescription', { assigneeName: assigneeToDelete.name }) });
       addHistoryLogEntry('historyLogDeleteAssignee', { name: assigneeToDelete.name }, 'assignee');
     } catch (err) { createApiErrorToast(err, toast, "toastAssigneeDeletedTitle", "deleting", t, `${API_BASE_URL}/users/${assigneeId}`); setError((err as Error).message); throw err; }
-  }, [assignees, toast, t, addHistoryLogEntry]);
+  }, [fetchWithAuth, assignees, toast, t, addHistoryLogEntry]);
 
 
   const addActivity = useCallback(async (
@@ -1236,10 +1283,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     ) => {
     setError(null);
     const frontendActivityShell: Activity = {
-      id: 0, // Temporary, backend will assign
+      id: 0, 
       title: activityData.title,
       categoryId: activityData.categoryId,
-      todos: (activityData.todos || []).map(t => ({ id: 0, text: t.text, completed: false })), // Temp IDs
+      todos: (activityData.todos || []).map(t => ({ id: 0, text: t.text, completed: false })),
       createdAt: customCreatedAt !== undefined ? customCreatedAt : Date.now(),
       time: activityData.time,
       notes: activityData.notes,
@@ -1250,9 +1297,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const payload = frontendToBackendActivityPayload(frontendActivityShell) as BackendActivityCreatePayload;
+    // Ensure todos in payload match BackendTodoCreate (with 'complete' field)
+    payload.todos = (activityData.todos || []).map(t => ({text: t.text, complete: false}));
+
 
     try {
-      const response = await fetch(`${API_BASE_URL}/activities`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await fetchWithAuth(`${API_BASE_URL}/activities`, { method: 'POST', body: JSON.stringify(payload) });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add activity: HTTP ${response.status}`));}
       
       const newBackendActivity: BackendActivity | null | undefined = await response.json().catch(() => null);
@@ -1266,7 +1316,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
       addHistoryLogEntry(appModeState === 'personal' ? 'historyLogAddActivityPersonal' : 'historyLogAddActivityWork', { title: newFrontendActivity.title }, appModeState);
     } catch (err) { createApiErrorToast(err, toast, "toastActivityAddedTitle", "adding", t, `${API_BASE_URL}/activities`); setError((err as Error).message); throw err; }
-  }, [appModeState, toast, t, addHistoryLogEntry]);
+  }, [fetchWithAuth, appModeState, toast, t, addHistoryLogEntry]);
 
  const updateActivity = useCallback(async (activityId: number, updates: Partial<Omit<Activity, 'id'>>, originalActivity?: Activity) => {
     setError(null);
@@ -1275,9 +1325,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     let targetSetter = appModeState === 'work' ? setWorkActivities : setPersonalActivities;
 
     if (!activityToUpdate) {
-      currentActivitiesList = appModeState === 'work' ? personalActivities : workActivities;
+      currentActivitiesList = appModeState === 'work' ? personalActivities : workActivities; // Check other list
       activityToUpdate = currentActivitiesList.find(a => a.id === activityId);
-      targetSetter = appModeState === 'work' ? setPersonalActivities : setWorkActivities;
+      targetSetter = appModeState === 'work' ? setPersonalActivities : setWorkActivities; // Set setter for the other list
        if(!activityToUpdate) {
          console.error("[AppProvider] Activity not found for update in any list:", activityId);
          toast({variant: "destructive", title: "Error", description: "Activity not found for update."});
@@ -1289,14 +1339,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const payload = frontendToBackendActivityPayload({ ...activityToUpdate, ...updates, appMode: effectiveAppMode }, true) as BackendActivityUpdatePayload;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/activities/${activityId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await fetchWithAuth(`${API_BASE_URL}/activities/${activityId}`, { method: 'PUT', body: JSON.stringify(payload) });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to update activity: HTTP ${response.status}`));}
       const updatedBackendActivity: BackendActivity = await response.json();
       
       let processedActivityFromBackend = backendToFrontendActivity(updatedBackendActivity, appModeState);
       
-      // If 'updates' contains todos, use those for the final client-side state,
-      // otherwise, if backend response is missing todos but client had them, retain client's todos.
       if (updates.todos && Array.isArray(updates.todos)) {
          processedActivityFromBackend.todos = updates.todos.map(t => ({
             id: t.id as number, 
@@ -1304,6 +1352,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             completed: !!t.completed
          }));
       } else if (activityToUpdate && (!processedActivityFromBackend.todos || processedActivityFromBackend.todos.length === 0) && activityToUpdate.todos.length > 0) {
+          // If backend response for PUT doesn't include todos, but client had them, preserve client's todos
+          // This is important because PUT /activities/{id} doesn't update todos list itself, only activity fields
           processedActivityFromBackend.todos = activityToUpdate.todos;
       }
       
@@ -1330,7 +1380,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
       addHistoryLogEntry(appModeState === 'personal' ? 'historyLogUpdateActivityPersonal' : 'historyLogUpdateActivityWork', { title: finalFrontendActivity.title }, appModeState);
     } catch (err) { createApiErrorToast(err, toast, "toastActivityUpdatedTitle", "updating", t, `${API_BASE_URL}/activities/${activityId}`); setError((err as Error).message); throw err; }
-  }, [appModeState, personalActivities, workActivities, toast, t, addHistoryLogEntry]);
+  }, [fetchWithAuth, appModeState, personalActivities, workActivities, toast, t, addHistoryLogEntry]);
 
   const deleteActivity = useCallback(async (activityId: number) => {
     setError(null);
@@ -1352,30 +1402,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/activities/${activityId}`, { method: 'DELETE' });
+      const response = await fetchWithAuth(`${API_BASE_URL}/activities/${activityId}`, { method: 'DELETE' });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete activity: HTTP ${response.status}`));}
       setter(prev => prev.filter(act => act.id !== activityId));
       toast({ title: t('toastActivityDeletedTitle'), description: t('toastActivityDeletedDescription', { activityTitle: activityToDelete.title }) });
       addHistoryLogEntry(modeForLog === 'personal' ? 'historyLogDeleteActivityPersonal' : 'historyLogDeleteActivityWork', { title: activityToDelete.title }, modeForLog);
     } catch (err) { createApiErrorToast(err, toast, "toastActivityDeletedTitle", "deleting", t, `${API_BASE_URL}/activities/${activityId}`); setError((err as Error).message); throw err; }
-  }, [personalActivities, workActivities, toast, t, addHistoryLogEntry]);
+  }, [fetchWithAuth, personalActivities, workActivities, toast, t, addHistoryLogEntry]);
 
 
-  const addTodoToActivity = useCallback(async (activityId: number, todoText: string) => {
+  const addTodoToActivity = useCallback(async (activityId: number, todoText: string, completed: boolean = false) => {
     setError(null);
-    const payload: BackendTodoCreate = { text: todoText };
+    const payload: BackendTodoCreate = { text: todoText, complete: completed };
     try {
-      const response = await fetch(`${API_BASE_URL}/activities/${activityId}/todos`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const response = await fetchWithAuth(`${API_BASE_URL}/activities/${activityId}/todos`, { method: 'POST', body: JSON.stringify(payload) });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add todo: HTTP ${response.status}`));}
       const newBackendTodo: BackendTodo = await response.json();
       const newFrontendTodo: Todo = {
-        id: typeof newBackendTodo?.id === 'number' ? newBackendTodo.id : Date.now() + Math.random(),
-        text: newBackendTodo?.text || todoText,
-        completed: false
+        id: newBackendTodo.id, // Use ID from backend
+        text: newBackendTodo.text,
+        completed: newBackendTodo.complete
       };
-      if (typeof newBackendTodo?.id !== 'number') {
-        console.warn(`[AppProvider] Todo added for activity ${activityId} but backend did not return a valid ID. Using temporary ID. Backend response:`, newBackendTodo);
-      }
 
       const updateInList = (list: Activity[], setter: React.Dispatch<React.SetStateAction<Activity[]>>) => {
           const activityIndex = list.findIndex(act => act.id === activityId);
@@ -1389,27 +1436,53 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       toast({ title: t('toastTodoAddedTitle'), description: t('toastTodoAddedDescription', { todoText }) });
     } catch (err) { createApiErrorToast(err, toast, "toastTodoAddedTitle", "adding", t, `${API_BASE_URL}/activities/${activityId}/todos`); setError((err as Error).message); throw err; }
-  }, [personalActivities, workActivities, toast, t]);
+  }, [fetchWithAuth, personalActivities, workActivities, toast, t]);
 
-  const updateTodoInActivity = useCallback((activityId: number, todoId: number, updates: Partial<Todo>) => {
-    if (updates.hasOwnProperty('completed') || updates.hasOwnProperty('text')) {
-      const updateInList = (list: Activity[], setter: React.Dispatch<React.SetStateAction<Activity[]>>) => {
-          const activityIndex = list.findIndex(act => act.id === activityId);
-          if (activityIndex !== -1) {
-            const updatedTodos = list[activityIndex].todos.map(todo =>
-              todo.id === todoId ? { ...todo, ...updates } : todo
-            );
-            const updatedActivity = { ...list[activityIndex], todos: updatedTodos };
-            setter(prev => prev.map(act => act.id === activityId ? updatedActivity : act));
-            if (updates.text) {
-              toast({ title: t('toastTodoUpdatedTitle'), description: t('toastTodoUpdatedDescription', { todoText: updates.text || "" }) });
+  const updateTodoInActivity = useCallback(async (activityId: number, todoId: number, updates: Partial<Todo>) => {
+    setError(null);
+    const payload: Partial<BackendTodo> = {};
+    if (updates.text !== undefined) payload.text = updates.text;
+    if (updates.completed !== undefined) payload.complete = updates.completed;
+
+    if (Object.keys(payload).length === 0) return; // No actual updates
+
+    try {
+        const response = await fetchWithAuth(`${API_BASE_URL}/todos/${todoId}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+            throw new Error(formatBackendError(errorData, `Failed to update todo: HTTP ${response.status}`));
+        }
+        const updatedBackendTodo: BackendTodo = await response.json();
+        const updatedFrontendTodo: Todo = {
+            id: updatedBackendTodo.id,
+            text: updatedBackendTodo.text,
+            completed: updatedBackendTodo.complete
+        };
+
+        const updateInList = (list: Activity[], setter: React.Dispatch<React.SetStateAction<Activity[]>>) => {
+            const activityIndex = list.findIndex(act => act.id === activityId);
+            if (activityIndex !== -1) {
+                const updatedTodos = list[activityIndex].todos.map(todo =>
+                    todo.id === todoId ? updatedFrontendTodo : todo
+                );
+                const updatedActivity = { ...list[activityIndex], todos: updatedTodos };
+                setter(prev => prev.map(act => act.id === activityId ? updatedActivity : act));
+                if (updates.text) {
+                    toast({ title: t('toastTodoUpdatedTitle'), description: t('toastTodoUpdatedDescription', { todoText: updates.text || "" }) });
+                }
             }
-          }
-      };
-      updateInList(personalActivities, setPersonalActivities);
-      updateInList(workActivities, setWorkActivities);
+        };
+        updateInList(personalActivities, setPersonalActivities);
+        updateInList(workActivities, setWorkActivities);
+    } catch (err) {
+        createApiErrorToast(err, toast, "toastTodoUpdatedTitle", "updating", t, `${API_BASE_URL}/todos/${todoId}`);
+        setError((err as Error).message);
+        throw err;
     }
-  }, [personalActivities, workActivities, t, toast]);
+  }, [fetchWithAuth, personalActivities, workActivities, t, toast]);
 
   const deleteTodoFromActivity = useCallback(async (activityId: number, todoId: number) => {
     setError(null);
@@ -1418,7 +1491,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       workActivities.find(act => act.id === activityId)?.todos.find(t => t.id === todoId);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/todos/${todoId}`, { method: 'DELETE' });
+      const response = await fetchWithAuth(`${API_BASE_URL}/todos/${todoId}`, { method: 'DELETE' });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete todo: HTTP ${response.status}`));}
       
       const updateInList = (list: Activity[], setter: React.Dispatch<React.SetStateAction<Activity[]>>) => {
@@ -1434,7 +1507,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       toast({ title: t('toastTodoDeletedTitle'), description: t('toastTodoDeletedDescription', { todoText: todoToDelete?.text || "Todo" }) });
     } catch (err) { createApiErrorToast(err, toast, "toastTodoDeletedTitle", "deleting", t, `${API_BASE_URL}/todos/${todoId}`); setError((err as Error).message); throw err; }
-  }, [personalActivities, workActivities, toast, t]);
+  }, [fetchWithAuth, personalActivities, workActivities, toast, t]);
 
   const toggleOccurrenceCompletion = useCallback((masterActivityId: number, occurrenceDateTimestamp: number, completedState: boolean) => {
     let activityTitleForLog = 'Unknown Activity';
@@ -1499,7 +1572,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         getCategoryById, addCategory, updateCategory, deleteCategory,
         addAssignee, updateAssignee, deleteAssignee, getAssigneeById,
         isLoading: combinedIsLoading, error,
-        isAuthenticated, setIsAuthenticated, loginAttempts, setLoginAttempts, lockoutEndTime, setLockoutEndTime, sessionExpiryTimestamp, logout, logPasswordChange,
+        isAuthenticated, login, logout, changePassword, getCurrentUserId,
         uiNotifications, addUINotification: stableAddUINotification, markUINotificationAsRead, markAllUINotificationsAsRead, clearAllUINotifications,
         historyLog, addHistoryLogEntry,
         systemNotificationPermission, requestSystemNotificationPermission,
@@ -1512,4 +1585,3 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
-    

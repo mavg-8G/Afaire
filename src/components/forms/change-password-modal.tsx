@@ -25,16 +25,11 @@ import {
 } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslations } from '@/contexts/language-context';
-import { HARDCODED_PASSWORD } from '@/lib/constants'; // Superuser password
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Terminal, Eye, EyeOff } from 'lucide-react';
+import { Terminal, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useAppStore } from '@/hooks/use-app-store';
 
-// This is the default password assigned to users created via the UI
-// It needs to be accessible here for the change password modal to work for them.
-const DEFAULT_CREATED_USER_PASSWORD = "P@ssword123";
-
-const PASSWORD_MIN_LENGTH = 6;
+const PASSWORD_MIN_LENGTH = 6; // From backend constraints if any, or a sensible default
 
 interface ChangePasswordModalProps {
   isOpen: boolean;
@@ -44,14 +39,15 @@ interface ChangePasswordModalProps {
 export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProps) {
   const { t } = useTranslations();
   const { toast } = useToast();
-  const { logPasswordChange } = useAppStore();
+  const { changePassword, getCurrentUserId } = useAppStore(); // Use new changePassword from AppStore
   const [serverError, setServerError] = useState<string | null>(null);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const changePasswordFormSchema = z.object({
-    currentPassword: z.string().min(1, t('passwordUpdateErrorIncorrectCurrent')),
+    currentPassword: z.string().min(1, t('passwordUpdateErrorIncorrectCurrent')), // Keep this field, backend will verify
     newPassword: z.string().min(PASSWORD_MIN_LENGTH, t('passwordMinLength', { length: PASSWORD_MIN_LENGTH })),
     confirmNewPassword: z.string().min(1, t('passwordUpdateErrorConfirmPasswordRequired')),
   }).refine(data => data.newPassword === data.confirmNewPassword, {
@@ -73,22 +69,32 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
     },
   });
 
-  const onSubmit = (data: ChangePasswordFormData) => {
+  const onSubmit = async (data: ChangePasswordFormData) => {
     setServerError(null);
-    // Allow changing password if currentPassword matches either the superuser or the default created user password
-    if (data.currentPassword !== HARDCODED_PASSWORD && data.currentPassword !== DEFAULT_CREATED_USER_PASSWORD) {
-      setServerError(t('passwordUpdateErrorIncorrectCurrent'));
-      return;
+    setIsSubmitting(true);
+
+    const currentUserId = getCurrentUserId();
+    if (!currentUserId) {
+        setServerError("User not identified. Cannot change password."); // Or use a translation key
+        setIsSubmitting(false);
+        return;
     }
 
-    logPasswordChange();
+    const success = await changePassword(data.currentPassword, data.newPassword);
 
-    toast({
-      title: t('passwordUpdateSuccessTitle'),
-      description: t('passwordUpdateSuccessDescription'),
-    });
-    form.reset();
-    onClose();
+    if (success) {
+      toast({
+        title: t('passwordUpdateSuccessTitle'),
+        description: t('passwordUpdateSuccessDescription'), // This translation will be updated
+      });
+      form.reset();
+      onClose();
+    } else {
+      // Error message is set by AppProvider's changePassword via toast for backend errors
+      // Or potentially set a local serverError if changePassword returns specific error messages
+      setServerError(t('passwordUpdateFailedError')); // Add this translation
+    }
+    setIsSubmitting(false);
   };
 
   const handleCloseDialog = () => {
@@ -97,6 +103,7 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
     setShowCurrentPassword(false);
     setShowNewPassword(false);
     setShowConfirmNewPassword(false);
+    setIsSubmitting(false);
     onClose();
   };
 
@@ -126,6 +133,7 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
                         placeholder={t('currentPasswordPlaceholder')}
                         {...field}
                         className="pr-10"
+                        disabled={isSubmitting}
                       />
                       <Button
                         type="button"
@@ -134,6 +142,7 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
                         className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
                         onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                         aria-label={showCurrentPassword ? t('hidePassword') : t('showPassword')}
+                        disabled={isSubmitting}
                       >
                         {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </Button>
@@ -156,6 +165,7 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
                         placeholder={t('newPasswordPlaceholder')}
                         {...field}
                         className="pr-10"
+                        disabled={isSubmitting}
                       />
                       <Button
                         type="button"
@@ -164,6 +174,7 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
                         className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
                         onClick={() => setShowNewPassword(!showNewPassword)}
                          aria-label={showNewPassword ? t('hidePassword') : t('showPassword')}
+                         disabled={isSubmitting}
                       >
                         {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </Button>
@@ -186,6 +197,7 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
                         placeholder={t('confirmNewPasswordPlaceholder')}
                         {...field}
                         className="pr-10"
+                        disabled={isSubmitting}
                       />
                       <Button
                         type="button"
@@ -194,6 +206,7 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
                         className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
                         onClick={() => setShowConfirmNewPassword(!showConfirmNewPassword)}
                         aria-label={showConfirmNewPassword ? t('hidePassword') : t('showPassword')}
+                        disabled={isSubmitting}
                       >
                         {showConfirmNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </Button>
@@ -211,10 +224,12 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
               </Alert>
             )}
             <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={handleCloseDialog}>
+              <Button type="button" variant="outline" onClick={handleCloseDialog} disabled={isSubmitting}>
                 {t('cancel')}
               </Button>
-              <Button type="submit">{t('updatePasswordButton')}</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t('updatePasswordButton')}
+                </Button>
             </DialogFooter>
           </form>
         </Form>
@@ -222,4 +237,3 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
     </Dialog>
   );
 }
-

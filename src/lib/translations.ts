@@ -16,7 +16,7 @@ export type Translations = {
   moreOptions: string;
   moreOptionsDesktop: string;
   personalMode: string;
-  workMode: "Work"; // Keep as "Work" for type consistency, translation will handle "Trabajo"
+  workMode: "Work"; 
   switchToPersonalMode: string;
   switchToWorkMode: string;
   logout: string;
@@ -74,6 +74,13 @@ export type Translations = {
   usernamePlaceholder: string;
   usernameMinLength: (params: { length: number }) => string;
   usernameIsRequired: string;
+  passwordLabel: string;
+  newPasswordOptionalLabel: string;
+  enterPasswordPlaceholder: string;
+  leaveBlankToKeepCurrent: string;
+  confirmPasswordLabel: string;
+  confirmPasswordPlaceholder: string;
+  passwordIsRequiredForCreation: string;
   createAssigneeDescription: string;
   updateAssigneeDetails: string;
   existingAssignees: string;
@@ -88,7 +95,7 @@ export type Translations = {
   adminStatusEditDisabled: string;
 
 
-  // ActivityEditorPage (formerly ActivityModal)
+  // ActivityEditorPage
   editActivityTitle: string;
   addActivityTitle: string;
   editActivityDescription: (params: { formattedInitialDate: string }) => string;
@@ -111,7 +118,7 @@ export type Translations = {
   toastActivityUpdatedDescription: string;
   toastActivityAddedTitle: string;
   toastActivityAddedDescription: string;
-  recurrenceLabel: string; // Not used directly as fields are separate
+  recurrenceLabel: string; 
   recurrenceTypeLabel: string;
   recurrenceNone: string;
   recurrenceDaily: string;
@@ -176,15 +183,15 @@ export type Translations = {
   loginPasswordPlaceholder: string;
   loginButtonText: string;
   loginLoggingIn: string;
-  loginInvalidCredentials: string;
+  loginInvalidCredentials: string; // Generic, backend might provide specifics via toast
   loginErrorTitle: string;
-  loginLockoutTitle: string;
-  loginLockoutMessage: (params: { seconds: number }) => string;
+  // loginLockoutTitle: string; // Lockout handled by backend
+  // loginLockoutMessage: (params: { seconds: number }) => string; // Lockout handled by backend
   loginUsernameRequired: string;
   loginPasswordRequired: string;
-  loginSecurityNotice: string;
+  loginSecurityNoticeBackend: string; // Updated security notice
   loginRedirecting: string;
-  rememberMeLabel: string;
+  rememberMeLabel: string; // Keep if client-side session management is desired
   showPassword?: string;
   hidePassword?: string;
 
@@ -200,15 +207,17 @@ export type Translations = {
   confirmNewPasswordPlaceholder: string;
   updatePasswordButton: string;
   passwordUpdateSuccessTitle: string;
-  passwordUpdateSuccessDescription: string;
+  passwordUpdateSuccessDescription: string; // Updated for clarity
   passwordUpdateErrorIncorrectCurrent: string;
   passwordUpdateErrorNewPasswordRequired: string;
   passwordUpdateErrorConfirmPasswordRequired: string;
   passwordUpdateErrorPasswordsDoNotMatch: string;
   passwordUpdateErrorCurrentEqualsNew: string;
   passwordMinLength: (params: { length: number }) => string;
+  passwordUpdateFailedError: string;
 
-  // AppProvider Toasts & Notifications
+
+  // AppProvider Toasts & Notifications (some may be generic now if backend provides details)
   toastCategoryAddedTitle: string;
   toastCategoryAddedDescription: (params: { categoryName: string }) => string;
   toastCategoryUpdatedTitle: string;
@@ -231,7 +240,19 @@ export type Translations = {
   toastAssigneeUpdatedDescription: (params: { assigneeName: string }) => string;
   toastAssigneeDeletedTitle: string;
   toastAssigneeDeletedDescription: (params: { assigneeName: string }) => string;
-
+  toastTodoAddedTitle: string;
+  toastTodoAddedDescription: (params: { todoText: string }) => string;
+  toastTodoUpdatedTitle: string;
+  toastTodoUpdatedDescription: (params: { todoText: string }) => string;
+  toastTodoDeletedTitle: string;
+  toastTodoDeletedDescription: (params: { todoText: string }) => string;
+  toastDefaultErrorDescription: string;
+  toastFailedToFetchErrorDescription: (params: { endpoint: string }) => string;
+  toastInvalidJsonErrorDescription: (params: { endpoint: string }) => string;
+  toastActivityLoadErrorTitle: string; // For get_activities
+  toastCategoryLoadErrorTitle: string; // For get_categories
+  toastAssigneeLoadErrorTitle: string; // For get_users
+  historyLoadErrorTitle: string; // For get_history
 
   // Dashboard Page
   dashboardTitle: string;
@@ -293,7 +314,7 @@ export type Translations = {
   historyLogDeleteCategory: (params: { name: string, mode: string }) => string;
   historyLogSwitchToPersonalMode: string;
   historyLogSwitchToWorkMode: string;
-  historyLogPasswordChange: string;
+  historyLogPasswordChangeAttempt: string; // Updated
   historyLogAddAssignee: (params: { name: string, isAdmin?: boolean }) => string;
   historyLogUpdateAssignee: (params: { name: string, oldName?: string, oldUsername?: string, newUsername?: string, isAdmin?: boolean, oldIsAdmin?: boolean }) => string;
   historyLogDeleteAssignee: (params: { name: string }) => string;
@@ -411,6 +432,13 @@ export const translations: Record<Locale, Translations> = {
     usernamePlaceholder: "e.g., johndoe (min 3 chars)",
     usernameMinLength: (params) => `Username must be at least ${params.length} characters.`,
     usernameIsRequired: "Username is required.",
+    passwordLabel: "Password",
+    newPasswordOptionalLabel: "New Password (optional)",
+    enterPasswordPlaceholder: "Enter password",
+    leaveBlankToKeepCurrent: "Leave blank to keep current password",
+    confirmPasswordLabel: "Confirm Password",
+    confirmPasswordPlaceholder: "Confirm password",
+    passwordIsRequiredForCreation: "Password is required for new assignees.",
     createAssigneeDescription: "Create a new assignee for your tasks.",
     updateAssigneeDetails: "Update the details of this assignee.",
     existingAssignees: "Existing Assignees",
@@ -422,7 +450,7 @@ export const translations: Record<Locale, Translations> = {
     usernameTakenErrorDescription: (params) => `The username "${params.username}" is already taken. Please choose another one.`,
     administratorLabel: "Administrator",
     adminBadge: "Admin",
-    adminStatusEditDisabled: "Admin status cannot be changed after creation (backend limitation).",
+    adminStatusEditDisabled: "Admin status can be changed during edit.",
     editActivityTitle: "Edit Activity",
     addActivityTitle: "Add New Activity",
     editActivityDescription: (params) => `Update the details of your activity. Default date: ${params.formattedInitialDate}.`,
@@ -501,15 +529,13 @@ export const translations: Record<Locale, Translations> = {
     loginPasswordPlaceholder: "Enter your password",
     loginButtonText: "Login",
     loginLoggingIn: "Logging in...",
-    loginInvalidCredentials: "Invalid username or password.",
+    loginInvalidCredentials: "Invalid username or password. Please try again.",
     loginErrorTitle: "Login Error",
-    loginLockoutTitle: "Temporarily Locked Out",
-    loginLockoutMessage: (params) => `Too many failed login attempts. Please try again in ${params.seconds} seconds.`,
     loginUsernameRequired: "Username is required.",
     loginPasswordRequired: "Password is required.",
-    loginSecurityNotice: "This is a prototype. Do not use real credentials.",
+    loginSecurityNoticeBackend: "Secure login. Your credentials are encrypted.",
     loginRedirecting: "Redirecting...",
-    rememberMeLabel: "Keep me logged in for 30 days",
+    rememberMeLabel: "Keep me logged in",
     showPassword: "Show password",
     hidePassword: "Hide password",
     changePasswordModalTitle: "Change Password",
@@ -521,14 +547,15 @@ export const translations: Record<Locale, Translations> = {
     newPasswordPlaceholder: "Your new password",
     confirmNewPasswordPlaceholder: "Confirm your new password",
     updatePasswordButton: "Update Password",
-    passwordUpdateSuccessTitle: "Password Update Initiated",
-    passwordUpdateSuccessDescription: "Password change process initiated. (Prototype: Password is not actually stored or changed.)",
+    passwordUpdateSuccessTitle: "Password Updated",
+    passwordUpdateSuccessDescription: "Your password has been successfully changed.",
     passwordUpdateErrorIncorrectCurrent: "Incorrect current password.",
     passwordUpdateErrorNewPasswordRequired: "New password is required.",
     passwordUpdateErrorConfirmPasswordRequired: "Confirm new password is required.",
     passwordUpdateErrorPasswordsDoNotMatch: "New passwords do not match.",
     passwordUpdateErrorCurrentEqualsNew: "New password must be different from the current password.",
     passwordMinLength: (params) => `Password must be at least ${params.length} characters.`,
+    passwordUpdateFailedError: "Failed to update password. Please check your old password or try again later.",
     toastCategoryAddedTitle: "Category Added",
     toastCategoryAddedDescription: (params) => `Category "${params.categoryName}" has been added.`,
     toastCategoryUpdatedTitle: "Category Updated",
@@ -551,6 +578,19 @@ export const translations: Record<Locale, Translations> = {
     toastAssigneeUpdatedDescription: (params) => `Assignee "${params.assigneeName}" has been updated.`,
     toastAssigneeDeletedTitle: "Assignee Deleted",
     toastAssigneeDeletedDescription: (params) => `Assignee "${params.assigneeName}" has been removed.`,
+    toastTodoAddedTitle: "Todo Added",
+    toastTodoAddedDescription: (params) => `Todo "${params.todoText}" added.`,
+    toastTodoUpdatedTitle: "Todo Updated",
+    toastTodoUpdatedDescription: (params) => `Todo "${params.todoText}" updated.`,
+    toastTodoDeletedTitle: "Todo Deleted",
+    toastTodoDeletedDescription: (params) => `Todo "${params.todoText}" removed.`,
+    toastDefaultErrorDescription: "An unexpected error occurred. Please try again.",
+    toastFailedToFetchErrorDescription: (params) => `Could not connect to the server at ${params.endpoint}. Please check your internet connection.`,
+    toastInvalidJsonErrorDescription: (params) => `Received an invalid response from the server at ${params.endpoint}.`,
+    toastActivityLoadErrorTitle: "Error Loading Activities",
+    toastCategoryLoadErrorTitle: "Error Loading Categories",
+    toastAssigneeLoadErrorTitle: "Error Loading Users",
+    historyLoadErrorTitle: "Error Loading History",
     dashboardTitle: "Activity Dashboard",
     dashboardMainDescription: "Track your activity progress and view summaries.",
     dashboardChartView: "Chart View",
@@ -607,7 +647,7 @@ export const translations: Record<Locale, Translations> = {
     historyLogDeleteCategory: (params) => `Deleted Category: "${params.name}" (Mode: ${params.mode}).`,
     historyLogSwitchToPersonalMode: "Switched to Personal Mode.",
     historyLogSwitchToWorkMode: "Switched to Work Mode.",
-    historyLogPasswordChange: "Password changed.",
+    historyLogPasswordChangeAttempt: "Password change attempt.",
     historyLogAddAssignee: (params) => `Added Assignee: "${params.name}"${params.isAdmin ? ' (Admin)' : ''}.`,
     historyLogUpdateAssignee: (params) => `Updated Assignee: "${params.oldName ? params.oldName + ' to ' : ''}${params.name}"${params.newUsername ? ` (Username: ${params.oldUsername ? params.oldUsername + ' to ' : ''}${params.newUsername})` : ''}${params.isAdmin !== undefined ? ` (Admin: ${params.oldIsAdmin ? 'Yes' : 'No'} to ${params.isAdmin ? 'Yes' : 'No'})` : ''}.`,
     historyLogDeleteAssignee: (params) => `Deleted Assignee: "${params.name}".`,
@@ -728,6 +768,13 @@ export const translations: Record<Locale, Translations> = {
     usernamePlaceholder: "Ej: juanperez (mín 3 car.)",
     usernameMinLength: (params) => `El nombre de usuario debe tener al menos ${params.length} caracteres.`,
     usernameIsRequired: "El nombre de usuario es obligatorio.",
+    passwordLabel: "Contraseña",
+    newPasswordOptionalLabel: "Nueva Contraseña (opcional)",
+    enterPasswordPlaceholder: "Introducir contraseña",
+    leaveBlankToKeepCurrent: "Dejar en blanco para mantener la contraseña actual",
+    confirmPasswordLabel: "Confirmar Contraseña",
+    confirmPasswordPlaceholder: "Confirmar contraseña",
+    passwordIsRequiredForCreation: "La contraseña es obligatoria para nuevos asignados.",
     createAssigneeDescription: "Crea un nuevo asignado para tus tareas.",
     updateAssigneeDetails: "Actualiza los detalles de este asignado.",
     existingAssignees: "Asignados Existentes",
@@ -739,7 +786,7 @@ export const translations: Record<Locale, Translations> = {
     usernameTakenErrorDescription: (params) => `El nombre de usuario "${params.username}" ya está en uso. Por favor, elige otro.`,
     administratorLabel: "Administrador",
     adminBadge: "Admin",
-    adminStatusEditDisabled: "El estado de administrador no se puede cambiar después de la creación (limitación del backend).",
+    adminStatusEditDisabled: "El estado de administrador se puede cambiar durante la edición.",
     editActivityTitle: "Editar Actividad",
     addActivityTitle: "Añadir Nueva Actividad",
     editActivityDescription: (params) => `Actualiza los detalles de tu actividad. Fecha por defecto: ${params.formattedInitialDate}.`,
@@ -818,15 +865,13 @@ export const translations: Record<Locale, Translations> = {
     loginPasswordPlaceholder: "Introduce tu contraseña",
     loginButtonText: "Iniciar Sesión",
     loginLoggingIn: "Iniciando sesión...",
-    loginInvalidCredentials: "Usuario o contraseña incorrectos.",
+    loginInvalidCredentials: "Usuario o contraseña incorrectos. Inténtalo de nuevo.",
     loginErrorTitle: "Error de Inicio de Sesión",
-    loginLockoutTitle: "Bloqueado Temporalmente",
-    loginLockoutMessage: (params) => `Demasiados intentos fallidos. Por favor, inténtalo de nuevo en ${params.seconds} segundos.`,
     loginUsernameRequired: "El nombre de usuario es obligatorio.",
     loginPasswordRequired: "La contraseña es obligatoria.",
-    loginSecurityNotice: "Esto es un prototipo. No uses credenciales reales.",
+    loginSecurityNoticeBackend: "Inicio de sesión seguro. Tus credenciales están encriptadas.",
     loginRedirecting: "Redirigiendo...",
-    rememberMeLabel: "Mantenerme conectado por 30 días",
+    rememberMeLabel: "Mantenerme conectado",
     showPassword: "Mostrar contraseña",
     hidePassword: "Ocultar contraseña",
     changePasswordModalTitle: "Cambiar Contraseña",
@@ -838,14 +883,15 @@ export const translations: Record<Locale, Translations> = {
     newPasswordPlaceholder: "Tu nueva contraseña",
     confirmNewPasswordPlaceholder: "Confirma tu nueva contraseña",
     updatePasswordButton: "Actualizar Contraseña",
-    passwordUpdateSuccessTitle: "Cambio de Contraseña Iniciado",
-    passwordUpdateSuccessDescription: "Proceso de cambio de contraseña iniciado. (Prototipo: La contraseña no se almacena ni cambia realmente.)",
+    passwordUpdateSuccessTitle: "Contraseña Actualizada",
+    passwordUpdateSuccessDescription: "Tu contraseña ha sido cambiada exitosamente.",
     passwordUpdateErrorIncorrectCurrent: "Contraseña actual incorrecta.",
     passwordUpdateErrorNewPasswordRequired: "La nueva contraseña es obligatoria.",
     passwordUpdateErrorConfirmPasswordRequired: "Confirmar la nueva contraseña es obligatorio.",
     passwordUpdateErrorPasswordsDoNotMatch: "Las nuevas contraseñas no coinciden.",
     passwordUpdateErrorCurrentEqualsNew: "La nueva contraseña debe ser diferente a la actual.",
     passwordMinLength: (params) => `La contraseña debe tener al menos ${params.length} caracteres.`,
+    passwordUpdateFailedError: "No se pudo actualizar la contraseña. Verifica tu contraseña anterior o inténtalo más tarde.",
     toastCategoryAddedTitle: "Categoría Añadida",
     toastCategoryAddedDescription: (params) => `La categoría "${params.categoryName}" ha sido añadida.`,
     toastCategoryUpdatedTitle: "Categoría Actualizada",
@@ -868,6 +914,19 @@ export const translations: Record<Locale, Translations> = {
     toastAssigneeUpdatedDescription: (params) => `El asignado "${params.assigneeName}" ha sido actualizado.`,
     toastAssigneeDeletedTitle: "Asignado Eliminado",
     toastAssigneeDeletedDescription: (params) => `El asignado "${params.assigneeName}" ha sido eliminado.`,
+    toastTodoAddedTitle: "Tarea Añadida",
+    toastTodoAddedDescription: (params) => `Tarea "${params.todoText}" añadida.`,
+    toastTodoUpdatedTitle: "Tarea Actualizada",
+    toastTodoUpdatedDescription: (params) => `Tarea "${params.todoText}" actualizada.`,
+    toastTodoDeletedTitle: "Tarea Eliminada",
+    toastTodoDeletedDescription: (params) => `Tarea "${params.todoText}" eliminada.`,
+    toastDefaultErrorDescription: "Ocurrió un error inesperado. Por favor, inténtalo de nuevo.",
+    toastFailedToFetchErrorDescription: (params) => `No se pudo conectar al servidor en ${params.endpoint}. Por favor, verifica tu conexión a internet.`,
+    toastInvalidJsonErrorDescription: (params) => `Se recibió una respuesta inválida del servidor en ${params.endpoint}.`,
+    toastActivityLoadErrorTitle: "Error al Cargar Actividades",
+    toastCategoryLoadErrorTitle: "Error al Cargar Categorías",
+    toastAssigneeLoadErrorTitle: "Error al Cargar Usuarios",
+    historyLoadErrorTitle: "Error al Cargar Historial",
     dashboardTitle: "Panel de Actividades",
     dashboardMainDescription: "Sigue el progreso de tus actividades y visualiza resúmenes.",
     dashboardChartView: "Vista de Gráfico",
@@ -924,7 +983,7 @@ export const translations: Record<Locale, Translations> = {
     historyLogDeleteCategory: (params) => `Categoría eliminada: "${params.name}" (Modo: ${params.mode}).`,
     historyLogSwitchToPersonalMode: "Cambiado a Modo Personal.",
     historyLogSwitchToWorkMode: "Cambiado a Modo Trabajo.",
-    historyLogPasswordChange: "Contraseña cambiada.",
+    historyLogPasswordChangeAttempt: "Intento de cambio de contraseña.",
     historyLogAddAssignee: (params) => `Asignado añadido: "${params.name}"${params.isAdmin ? ' (Admin)' : ''}.`,
     historyLogUpdateAssignee: (params) => `Asignado actualizado: "${params.oldName ? params.oldName + ' a ' : ''}${params.name}"${params.newUsername ? ` (Usuario: ${params.oldUsername ? params.oldUsername + ' a ' : ''}${params.newUsername})` : ''}${params.isAdmin !== undefined ? ` (Admin: ${params.oldIsAdmin ? 'Sí' : 'No'} a ${params.isAdmin ? 'Sí' : 'No'})` : ''}.`,
     historyLogDeleteAssignee: (params) => `Asignado eliminado: "${params.name}".`,
@@ -1045,6 +1104,13 @@ export const translations: Record<Locale, Translations> = {
     usernamePlaceholder: "Ex : jeandupont (min 3 cars)",
     usernameMinLength: (params) => `Le nom d'utilisateur doit comporter au moins ${params.length} caractères.`,
     usernameIsRequired: "Le nom d'utilisateur est requis.",
+    passwordLabel: "Mot de passe",
+    newPasswordOptionalLabel: "Nouveau mot de passe (optionnel)",
+    enterPasswordPlaceholder: "Saisir le mot de passe",
+    leaveBlankToKeepCurrent: "Laisser vide pour conserver le mot de passe actuel",
+    confirmPasswordLabel: "Confirmer le mot de passe",
+    confirmPasswordPlaceholder: "Confirmer le mot de passe",
+    passwordIsRequiredForCreation: "Un mot de passe est requis pour les nouvelles personnes assignées.",
     createAssigneeDescription: "Créez une nouvelle personne assignée pour vos tâches.",
     updateAssigneeDetails: "Mettez à jour les détails de cette personne assignée.",
     existingAssignees: "Personnes Assignées Existantes",
@@ -1056,7 +1122,7 @@ export const translations: Record<Locale, Translations> = {
     usernameTakenErrorDescription: (params) => `Le nom d'utilisateur "${params.username}" est déjà pris. Veuillez en choisir un autre.`,
     administratorLabel: "Administrateur",
     adminBadge: "Admin",
-    adminStatusEditDisabled: "Le statut d'administrateur ne peut pas être modifié après la création (limitation du backend).",
+    adminStatusEditDisabled: "Le statut d'administrateur peut être modifié lors de l'édition.",
     editActivityTitle: "Modifier l'activité",
     addActivityTitle: "Ajouter une nouvelle activité",
     editActivityDescription: (params) => `Mettez à jour les détails de votre activité. Date par défaut : ${params.formattedInitialDate}.`,
@@ -1135,15 +1201,13 @@ export const translations: Record<Locale, Translations> = {
     loginPasswordPlaceholder: "Entrez votre mot de passe",
     loginButtonText: "Connexion",
     loginLoggingIn: "Connexion en cours...",
-    loginInvalidCredentials: "Nom d'utilisateur ou mot de passe incorrect.",
+    loginInvalidCredentials: "Nom d'utilisateur ou mot de passe incorrect. Veuillez réessayer.",
     loginErrorTitle: "Erreur de connexion",
-    loginLockoutTitle: "Temporairement verrouillé",
-    loginLockoutMessage: (params) => `Trop de tentatives de connexion échouées. Veuillez réessayer dans ${params.seconds} secondes.`,
     loginUsernameRequired: "Le nom d'utilisateur est requis.",
     loginPasswordRequired: "Le mot de passe est requis.",
-    loginSecurityNotice: "Ceci est un prototype. N'utilisez pas de vrais identifiants.",
+    loginSecurityNoticeBackend: "Connexion sécurisée. Vos identifiants sont chiffrés.",
     loginRedirecting: "Redirection...",
-    rememberMeLabel: "Rester connecté pendant 30 jours",
+    rememberMeLabel: "Rester connecté",
     showPassword: "Afficher le mot de passe",
     hidePassword: "Masquer le mot de passe",
     changePasswordModalTitle: "Changer de mot de passe",
@@ -1155,14 +1219,15 @@ export const translations: Record<Locale, Translations> = {
     newPasswordPlaceholder: "Votre nouveau mot de passe",
     confirmNewPasswordPlaceholder: "Confirmez votre nouveau mot de passe",
     updatePasswordButton: "Mettre à jour le mot de passe",
-    passwordUpdateSuccessTitle: "Mise à jour du mot de passe initiée",
-    passwordUpdateSuccessDescription: "Processus de changement de mot de passe initié. (Prototype : Le mot de passe n'est pas réellement stocké ni changé.)",
+    passwordUpdateSuccessTitle: "Mot de passe mis à jour",
+    passwordUpdateSuccessDescription: "Votre mot de passe a été changé avec succès.",
     passwordUpdateErrorIncorrectCurrent: "Mot de passe actuel incorrect.",
     passwordUpdateErrorNewPasswordRequired: "Le nouveau mot de passe est requis.",
     passwordUpdateErrorConfirmPasswordRequired: "La confirmation du nouveau mot de passe est requise.",
     passwordUpdateErrorPasswordsDoNotMatch: "Les nouveaux mots de passe ne correspondent pas.",
     passwordUpdateErrorCurrentEqualsNew: "Le nouveau mot de passe doit être différent du mot de passe actuel.",
     passwordMinLength: (params) => `Le mot de passe doit comporter au moins ${params.length} caractères.`,
+    passwordUpdateFailedError: "Échec de la mise à jour du mot de passe. Veuillez vérifier votre ancien mot de passe ou réessayer plus tard.",
     toastCategoryAddedTitle: "Catégorie ajoutée",
     toastCategoryAddedDescription: (params) => `La catégorie "${params.categoryName}" a été ajoutée.`,
     toastCategoryUpdatedTitle: "Catégorie mise à jour",
@@ -1185,6 +1250,19 @@ export const translations: Record<Locale, Translations> = {
     toastAssigneeUpdatedDescription: (params) => `La personne "${params.assigneeName}" a été mise à jour.`,
     toastAssigneeDeletedTitle: "Personne Assignée Supprimée",
     toastAssigneeDeletedDescription: (params) => `La personne "${params.assigneeName}" a été supprimée.`,
+    toastTodoAddedTitle: "Tâche Ajoutée",
+    toastTodoAddedDescription: (params) => `Tâche "${params.todoText}" ajoutée.`,
+    toastTodoUpdatedTitle: "Tâche Mise à Jour",
+    toastTodoUpdatedDescription: (params) => `Tâche "${params.todoText}" mise à jour.`,
+    toastTodoDeletedTitle: "Tâche Supprimée",
+    toastTodoDeletedDescription: (params) => `Tâche "${params.todoText}" supprimée.`,
+    toastDefaultErrorDescription: "Une erreur inattendue s'est produite. Veuillez réessayer.",
+    toastFailedToFetchErrorDescription: (params) => `Impossible de se connecter au serveur à ${params.endpoint}. Veuillez vérifier votre connexion internet.`,
+    toastInvalidJsonErrorDescription: (params) => `Réponse invalide reçue du serveur à ${params.endpoint}.`,
+    toastActivityLoadErrorTitle: "Erreur lors du Chargement des Activités",
+    toastCategoryLoadErrorTitle: "Erreur lors du Chargement des Catégories",
+    toastAssigneeLoadErrorTitle: "Erreur lors du Chargement des Utilisateurs",
+    historyLoadErrorTitle: "Erreur lors du Chargement de l'Historique",
     dashboardTitle: "Tableau de bord des activités",
     dashboardMainDescription: "Suivez la progression de vos activités et consultez des résumés.",
     dashboardChartView: "Vue graphique",
@@ -1241,7 +1319,7 @@ export const translations: Record<Locale, Translations> = {
     historyLogDeleteCategory: (params) => `Catégorie supprimée : "${params.name}" (Mode : ${params.mode}).`,
     historyLogSwitchToPersonalMode: "Passé en mode Personnel.",
     historyLogSwitchToWorkMode: "Passé en mode Travail.",
-    historyLogPasswordChange: "Mot de passe changé.",
+    historyLogPasswordChangeAttempt: "Tentative de changement de mot de passe.",
     historyLogAddAssignee: (params) => `Personne assignée ajoutée : "${params.name}"${params.isAdmin ? ' (Admin)' : ''}.`,
     historyLogUpdateAssignee: (params) => `Personne assignée mise à jour : "${params.oldName ? params.oldName + ' à ' : ''}${params.name}"${params.newUsername ? ` (Nom d'utilisateur : ${params.oldUsername ? params.oldUsername + ' à ' : ''}${params.newUsername})` : ''}${params.isAdmin !== undefined ? ` (Admin : ${params.oldIsAdmin ? 'Oui' : 'Non'} à ${params.isAdmin ? 'Oui' : 'Non'})` : ''}.`,
     historyLogDeleteAssignee: (params) => `Personne assignée supprimée : "${params.name}".`,
@@ -1308,5 +1386,3 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
-
-    
