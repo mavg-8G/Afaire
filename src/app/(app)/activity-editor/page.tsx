@@ -51,7 +51,17 @@ const recurrenceSchema = z.object({
 export default function ActivityEditorPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { addActivity, updateActivity, appMode, assignees, getRawActivities, getCategoryById, isLoading: isAppStoreLoading } = useAppStore();
+  // Correctly destructure from useAppStore()
+  const {
+    addActivity,
+    updateActivity,
+    appMode,
+    assignees,
+    getRawActivities,
+    getCategoryById, // getCategoryById is destructured
+    isLoading: isAppStoreLoading,
+    categories // categories is destructured
+  } = useAppStore();
   const { toast } = useToast();
   const { t, locale } = useTranslations();
 
@@ -61,8 +71,8 @@ export default function ActivityEditorPage() {
   const [activityToEdit, setActivityToEdit] = useState<Activity | undefined>(undefined);
   const [isLoadingActivity, setIsLoadingActivity] = useState(true); // For loading existing activity
 
-  const activityIdParam = searchParams.get('id'); // This will be string from URL
-  const activityId = activityIdParam ? parseInt(activityIdParam, 10) : undefined; // Convert to number
+  const activityIdParam = searchParams.get('id');
+  const activityId = activityIdParam ? parseInt(activityIdParam, 10) : undefined;
   const initialDateParam = searchParams.get('initialDate');
 
   const dateLocale = useMemo(() => (locale === 'es' ? es : locale === 'fr' ? fr : enUS), [locale]);
@@ -75,7 +85,7 @@ export default function ActivityEditorPage() {
     todos: z.array(todoSchema).optional(),
     notes: z.string().optional(),
     recurrence: recurrenceSchema,
-    responsiblePersonIds: z.array(z.number()).optional(), // IDs are numbers
+    responsiblePersonIds: z.array(z.number()).optional(),
   });
 
   type ActivityFormData = z.infer<typeof activityFormSchema>;
@@ -105,7 +115,7 @@ export default function ActivityEditorPage() {
 
   useEffect(() => {
     setIsLoadingActivity(true);
-    const currentActivities = getRawActivities(); // Still from localStorage for initial fill
+    const currentActivities = getRawActivities();
     if (activityId !== undefined && !isNaN(activityId)) {
       const foundActivity = currentActivities.find(a => a.id === activityId);
       if (foundActivity) {
@@ -124,19 +134,19 @@ export default function ActivityEditorPage() {
             daysOfWeek: foundActivity.recurrence?.daysOfWeek || [],
             dayOfMonth: foundActivity.recurrence?.dayOfMonth || baseDate.getDate(),
           },
-          responsiblePersonIds: foundActivity.responsiblePersonIds?.map(id => Number(id)) || [], // Ensure numbers
+          responsiblePersonIds: foundActivity.responsiblePersonIds?.map(id => Number(id)) || [],
         });
       } else {
-        // Could fetch from backend if not found locally: GET /activities/{activityId}
-        // For now, assumes local consistency or redirects.
         toast({ variant: "destructive", title: "Error", description: "Activity not found." });
         router.replace('/');
       }
     } else {
-        const firstCategory = getCategoryById(useAppStore.getState().categories[0]?.id);
+        // Correctly use the 'categories' variable from the hook
+        const defaultCategory = categories.length > 0 ? categories[0] : undefined;
         form.reset({
             title: "",
-            categoryId: firstCategory ? firstCategory.id : undefined,
+            // Use the id of the first category if available
+            categoryId: defaultCategory ? defaultCategory.id : undefined,
             activityDate: defaultInitialDate,
             time: "",
             todos: [],
@@ -146,7 +156,7 @@ export default function ActivityEditorPage() {
         });
     }
     setIsLoadingActivity(false);
-  }, [activityId, getRawActivities, form, defaultInitialDate, router, toast, getCategoryById]);
+  }, [activityId, getRawActivities, form, defaultInitialDate, router, toast, categories, getCategoryById]); // Added categories and getCategoryById to dependency array
 
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "todos" });
@@ -165,20 +175,19 @@ export default function ActivityEditorPage() {
     const activityPayloadBase = {
       title: data.title,
       categoryId: data.categoryId,
-      todos: data.todos?.map(t => ({ text: t.text })) || [], // Only send text for creation/update
+      todos: data.todos?.map(t => ({ text: t.text })) || [],
       time: data.time === "" ? undefined : data.time,
       notes: data.notes,
       recurrence: recurrenceRule,
       responsiblePersonIds: (appMode === 'personal') ? data.responsiblePersonIds?.map(id => Number(id)) : [],
-      appMode: appMode, // Pass current appMode
+      appMode: appMode,
     };
-    
+
     try {
       if (activityToEdit && activityToEdit.id !== undefined) {
         const updatePayload = {
             ...activityPayloadBase,
-            createdAt: data.activityDate.getTime(), // Send for backend start_date
-            // completed, completedAt, completedOccurrences are managed client-side or implicitly by backend
+            createdAt: data.activityDate.getTime(),
         };
         await updateActivity(activityToEdit.id, updatePayload as Partial<Omit<Activity, 'id'>>, activityToEdit);
         toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
@@ -191,7 +200,6 @@ export default function ActivityEditorPage() {
       }
       router.replace('/');
     } catch (error) {
-      // Error handled by AppProvider's toast
       console.error("Failed to save activity:", error);
     } finally {
       setIsSubmittingForm(false);
@@ -238,7 +246,7 @@ export default function ActivityEditorPage() {
                     <FormLabel>{t('categoryLabel')}</FormLabel>
                     <CategorySelector
                       value={field.value !== undefined ? String(field.value) : undefined}
-                      onChange={(value) => field.onChange(value ? Number(value) : undefined)} // Convert string back to number
+                      onChange={(value) => field.onChange(value ? Number(value) : undefined)}
                       placeholder={t('selectCategoryPlaceholder')}
                     />
                     <FormMessage />
@@ -283,7 +291,7 @@ export default function ActivityEditorPage() {
                     </FormItem>
                 )}/>
               </div>
-              
+
               {appMode === 'personal' && (
                 <FormField control={form.control} name="responsiblePersonIds" render={() => (
                     <FormItem>
@@ -318,7 +326,7 @@ export default function ActivityEditorPage() {
                     </FormItem>
                 )}/>
               )}
-            
+
               <FormField control={form.control} name="recurrence.type" render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t('recurrenceTypeLabel')}</FormLabel>
@@ -463,3 +471,5 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
+
+    
