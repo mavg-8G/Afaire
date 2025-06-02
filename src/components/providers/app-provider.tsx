@@ -309,7 +309,7 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
     : 'ID_MISSING_OR_INVALID_IN_BACKEND_RESPONSE';
 
   if (!backendActivity || typeof backendActivity !== 'object') {
-    console.error(`[AppProvider] CRITICAL: backendToFrontendActivity received invalid backendActivity object for ID '${activityIdForLog}'. Received type: ${typeof backendActivity}, value:`, typeof backendActivity === 'object' ? JSON.stringify(backendActivity) : backendActivity);
+    console.error(`[AppProvider] CRITICAL: backendToFrontendActivity received invalid backendActivity object for ID '${activityIdForLog}'. Using fallback. Received type: ${typeof backendActivity}, value:`, typeof backendActivity === 'object' ? JSON.stringify(backendActivity) : backendActivity);
     return {
       id: Date.now() + Math.random(),
       title: 'Error: Invalid Activity Data from Backend',
@@ -333,8 +333,8 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
       createdAtTimestamp = Date.now();
     }
   } else {
-    console.warn(`[AppProvider] Warning: backendActivity.start_date is missing, null, or invalid in response for activity ID ${activityIdForLog}:`, startDateFromBackend === undefined ? 'FIELD_MISSING' : startDateFromBackend, ". Using fallback createdAt to Date.now().");
-    createdAtTimestamp = Date.now();
+    console.warn(`[AppProvider] Warning: backendActivity.start_date is missing, null, or invalid in response for activity ID ${activityIdForLog}:`, startDateFromBackend === undefined ? 'FIELD_MISSING_OR_UNDEFINED' : startDateFromBackend, ". Using fallback createdAt to Date.now().");
+    createdAtTimestamp = Date.now(); // Fallback
   }
   
   let daysOfWeekArray: number[] = [];
@@ -351,8 +351,9 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
     dayOfMonth: backendActivity.day_of_month ?? undefined,
   };
   
- const todos: Todo[] = (Array.isArray(backendActivity.todos))
-    ? backendActivity.todos.map((bt: BackendTodo, index: number) => {
+ const todos: Todo[] = [];
+ if (Array.isArray(backendActivity.todos)) {
+    backendActivity.todos.forEach((bt: BackendTodo, index: number) => {
         const todoId = typeof bt?.id === 'number' ? bt.id : Date.now() + Math.random() + index;
         if (typeof bt?.id !== 'number') {
             console.warn(`[AppProvider] Warning: Todo at index ${index} for activity ID ${activityIdForLog} is missing a valid 'id' from backend. Using temporary ID ${todoId}. Backend todo:`, bt);
@@ -360,15 +361,13 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
         if (typeof bt?.text !== 'string') {
              console.warn(`[AppProvider] Warning: Todo at index ${index} for activity ID ${activityIdForLog} is missing 'text'.`);
         }
-        return {
+        todos.push({
           id: todoId,
           text: bt?.text || 'Untitled Todo from Backend',
-          completed: false,
-        };
-      })
-    : [];
-
-  if (!(Array.isArray(backendActivity.todos))) {
+          completed: false, // Backend todo doesn't have completion status
+        });
+      });
+  } else {
      console.warn(`[AppProvider] Warning: backendActivity.todos is missing or not an array for activity ID ${activityIdForLog}. Defaulting to empty array. Received:`, backendActivity.todos);
   }
   
@@ -425,9 +424,10 @@ const frontendToBackendActivityPayload = (
     payload.day_of_month = null;
   }
 
+  // Always include responsible_ids for updates if present, or empty array for creates if not present
   if (activity.responsiblePersonIds !== undefined) {
     payload.responsible_ids = activity.responsiblePersonIds;
-  } else if (!isUpdate) {
+  } else if (!isUpdate) { // Only default to empty for creates
     payload.responsible_ids = [];
   }
 
@@ -1153,15 +1153,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
 
-    const payload: Partial<BackendUserUpdatePayload> = {};
-    if (updates.name) payload.name = updates.name;
-    if (updates.username) payload.username = updates.username;
+    const formData = new FormData();
+    if (updates.name) formData.append('name', updates.name);
+    if (updates.username) formData.append('username', updates.username);
+    // Password updates are not handled by this specific UI flow/form.
 
     try {
       const response = await fetch(`${API_BASE_URL}/users/${assigneeId}`, {
          method: 'PUT',
-         headers: { 'Content-Type': 'application/json' }, 
-         body: JSON.stringify(payload)
+         // Content-Type header is not set, browser will set it for FormData
+         body: formData
       });
 
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to update assignee: HTTP ${response.status}`));}
@@ -1216,10 +1217,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     ) => {
     setError(null);
     const frontendActivityShell: Activity = {
-      id: 0,
+      id: 0, // Temporary, backend will assign
       title: activityData.title,
       categoryId: activityData.categoryId,
-      todos: (activityData.todos || []).map(t => ({ id: 0, text: t.text, completed: false })),
+      todos: (activityData.todos || []).map(t => ({ id: 0, text: t.text, completed: false })), // Temp IDs
       createdAt: customCreatedAt !== undefined ? customCreatedAt : Date.now(),
       time: activityData.time,
       notes: activityData.notes,
@@ -1275,8 +1276,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       
       let processedActivityFromBackend = backendToFrontendActivity(updatedBackendActivity, appModeState);
       
-      // If 'updates' (from form submission) contains 'todos', prioritize it for local state.
-      // Otherwise, if backend didn't send todos, keep original client todos.
+      // Prioritize client-side todos if they were part of the 'updates' object (from editor submission)
+      // Or, if backend response lacks todos, retain the original client-side todos.
       if (updates.todos && Array.isArray(updates.todos)) {
          processedActivityFromBackend.todos = updates.todos.map(t => ({
             id: t.id as number, // Assume ID exists for updates if passed
@@ -1284,6 +1285,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             completed: !!t.completed
          }));
       } else if (activityToUpdate && (!processedActivityFromBackend.todos || processedActivityFromBackend.todos.length === 0) && activityToUpdate.todos.length > 0) {
+          // Backend response didn't include todos, but client had them -> retain client's todos
           processedActivityFromBackend.todos = activityToUpdate.todos;
       }
       
@@ -1492,3 +1494,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+
+
+    
