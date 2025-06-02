@@ -27,7 +27,7 @@ import { useTranslations } from '@/contexts/language-context';
 import { enUS, es, fr } from 'date-fns/locale';
 import { useTheme } from 'next-themes';
 
-const API_BASE_URL = 'http://62.171.187.41:10242';
+const API_BASE_URL = 'https://afaire.is-cool.dev/api';
 
 export interface AppContextType {
   activities: Activity[];
@@ -655,10 +655,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setIsCategoriesLoading(true);
       try {
         const response = await fetch(`${API_BASE_URL}/categories`);
-        if (!response.ok) { 
-          const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-          throw new Error(formatBackendError(errorData, `Failed to fetch categories: HTTP ${response.status}`));
-        }
+        if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to fetch categories: HTTP ${response.status}`));}
         const backendCategories: BackendCategory[] = await response.json();
         setAllCategories(backendCategories.map(cat => backendToFrontendCategory(cat)));
       } catch (err) { createApiErrorToast(err, toast, "toastCategoryLoadErrorTitle", "loading", t, `${API_BASE_URL}/categories`); setError(prev => prev ? `${prev} Categories failed. ` : "Categories failed. "); setAllCategories([]); }
@@ -669,10 +666,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setIsAssigneesLoading(true);
       try {
         const response = await fetch(`${API_BASE_URL}/users`);
-        if (!response.ok) { 
-          const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-          throw new Error(formatBackendError(errorData, `Failed to fetch users: HTTP ${response.status}`));
-        }
+        if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to fetch users: HTTP ${response.status}`));}
         const backendUsers: BackendUser[] = await response.json();
         setAllAssignees(backendUsers.map(user => backendToFrontendAssignee(user)));
       } catch (err) { createApiErrorToast(err, toast, "toastAssigneeLoadErrorTitle", "loading", t, `${API_BASE_URL}/users`); setError(prev => prev ? `${prev} Assignees failed. ` : "Assignees failed. "); setAllAssignees([]); }
@@ -683,10 +677,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setIsHistoryLoading(true);
       try {
         const response = await fetch(`${API_BASE_URL}/history`);
-        if (!response.ok) { 
-          const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-          throw new Error(formatBackendError(errorData, `Failed to fetch history: HTTP ${response.status}`));
-        }
+        if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to fetch history: HTTP ${response.status}`));}
         const backendHistoryItems: BackendHistory[] = await response.json();
         setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
       } catch (err) { createApiErrorToast(err, toast, "historyLoadErrorTitle", "loading", t, `${API_BASE_URL}/history`); setError(prev => prev ? `${prev} History failed. ` : "History failed. "); setHistoryLog([]);}
@@ -986,10 +977,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const payload: BackendCategoryCreatePayload = { name, icon_name: iconName, mode: frontendToBackendCategoryMode(mode) };
     try {
       const response = await fetch(`${API_BASE_URL}/categories`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (!response.ok) { 
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(formatBackendError(errorData, `Failed to add category: HTTP ${response.status}`));
-      }
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add category: HTTP ${response.status}`));}
       const newBackendCategory: BackendCategory = await response.json();
       setAllCategories(prev => [...prev, backendToFrontendCategory(newBackendCategory)]);
       toast({ title: t('toastCategoryAddedTitle'), description: t('toastCategoryAddedDescription', { categoryName: name }) });
@@ -1006,10 +994,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     try {
       const response = await fetch(`${API_BASE_URL}/categories/${categoryId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (!response.ok) { 
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(formatBackendError(errorData, `Failed to update category: HTTP ${response.status}`));
-      }
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to update category: HTTP ${response.status}`));}
       const updatedBackendCategory: BackendCategory = await response.json();
       const updatedFrontendCategory = backendToFrontendCategory(updatedBackendCategory);
       setAllCategories(prev => prev.map(cat => (cat.id === categoryId ? updatedFrontendCategory : cat)));
@@ -1027,10 +1012,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!categoryToDelete) return;
     try {
       const response = await fetch(`${API_BASE_URL}/categories/${categoryId}`, { method: 'DELETE' });
-      if (!response.ok) { 
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(formatBackendError(errorData, `Failed to delete category: HTTP ${response.status}`));
-      }
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete category: HTTP ${response.status}`));}
       setAllCategories(prev => prev.filter(cat => cat.id !== categoryId));
       toast({ title: t('toastCategoryDeletedTitle'), description: t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name }) });
       addHistoryLogEntry('historyLogDeleteCategory', { name: categoryToDelete.name, mode: categoryToDelete.mode as string }, 'category');
@@ -1045,10 +1027,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     try {
       const response = await fetch(`${API_BASE_URL}/users`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (!response.ok) { 
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(formatBackendError(errorData, `Failed to add assignee: HTTP ${response.status}`));
-      }
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add assignee: HTTP ${response.status}`));}
       const newBackendUser: BackendUser = await response.json();
       setAllAssignees(prev => [...prev, backendToFrontendAssignee(newBackendUser)]);
       toast({ title: t('toastAssigneeAddedTitle'), description: t('toastAssigneeAddedDescription', { assigneeName: name }) });
@@ -1073,6 +1052,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const payload: Partial<BackendUserUpdatePayload> = {};
     if (updates.name) payload.name = updates.name;
     if (updates.username) payload.username = updates.username;
+    // Password is not included here based on previous decision for simpler assignee updates.
+    // If backend's PUT /users requires password, this needs to change or backend needs to allow optional password for update.
 
     try {
       const response = await fetch(`${API_BASE_URL}/users/${assigneeId}`, {
@@ -1081,10 +1062,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
          body: JSON.stringify(payload) 
       });
 
-      if (!response.ok) { 
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(formatBackendError(errorData, `Failed to update assignee: HTTP ${response.status}`));
-      }
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to update assignee: HTTP ${response.status}`));}
       const updatedBackendUser: BackendUser = await response.json();
       setAllAssignees(prev => prev.map(asg => (asg.id === assigneeId ? backendToFrontendAssignee(updatedBackendUser) : asg)));
       toast({ title: t('toastAssigneeUpdatedTitle'), description: t('toastAssigneeUpdatedDescription', { assigneeName: updatedBackendUser.name }) });
@@ -1113,10 +1091,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!assigneeToDelete) return;
     try {
       const response = await fetch(`${API_BASE_URL}/users/${assigneeId}`, { method: 'DELETE' });
-      if (!response.ok) { 
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(formatBackendError(errorData, `Failed to delete assignee: HTTP ${response.status}`));
-      }
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete assignee: HTTP ${response.status}`));}
       setAllAssignees(prev => prev.filter(asg => asg.id !== assigneeId));
       const updateActivities = (acts: Activity[]) => 
         acts.map(act => ({
@@ -1156,10 +1131,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     try {
       const response = await fetch(`${API_BASE_URL}/activities`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (!response.ok) { 
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(formatBackendError(errorData, `Failed to add activity: HTTP ${response.status}`));
-      }
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add activity: HTTP ${response.status}`));}
       const newBackendActivity: BackendActivity = await response.json();
       const newFrontendActivity = backendToFrontendActivity(newBackendActivity, appModeState); 
       
@@ -1185,10 +1157,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     try {
       const response = await fetch(`${API_BASE_URL}/activities/${activityId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (!response.ok) { 
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(formatBackendError(errorData, `Failed to update activity: HTTP ${response.status}`));
-      }
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to update activity: HTTP ${response.status}`));}
       const updatedBackendActivity: BackendActivity = await response.json();
       const finalFrontendActivity = {
         ...backendToFrontendActivity(updatedBackendActivity, appModeState), 
@@ -1215,10 +1184,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     try {
       const response = await fetch(`${API_BASE_URL}/activities/${activityId}`, { method: 'DELETE' });
-      if (!response.ok) { 
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(formatBackendError(errorData, `Failed to delete activity: HTTP ${response.status}`));
-      }
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete activity: HTTP ${response.status}`));}
       currentActivitySetter(prev => prev.filter(act => act.id !== activityId));
       toast({ title: t('toastActivityDeletedTitle'), description: t('toastActivityDeletedDescription', { activityTitle: activityToDelete.title }) });
       addHistoryLogEntry(appModeState === 'personal' ? 'historyLogDeleteActivityPersonal' : 'historyLogDeleteActivityWork', { title: activityToDelete.title }, appModeState);
