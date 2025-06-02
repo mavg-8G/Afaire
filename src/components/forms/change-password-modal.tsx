@@ -25,11 +25,14 @@ import {
 } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslations } from '@/contexts/language-context';
-import { HARDCODED_PASSWORD } from '@/lib/constants';
+import { HARDCODED_PASSWORD } from '@/lib/constants'; // Superuser password
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Terminal, Eye, EyeOff } from 'lucide-react';
 import { useAppStore } from '@/hooks/use-app-store';
 
+// This is the default password assigned to users created via the UI
+// It needs to be accessible here for the change password modal to work for them.
+const DEFAULT_CREATED_USER_PASSWORD = "P@ssword123";
 
 const PASSWORD_MIN_LENGTH = 6;
 
@@ -41,7 +44,7 @@ interface ChangePasswordModalProps {
 export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProps) {
   const { t } = useTranslations();
   const { toast } = useToast();
-  const { logPasswordChange } = useAppStore(); // Get the logging function
+  const { logPasswordChange } = useAppStore();
   const [serverError, setServerError] = useState<string | null>(null);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -72,12 +75,12 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
 
   const onSubmit = (data: ChangePasswordFormData) => {
     setServerError(null);
-    if (data.currentPassword !== HARDCODED_PASSWORD) {
+    // Allow changing password if currentPassword matches either the superuser or the default created user password
+    if (data.currentPassword !== HARDCODED_PASSWORD && data.currentPassword !== DEFAULT_CREATED_USER_PASSWORD) {
       setServerError(t('passwordUpdateErrorIncorrectCurrent'));
       return;
     }
 
-    // Log the password change event
     logPasswordChange();
 
     toast({
@@ -219,3 +222,4 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
     </Dialog>
   );
 }
+
