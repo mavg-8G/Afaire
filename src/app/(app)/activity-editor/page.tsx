@@ -58,9 +58,9 @@ export default function ActivityEditorPage() {
     appMode,
     assignees,
     getRawActivities,
-    getCategoryById, // getCategoryById is destructured
+    getCategoryById, 
     isLoading: isAppStoreLoading,
-    categories // categories is destructured
+    categories 
   } = useAppStore();
   const { toast } = useToast();
   const { t, locale } = useTranslations();
@@ -126,7 +126,11 @@ export default function ActivityEditorPage() {
           categoryId: foundActivity.categoryId,
           activityDate: baseDate,
           time: foundActivity.time || "",
-          todos: foundActivity.todos?.map(t => ({ id: t.id, text: t.text, completed: t.completed })) || [],
+          todos: foundActivity.todos?.map(t => ({ 
+            id: t.id, 
+            text: t.text, 
+            completed: !!t.completed // Ensure boolean
+          })) || [],
           notes: foundActivity.notes || "",
           recurrence: {
             type: foundActivity.recurrence?.type || 'none',
@@ -141,11 +145,9 @@ export default function ActivityEditorPage() {
         router.replace('/');
       }
     } else {
-        // Correctly use the 'categories' variable from the hook
         const defaultCategory = categories.length > 0 ? categories[0] : undefined;
         form.reset({
             title: "",
-            // Use the id of the first category if available
             categoryId: defaultCategory ? defaultCategory.id : undefined,
             activityDate: defaultInitialDate,
             time: "",
@@ -156,7 +158,7 @@ export default function ActivityEditorPage() {
         });
     }
     setIsLoadingActivity(false);
-  }, [activityId, getRawActivities, form, defaultInitialDate, router, toast, categories, getCategoryById]); // Added categories and getCategoryById to dependency array
+  }, [activityId, getRawActivities, form, defaultInitialDate, router, toast, categories, getCategoryById]);
 
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "todos" });
@@ -175,7 +177,12 @@ export default function ActivityEditorPage() {
     const activityPayloadBase = {
       title: data.title,
       categoryId: data.categoryId,
-      todos: data.todos?.map(t => ({ text: t.text })) || [],
+      // Map todos for submission, ensuring new todos don't have an ID yet
+      todos: data.todos?.map(t => ({ 
+        id: t.id, // Pass ID if it exists (for updates/tracking)
+        text: t.text, 
+        completed: !!t.completed // Ensure boolean for client-side state
+      })) || [],
       time: data.time === "" ? undefined : data.time,
       notes: data.notes,
       recurrence: recurrenceRule,
@@ -187,13 +194,18 @@ export default function ActivityEditorPage() {
       if (activityToEdit && activityToEdit.id !== undefined) {
         const updatePayload = {
             ...activityPayloadBase,
-            createdAt: data.activityDate.getTime(),
+            createdAt: data.activityDate.getTime(), // This updates the original start_date if modified
         };
         await updateActivity(activityToEdit.id, updatePayload as Partial<Omit<Activity, 'id'>>, activityToEdit);
         toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
       } else {
+        // For adding, we map todos to Omit<Todo, 'id'|'completed'> as backend assigns ID and completion is client-side init
+        const addPayload = {
+            ...activityPayloadBase,
+            todos: data.todos?.map(t => ({ text: t.text })), // Only text for new todos
+        };
         await addActivity(
-          activityPayloadBase as Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId'| 'appMode'| 'masterActivityId' | 'isRecurringInstance' | 'originalInstanceDate'> & { todos?: Omit<Todo, 'id'|'completed'>[], time?: string, notes?: string, recurrence?: RecurrenceRule | null, responsiblePersonIds?: number[], categoryId: number, appMode: AppMode },
+          addPayload as Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId'| 'appMode'| 'masterActivityId' | 'isRecurringInstance' | 'originalInstanceDate'> & { todos?: Omit<Todo, 'id'|'completed'>[], time?: string, notes?: string, recurrence?: RecurrenceRule | null, responsiblePersonIds?: number[], categoryId: number, appMode: AppMode },
           data.activityDate.getTime()
         );
         toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
@@ -201,6 +213,7 @@ export default function ActivityEditorPage() {
       router.replace('/');
     } catch (error) {
       console.error("Failed to save activity:", error);
+      // Error toast might be handled by AppProvider or here if specific
     } finally {
       setIsSubmittingForm(false);
     }
@@ -471,5 +484,7 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
+
+    
 
     

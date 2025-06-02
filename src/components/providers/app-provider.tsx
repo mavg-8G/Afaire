@@ -346,15 +346,15 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
       createdAtTimestamp = Date.now(); // Fallback
     }
   } else {
-    console.warn(`[AppProvider] Warning: backendActivity.start_date is missing, null, or invalid in response for activity ID ${activityIdForLog}. Received:`, startDateFromBackend === undefined ? 'FIELD_MISSING' : startDateFromBackend, ". Using fallback.");
+    console.warn(`[AppProvider] Warning: backendActivity.start_date is missing, null, or invalid in response for activity ID ${activityIdForLog}:`, startDateFromBackend === undefined ? 'FIELD_MISSING' : startDateFromBackend, ". Using fallback.");
     createdAtTimestamp = Date.now(); // Fallback
   }
   
-  const todos = (backendActivity && Array.isArray(backendActivity.todos))
+  const todos: Todo[] = (backendActivity && Array.isArray(backendActivity.todos))
     ? backendActivity.todos.map((bt: BackendTodo) => ({
         id: typeof bt?.id === 'number' ? bt.id : Date.now() + Math.random(), 
         text: bt?.text || 'Untitled Todo from Backend',
-        completed: false, 
+        completed: false, // Initialize all backend todos as not completed
       }))
     : [];
 
@@ -396,7 +396,7 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
     recurrence: recurrenceRule.type === 'none' ? { type: 'none' } : recurrenceRule,
     completedOccurrences: {}, 
     responsiblePersonIds: responsiblePersonIds,
-    appMode: backendActivity?.mode === 'both' ? currentAppMode : (backendActivity?.mode || currentAppMode), 
+    appMode: (backendActivity?.mode === 'both' ? currentAppMode : (backendActivity?.mode || currentAppMode)) as AppMode, 
   };
 };
 
@@ -1267,6 +1267,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         ...backendToFrontendActivity(updatedBackendActivity, appModeState), 
         completedOccurrences: activityToUpdate.completedOccurrences, 
       };
+      // Preserve client-side todo completion status after backend update
+      if (updates.todos && Array.isArray(updates.todos)) {
+         finalFrontendActivity.todos = updates.todos;
+      }
+
+
       if (updates.completedOccurrences) {
         finalFrontendActivity.completedOccurrences = { ...finalFrontendActivity.completedOccurrences, ...updates.completedOccurrences };
       }
@@ -1480,3 +1486,5 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+
+    
