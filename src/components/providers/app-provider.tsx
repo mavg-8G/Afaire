@@ -58,8 +58,8 @@ export interface AppContextType {
   addCategory: (name: string, iconName: string, mode: AppMode | 'all') => Promise<void>;
   updateCategory: (categoryId: number, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => Promise<void>;
   deleteCategory: (categoryId: number) => Promise<void>;
-  addAssignee: (name: string, username?: string, password?: string) => Promise<void>;
-  updateAssignee: (assigneeId: number, updates: Partial<Pick<Assignee, 'name' | 'username'>>) => Promise<void>;
+  addAssignee: (name: string, username?: string, password?: string, isAdmin?: boolean) => Promise<void>;
+  updateAssignee: (assigneeId: number, updates: Partial<Pick<Assignee, 'name' | 'username' | 'isAdmin'>>) => Promise<void>;
   deleteAssignee: (assigneeId: number) => Promise<void>;
   getAssigneeById: (assigneeId: number) => Assignee | undefined;
   isLoading: boolean;
@@ -301,6 +301,7 @@ const backendToFrontendAssignee = (backendUser: BackendUser): Assignee => ({
   id: backendUser.id,
   name: backendUser.name,
   username: backendUser.username,
+  isAdmin: backendUser.is_admin || false, // Map is_admin, default to false
 });
 
 const backendToFrontendActivity = (backendActivity: BackendActivity | null | undefined, currentAppMode: AppMode): Activity => {
@@ -333,7 +334,7 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
       createdAtTimestamp = Date.now();
     }
   } else {
-    console.warn(`[AppProvider] Warning: backendActivity.start_date is missing, null, or invalid in response for activity ID ${activityIdForLog}:`, startDateFromBackend === undefined ? 'FIELD_MISSING_OR_UNDEFINED' : startDateFromBackend, ". Using fallback createdAt to Date.now().");
+    console.warn(`[AppProvider] Warning: backendActivity.start_date is missing, null, or invalid in response for activity ID ${activityIdForLog}:`, startDateFromBackend === undefined ? 'FIELD_MISSING' : startDateFromBackend, ". Using fallback createdAt to Date.now().");
     createdAtTimestamp = Date.now(); // Fallback
   }
   
@@ -341,8 +342,10 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
   if (backendActivity.days_of_week && typeof backendActivity.days_of_week === 'string') {
     daysOfWeekArray = backendActivity.days_of_week.split(',').map(dayStr => parseInt(dayStr.trim(), 10)).filter(num => !isNaN(num));
   } else if (Array.isArray(backendActivity.days_of_week)) {
-    daysOfWeekArray = backendActivity.days_of_week.map(dayStr => parseInt(String(dayStr).trim(), 10)).filter(num => !isNaN(num));
+    // Handle if backend sends it as an array of numbers or strings directly
+    daysOfWeekArray = backendActivity.days_of_week.map(day => parseInt(String(day).trim(), 10)).filter(num => !isNaN(num));
   }
+
 
   const recurrenceRule: RecurrenceRule = {
     type: backendActivity.repeat_mode as RecurrenceType,
@@ -359,12 +362,12 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
             console.warn(`[AppProvider] Warning: Todo at index ${index} for activity ID ${activityIdForLog} is missing a valid 'id' from backend. Using temporary ID ${todoId}. Backend todo:`, bt);
         }
         if (typeof bt?.text !== 'string') {
-             console.warn(`[AppProvider] Warning: Todo at index ${index} for activity ID ${activityIdForLog} is missing 'text'.`);
+            console.warn(`[AppProvider] Warning: Todo at index ${index} for activity ID ${activityIdForLog} is missing 'text'.`);
         }
         todos.push({
           id: todoId,
           text: bt?.text || 'Untitled Todo from Backend',
-          completed: false, // Backend todo doesn't have completion status
+          completed: false, 
         });
       });
   } else {
@@ -423,11 +426,10 @@ const frontendToBackendActivityPayload = (
     payload.days_of_week = null;
     payload.day_of_month = null;
   }
-
-  // Always include responsible_ids for updates if present, or empty array for creates if not present
+  
   if (activity.responsiblePersonIds !== undefined) {
     payload.responsible_ids = activity.responsiblePersonIds;
-  } else if (!isUpdate) { // Only default to empty for creates
+  } else if (!isUpdate) { 
     payload.responsible_ids = [];
   }
 
@@ -1123,11 +1125,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (err) { createApiErrorToast(err, toast, "toastCategoryDeletedTitle", "deleting", t, `${API_BASE_URL}/categories/${categoryId}`); setError((err as Error).message); throw err; }
   }, [allCategories, toast, t, addHistoryLogEntry]);
 
-  const addAssignee = useCallback(async (name: string, username?: string, password?: string) => {
+  const addAssignee = useCallback(async (name: string, username?: string, password?: string, isAdmin?: boolean) => {
     setError(null);
     const finalUsername = username || name.toLowerCase().replace(/\s+/g, '') + Math.floor(Math.random() * 1000);
-    const finalPassword = password || "P@ssword123";
-    const payload: BackendUserCreatePayload = { name, username: finalUsername, password: finalPassword };
+    const finalPassword = password || "P@ssword123"; // Default password, only for prototype
+    const payload: BackendUserCreatePayload = { 
+        name, 
+        username: finalUsername, 
+        password: finalPassword,
+        is_admin: isAdmin || false, // Include isAdmin, default to false
+    };
 
     try {
       const response = await fetch(`${API_BASE_URL}/users`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -1135,11 +1142,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const newBackendUser: BackendUser = await response.json();
       setAllAssignees(prev => [...prev, backendToFrontendAssignee(newBackendUser)]);
       toast({ title: t('toastAssigneeAddedTitle'), description: t('toastAssigneeAddedDescription', { assigneeName: name }) });
-      addHistoryLogEntry('historyLogAddAssignee', { name }, 'assignee');
+      addHistoryLogEntry('historyLogAddAssignee', { name, isAdmin: newBackendUser.is_admin ? 1 : 0 }, 'assignee');
     } catch (err) { createApiErrorToast(err, toast, "toastAssigneeAddedTitle", "adding", t, `${API_BASE_URL}/users`); setError((err as Error).message); throw err; }
   }, [toast, t, addHistoryLogEntry]);
 
-  const updateAssignee = useCallback(async (assigneeId: number, updates: Partial<Pick<Assignee, 'name' | 'username'>>) => {
+  const updateAssignee = useCallback(async (assigneeId: number, updates: Partial<Pick<Assignee, 'name' | 'username' | 'isAdmin'>>) => {
     setError(null);
     const currentAssignee = assignees.find(a => a.id === assigneeId);
     
@@ -1156,27 +1163,39 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const formData = new FormData();
     if (updates.name) formData.append('name', updates.name);
     if (updates.username) formData.append('username', updates.username);
-    // Password updates are not handled by this specific UI flow/form.
+    // Note: Backend's PUT /users/{user_id} does not currently accept 'is_admin' via Form.
+    // If backend is updated to accept is_admin (e.g., via JSON payload or another Form field), this needs adjustment.
+    // For now, isAdmin updates are only reflected client-side if the backend doesn't strip it.
 
     try {
       const response = await fetch(`${API_BASE_URL}/users/${assigneeId}`, {
          method: 'PUT',
-         // Content-Type header is not set, browser will set it for FormData
-         body: formData
+         body: formData 
       });
 
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to update assignee: HTTP ${response.status}`));}
       const updatedBackendUser: BackendUser = await response.json();
-      setAllAssignees(prev => prev.map(asg => (asg.id === assigneeId ? backendToFrontendAssignee(updatedBackendUser) : asg)));
+      const frontendAssignee = backendToFrontendAssignee(updatedBackendUser);
+      // If the backend doesn't return is_admin, but we intended to change it, reflect client-side intent.
+      if (updates.isAdmin !== undefined && frontendAssignee.isAdmin !== updates.isAdmin) {
+        frontendAssignee.isAdmin = updates.isAdmin;
+      }
+
+      setAllAssignees(prev => prev.map(asg => (asg.id === assigneeId ? frontendAssignee : asg)));
       toast({ title: t('toastAssigneeUpdatedTitle'), description: t('toastAssigneeUpdatedDescription', { assigneeName: updatedBackendUser.name }) });
       
-      const historyDetails: Record<string, string | undefined> = { name: updatedBackendUser.name };
+      const historyDetails: Record<string, string | number | undefined> = { name: updatedBackendUser.name };
       if (currentAssignee?.name !== updatedBackendUser.name) {
         historyDetails.oldName = currentAssignee?.name;
       }
       if (updates.username && currentAssignee?.username !== updatedBackendUser.username) {
         historyDetails.oldUsername = currentAssignee?.username;
         historyDetails.newUsername = updatedBackendUser.username;
+      }
+      // Log isAdmin change if it was part of the update intent
+      if (updates.isAdmin !== undefined && currentAssignee?.isAdmin !== updates.isAdmin) {
+        historyDetails.isAdmin = updates.isAdmin ? 1 : 0;
+        historyDetails.oldIsAdmin = currentAssignee?.isAdmin ? 1 : 0;
       }
       addHistoryLogEntry('historyLogUpdateAssignee', historyDetails, 'assignee');
 
@@ -1276,16 +1295,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       
       let processedActivityFromBackend = backendToFrontendActivity(updatedBackendActivity, appModeState);
       
-      // Prioritize client-side todos if they were part of the 'updates' object (from editor submission)
-      // Or, if backend response lacks todos, retain the original client-side todos.
+      // If 'updates' contains todos, use those for the final client-side state,
+      // otherwise, if backend response is missing todos but client had them, retain client's todos.
       if (updates.todos && Array.isArray(updates.todos)) {
          processedActivityFromBackend.todos = updates.todos.map(t => ({
-            id: t.id as number, // Assume ID exists for updates if passed
+            id: t.id as number, 
             text: t.text,
             completed: !!t.completed
          }));
       } else if (activityToUpdate && (!processedActivityFromBackend.todos || processedActivityFromBackend.todos.length === 0) && activityToUpdate.todos.length > 0) {
-          // Backend response didn't include todos, but client had them -> retain client's todos
           processedActivityFromBackend.todos = activityToUpdate.todos;
       }
       
@@ -1494,6 +1512,4 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
-
-
     

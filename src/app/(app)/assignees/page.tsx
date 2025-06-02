@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import {
   Form,
@@ -18,7 +19,7 @@ import {
 } from "@/components/ui/form";
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Assignee } from '@/lib/types';
-import { Trash2, PlusCircle, Edit3, XCircle, ArrowLeft, Users, Loader2 } from 'lucide-react';
+import { Trash2, PlusCircle, Edit3, XCircle, ArrowLeft, Users, Loader2, ShieldCheck } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,12 +34,14 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslations } from '@/contexts/language-context';
 import { useRouter } from 'next/navigation';
+import { Badge } from '@/components/ui/badge';
 
 const MIN_USERNAME_LENGTH = 3;
 
 const assigneeFormSchemaBase = z.object({
   name: z.string().min(1, "assigneeNameLabel"), // Placeholder, will be translated
   username: z.string().min(MIN_USERNAME_LENGTH, "usernameMinLength"),
+  isAdmin: z.boolean().optional().default(false),
 });
 
 type AssigneeFormData = z.infer<typeof assigneeFormSchemaBase>;
@@ -57,13 +60,14 @@ export default function ManageAssigneesPage() {
         username: z.string()
                 .min(MIN_USERNAME_LENGTH, t('usernameMinLength', { length: MIN_USERNAME_LENGTH }))
                 .min(1,t('usernameIsRequired')), // Ensure not empty, applies to both create and edit
+        isAdmin: z.boolean().optional().default(false),
     });
   }, [t]);
 
 
   const form = useForm<AssigneeFormData>({
     resolver: zodResolver(assigneeFormSchema),
-    defaultValues: { name: "", username: "" },
+    defaultValues: { name: "", username: "", isAdmin: false },
     context: { editing: !!editingAssignee }, 
   });
 
@@ -76,9 +80,9 @@ export default function ManageAssigneesPage() {
   useEffect(() => {
     form.trigger(); 
     if (editingAssignee) {
-      form.reset({ name: editingAssignee.name, username: editingAssignee.username || "" });
+      form.reset({ name: editingAssignee.name, username: editingAssignee.username || "", isAdmin: !!editingAssignee.isAdmin });
     } else {
-      form.reset({ name: "", username: "" });
+      form.reset({ name: "", username: "", isAdmin: false });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingAssignee, form.reset, form.trigger]);
@@ -88,13 +92,14 @@ export default function ManageAssigneesPage() {
     setIsSubmitting(true);
     try {
       if (editingAssignee) {
-        // Pass both name and username for update
-        await updateAssignee(editingAssignee.id, { name: data.name, username: data.username });
+        // Pass name, username, and isAdmin for update
+        // Note: Backend currently doesn't support isAdmin update. This is for frontend consistency if backend is updated.
+        await updateAssignee(editingAssignee.id, { name: data.name, username: data.username, isAdmin: data.isAdmin });
         setEditingAssignee(null);
       } else {
-        await addAssignee(data.name, data.username);
+        await addAssignee(data.name, data.username, data.password, data.isAdmin); // Added data.isAdmin
       }
-      form.reset({ name: "", username: "" });
+      form.reset({ name: "", username: "", isAdmin: false });
     } catch (error) {
       // Error should be handled by AppProvider's toast, but console.error is still good
       console.error("Failed to save assignee:", error);
@@ -110,7 +115,7 @@ export default function ManageAssigneesPage() {
       setAssigneeToDelete(null);
       if (editingAssignee?.id === assigneeId) {
         setEditingAssignee(null);
-        form.reset({ name: "", username: "" });
+        form.reset({ name: "", username: "", isAdmin: false });
       }
     } catch (error) {
       console.error("Failed to delete assignee:", error);
@@ -125,7 +130,7 @@ export default function ManageAssigneesPage() {
 
   const handleCancelEdit = () => {
     setEditingAssignee(null);
-    form.reset({ name: "", username: "" });
+    form.reset({ name: "", username: "", isAdmin: false });
   };
 
   return (
@@ -172,13 +177,36 @@ export default function ManageAssigneesPage() {
                           <Input 
                             placeholder={t('usernamePlaceholder')} 
                             {...field} 
-                            disabled={isSubmitting || isAppStoreLoading} // Username is now editable
+                            disabled={isSubmitting || isAppStoreLoading} 
                           />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={form.control}
+                    name="isAdmin"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            disabled={isSubmitting || isAppStoreLoading || (!!editingAssignee)} // Disable for editing until backend supports it
+                            aria-labelledby="is-admin-label"
+                          />
+                        </FormControl>
+                        <FormLabel id="is-admin-label" className="font-normal">
+                          {t('administratorLabel')}
+                        </FormLabel>
+                         <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  {editingAssignee && (
+                    <p className="text-xs text-muted-foreground">{t('adminStatusEditDisabled')}</p>
+                  )}
                   <div className="flex space-x-2">
                     <Button type="submit" className="flex-grow" disabled={isSubmitting || isAppStoreLoading}>
                       {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : (editingAssignee ? <Edit3 className="mr-2 h-5 w-5" /> : <PlusCircle className="mr-2 h-5 w-5" />)}
@@ -211,6 +239,7 @@ export default function ManageAssigneesPage() {
                           <Users className="h-5 w-5 text-primary" />
                           <span className="font-medium">{assignee.name}</span>
                           {assignee.username && <span className="text-xs text-muted-foreground">(@{assignee.username})</span>}
+                          {assignee.isAdmin && <Badge variant="secondary" className="ml-2"><ShieldCheck className="h-3 w-3 mr-1" />{t('adminBadge')}</Badge>}
                         </div>
                         <div className="flex items-center">
                           <Button variant="ghost" size="icon" onClick={() => handleEditAssignee(assignee)} className="text-primary hover:text-primary/80" disabled={isSubmitting}>
@@ -257,5 +286,4 @@ export default function ManageAssigneesPage() {
     </div>
   );
 }
-
     

@@ -83,6 +83,9 @@ export type Translations = {
   noAssigneesYet: string;
   usernameTakenErrorTitle: string;
   usernameTakenErrorDescription: (params: { username: string }) => string;
+  administratorLabel: string;
+  adminBadge: string;
+  adminStatusEditDisabled: string;
 
 
   // ActivityEditorPage (formerly ActivityModal)
@@ -291,8 +294,8 @@ export type Translations = {
   historyLogSwitchToPersonalMode: string;
   historyLogSwitchToWorkMode: string;
   historyLogPasswordChange: string;
-  historyLogAddAssignee: (params: { name: string }) => string;
-  historyLogUpdateAssignee: (params: { name: string, oldName?: string, oldUsername?: string, newUsername?: string }) => string;
+  historyLogAddAssignee: (params: { name: string, isAdmin?: boolean }) => string;
+  historyLogUpdateAssignee: (params: { name: string, oldName?: string, oldUsername?: string, newUsername?: string, isAdmin?: boolean, oldIsAdmin?: boolean }) => string;
   historyLogDeleteAssignee: (params: { name: string }) => string;
   historyScopeAccount: string;
   historyScopePersonal: string;
@@ -417,6 +420,9 @@ export const translations: Record<Locale, Translations> = {
     noAssigneesYet: "No assignees added yet. Use the form to add your first assignee.",
     usernameTakenErrorTitle: "Username Unavailable",
     usernameTakenErrorDescription: (params) => `The username "${params.username}" is already taken. Please choose another one.`,
+    administratorLabel: "Administrator",
+    adminBadge: "Admin",
+    adminStatusEditDisabled: "Admin status cannot be changed after creation (backend limitation).",
     editActivityTitle: "Edit Activity",
     addActivityTitle: "Add New Activity",
     editActivityDescription: (params) => `Update the details of your activity. Default date: ${params.formattedInitialDate}.`,
@@ -602,8 +608,8 @@ export const translations: Record<Locale, Translations> = {
     historyLogSwitchToPersonalMode: "Switched to Personal Mode.",
     historyLogSwitchToWorkMode: "Switched to Work Mode.",
     historyLogPasswordChange: "Password changed.",
-    historyLogAddAssignee: (params) => `Added Assignee: "${params.name}".`,
-    historyLogUpdateAssignee: (params) => `Updated Assignee: "${params.oldName ? params.oldName + ' to ' : ''}${params.name}"${params.newUsername ? ` (Username: ${params.oldUsername ? params.oldUsername + ' to ' : ''}${params.newUsername})` : ''}.`,
+    historyLogAddAssignee: (params) => `Added Assignee: "${params.name}"${params.isAdmin ? ' (Admin)' : ''}.`,
+    historyLogUpdateAssignee: (params) => `Updated Assignee: "${params.oldName ? params.oldName + ' to ' : ''}${params.name}"${params.newUsername ? ` (Username: ${params.oldUsername ? params.oldUsername + ' to ' : ''}${params.newUsername})` : ''}${params.isAdmin !== undefined ? ` (Admin: ${params.oldIsAdmin ? 'Yes' : 'No'} to ${params.isAdmin ? 'Yes' : 'No'})` : ''}.`,
     historyLogDeleteAssignee: (params) => `Deleted Assignee: "${params.name}".`,
     historyScopeAccount: "Account",
     historyScopePersonal: "Personal",
@@ -731,6 +737,9 @@ export const translations: Record<Locale, Translations> = {
     noAssigneesYet: "Aún no has añadido asignados. Usa el formulario para añadir tu primer asignado.",
     usernameTakenErrorTitle: "Nombre de Usuario No Disponible",
     usernameTakenErrorDescription: (params) => `El nombre de usuario "${params.username}" ya está en uso. Por favor, elige otro.`,
+    administratorLabel: "Administrador",
+    adminBadge: "Admin",
+    adminStatusEditDisabled: "El estado de administrador no se puede cambiar después de la creación (limitación del backend).",
     editActivityTitle: "Editar Actividad",
     addActivityTitle: "Añadir Nueva Actividad",
     editActivityDescription: (params) => `Actualiza los detalles de tu actividad. Fecha por defecto: ${params.formattedInitialDate}.`,
@@ -916,8 +925,8 @@ export const translations: Record<Locale, Translations> = {
     historyLogSwitchToPersonalMode: "Cambiado a Modo Personal.",
     historyLogSwitchToWorkMode: "Cambiado a Modo Trabajo.",
     historyLogPasswordChange: "Contraseña cambiada.",
-    historyLogAddAssignee: (params) => `Asignado añadido: "${params.name}".`,
-    historyLogUpdateAssignee: (params) => `Asignado actualizado: "${params.oldName ? params.oldName + ' a ' : ''}${params.name}"${params.newUsername ? ` (Usuario: ${params.oldUsername ? params.oldUsername + ' a ' : ''}${params.newUsername})` : ''}.`,
+    historyLogAddAssignee: (params) => `Asignado añadido: "${params.name}"${params.isAdmin ? ' (Admin)' : ''}.`,
+    historyLogUpdateAssignee: (params) => `Asignado actualizado: "${params.oldName ? params.oldName + ' a ' : ''}${params.name}"${params.newUsername ? ` (Usuario: ${params.oldUsername ? params.oldUsername + ' a ' : ''}${params.newUsername})` : ''}${params.isAdmin !== undefined ? ` (Admin: ${params.oldIsAdmin ? 'Sí' : 'No'} a ${params.isAdmin ? 'Sí' : 'No'})` : ''}.`,
     historyLogDeleteAssignee: (params) => `Asignado eliminado: "${params.name}".`,
     historyScopeAccount: "Cuenta",
     historyScopePersonal: "Personal",
@@ -1045,6 +1054,9 @@ export const translations: Record<Locale, Translations> = {
     noAssigneesYet: "Aucune personne assignée pour le moment. Utilisez le formulaire pour en ajouter.",
     usernameTakenErrorTitle: "Nom d'utilisateur Indisponible",
     usernameTakenErrorDescription: (params) => `Le nom d'utilisateur "${params.username}" est déjà pris. Veuillez en choisir un autre.`,
+    administratorLabel: "Administrateur",
+    adminBadge: "Admin",
+    adminStatusEditDisabled: "Le statut d'administrateur ne peut pas être modifié après la création (limitation du backend).",
     editActivityTitle: "Modifier l'activité",
     addActivityTitle: "Ajouter une nouvelle activité",
     editActivityDescription: (params) => `Mettez à jour les détails de votre activité. Date par défaut : ${params.formattedInitialDate}.`,
@@ -1230,8 +1242,8 @@ export const translations: Record<Locale, Translations> = {
     historyLogSwitchToPersonalMode: "Passé en mode Personnel.",
     historyLogSwitchToWorkMode: "Passé en mode Travail.",
     historyLogPasswordChange: "Mot de passe changé.",
-    historyLogAddAssignee: (params) => `Personne assignée ajoutée : "${params.name}".`,
-    historyLogUpdateAssignee: (params) => `Personne assignée mise à jour : "${params.oldName ? params.oldName + ' à ' : ''}${params.name}"${params.newUsername ? ` (Nom d'utilisateur : ${params.oldUsername ? params.oldUsername + ' à ' : ''}${params.newUsername})` : ''}.`,
+    historyLogAddAssignee: (params) => `Personne assignée ajoutée : "${params.name}"${params.isAdmin ? ' (Admin)' : ''}.`,
+    historyLogUpdateAssignee: (params) => `Personne assignée mise à jour : "${params.oldName ? params.oldName + ' à ' : ''}${params.name}"${params.newUsername ? ` (Nom d'utilisateur : ${params.oldUsername ? params.oldUsername + ' à ' : ''}${params.newUsername})` : ''}${params.isAdmin !== undefined ? ` (Admin : ${params.oldIsAdmin ? 'Oui' : 'Non'} à ${params.isAdmin ? 'Oui' : 'Non'})` : ''}.`,
     historyLogDeleteAssignee: (params) => `Personne assignée supprimée : "${params.name}".`,
     historyScopeAccount: "Compte",
     historyScopePersonal: "Personnel",

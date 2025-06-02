@@ -62,7 +62,7 @@ export interface BackendActivityCreatePayload {
   category_id: number;
   repeat_mode?: BackendRepeatMode;
   end_date?: string | null; // ISO datetime string
-  days_of_week?: string[]; // Array of strings "0", "1", ... "6"
+  days_of_week?: string[] | null;
   day_of_month?: number | null;
   notes?: string | null;
   mode: BackendCategoryMode; // 'personal' or 'work' (derived from frontend AppMode)
@@ -132,17 +132,20 @@ export interface Assignee { // Frontend representation
   id: number; // Changed from string
   name: string;
   username?: string; // For creation, might not be displayed always
+  isAdmin?: boolean; // New: For frontend representation
 }
 
 export interface BackendUserCreatePayload { // For sending to backend
   name: string;
   username: string;
   password?: string; // Password for creation
+  is_admin?: boolean; // New: For backend payload
 }
 export interface BackendUserUpdatePayload { // For sending to backend
   name?: string;
   username?: string;
   password?: string;
+  is_admin?: boolean; // New: For backend payload (if updating admin status is supported)
 }
 
 
@@ -150,6 +153,7 @@ export interface BackendUser { // Received from backend
   id: number;
   name: string;
   username: string;
+  is_admin?: boolean; // New: To mirror potential backend field
   // hashed_password is not exposed to frontend
 }
 
