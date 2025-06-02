@@ -305,7 +305,7 @@ const backendToFrontendAssignee = (backendUser: BackendUser): Assignee => ({
 
 const backendToFrontendActivity = (backendActivity: BackendActivity | null | undefined, currentAppMode: AppMode): Activity => {
   if (!backendActivity || typeof backendActivity !== 'object') {
-    console.error('[AppProvider] CRITICAL: backendToFrontendActivity received invalid backendActivity object:', backendActivity);
+    console.error('[AppProvider] CRITICAL: backendToFrontendActivity received invalid backendActivity object:', typeof backendActivity === 'object' ? JSON.stringify(backendActivity) : backendActivity);
     return {
       id: Date.now() + Math.random(), 
       title: 'Error: Invalid Activity Data from Backend',
@@ -340,22 +340,16 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
   if (typeof startDateFromBackend === 'string' && startDateFromBackend.trim() !== '') {
     try {
       createdAtTimestamp = parseISO(startDateFromBackend).getTime();
+      if (isNaN(createdAtTimestamp)) throw new Error("Parsed timestamp is NaN");
     } catch (e) {
-      console.error(`[AppProvider] Critical: Failed to parse start_date "${startDateFromBackend}" from backend for activity ID ${activityIdForLog}. Error:`, e);
+      console.warn(`[AppProvider] Warning: Failed to parse start_date "${startDateFromBackend}" from backend for activity ID ${activityIdForLog}. Error:`, e instanceof Error ? e.message : String(e), ". Using fallback.");
       createdAtTimestamp = Date.now(); // Fallback
     }
   } else {
-    console.warn(`[AppProvider] Warning: backendActivity.start_date is missing, null, or invalid in response for activity ID ${activityIdForLog}. Using fallback. Received:`, startDateFromBackend === undefined ? 'FIELD_MISSING' : startDateFromBackend);
+    console.warn(`[AppProvider] Warning: backendActivity.start_date is missing, null, or invalid in response for activity ID ${activityIdForLog}. Received:`, startDateFromBackend === undefined ? 'FIELD_MISSING' : startDateFromBackend, ". Using fallback.");
     createdAtTimestamp = Date.now(); // Fallback
   }
   
-  const responsiblePersonIds = (backendActivity && Array.isArray(backendActivity.responsibles))
-    ? backendActivity.responsibles.map(r => r.id)
-    : [];
-  if (!(backendActivity && Array.isArray(backendActivity.responsibles))) {
-    console.warn(`[AppProvider] Warning: backendActivity.responsibles is missing or not an array for activity ID ${activityIdForLog}. Defaulting to empty array. Received:`, backendActivity ? backendActivity.responsibles : 'backendActivity_is_undefined_or_null');
-  }
-
   const todos = (backendActivity && Array.isArray(backendActivity.todos))
     ? backendActivity.todos.map((bt: BackendTodo) => ({
         id: typeof bt?.id === 'number' ? bt.id : Date.now() + Math.random(), 
@@ -377,10 +371,18 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
           }
       });
   }
+  
+  const responsiblePersonIds = (backendActivity && Array.isArray(backendActivity.responsibles))
+    ? backendActivity.responsibles.map(r => r.id)
+    : [];
+  if (!(backendActivity && Array.isArray(backendActivity.responsibles))) {
+    console.warn(`[AppProvider] Warning: backendActivity.responsibles is missing or not an array for activity ID ${activityIdForLog}. Defaulting to empty array. Received:`, backendActivity ? (typeof backendActivity.responsibles === 'object' ? JSON.stringify(backendActivity.responsibles) : backendActivity.responsibles) : 'FIELD_MISSING');
+  }
+
 
   const idToUse = typeof backendActivity?.id === 'number' ? backendActivity.id : Date.now() + Math.random(); 
   if (typeof backendActivity?.id !== 'number') {
-      console.error(`[AppProvider] CRITICAL: Backend activity response did not contain a valid 'id'. Using fallback ID ${idToUse}. Received:`, backendActivity);
+      console.error(`[AppProvider] CRITICAL: Backend activity response did not contain a valid 'id'. Using fallback ID ${idToUse}. Received:`, typeof backendActivity === 'object' ? JSON.stringify(backendActivity) : backendActivity);
   }
 
   return {
@@ -474,7 +476,7 @@ const createApiErrorToast = (
 Error Name: ${error.name || 'UnknownError'}
 Error Message: ${error.message || 'No message'}.`;
     if (error.stack) consoleMessage += `\nStack: ${error.stack}`;
-    if (error.cause) consoleMessage += `\nCause: ${String(error.cause)}`;
+    if (error.cause) consoleMessage += `\nCause: ${typeof error.cause === 'object' ? JSON.stringify(error.cause) : String(error.cause)}`;
 
     console.error(consoleMessage);
 
