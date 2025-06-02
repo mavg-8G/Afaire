@@ -304,8 +304,13 @@ const backendToFrontendAssignee = (backendUser: BackendUser): Assignee => ({
 });
 
 const backendToFrontendActivity = (backendActivity: BackendActivity | null | undefined, currentAppMode: AppMode): Activity => {
+  const activityIdForLog = (backendActivity && typeof backendActivity.id === 'number')
+    ? backendActivity.id
+    : 'ID_MISSING_OR_INVALID_IN_BACKEND_RESPONSE';
+  const startDateFromBackend = backendActivity ? backendActivity.start_date : undefined;
+
   if (!backendActivity || typeof backendActivity !== 'object') {
-    console.error(`[AppProvider] CRITICAL: backendToFrontendActivity received invalid backendActivity object. Received:`, typeof backendActivity === 'object' ? JSON.stringify(backendActivity) : backendActivity);
+    console.error(`[AppProvider] CRITICAL: backendToFrontendActivity received invalid backendActivity object for ID '${activityIdForLog}'. Received type: ${typeof backendActivity}, value:`, typeof backendActivity === 'object' ? JSON.stringify(backendActivity) : backendActivity);
     return {
       id: Date.now() + Math.random(),
       title: 'Error: Invalid Activity Data from Backend',
@@ -317,25 +322,7 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
     };
   }
 
-  let daysOfWeekArray: number[] = [];
-  if (backendActivity.days_of_week && typeof backendActivity.days_of_week === 'string') {
-    daysOfWeekArray = backendActivity.days_of_week.split(',').map(dayStr => parseInt(dayStr.trim(), 10)).filter(num => !isNaN(num));
-  } else if (Array.isArray(backendActivity.days_of_week)) {
-    daysOfWeekArray = backendActivity.days_of_week.map(dayStr => parseInt(String(dayStr).trim(), 10)).filter(num => !isNaN(num));
-  }
-
-  const recurrenceRule: RecurrenceRule = {
-    type: backendActivity.repeat_mode as RecurrenceType,
-    endDate: backendActivity.end_date ? parseISO(backendActivity.end_date).getTime() : null,
-    daysOfWeek: daysOfWeekArray,
-    dayOfMonth: backendActivity.day_of_month ?? undefined,
-  };
-
   let createdAtTimestamp: number;
-  const activityIdForLog = (backendActivity && typeof backendActivity.id === 'number')
-    ? backendActivity.id
-    : 'ID_MISSING_OR_INVALID_IN_BACKEND_RESPONSE';
-  const startDateFromBackend = backendActivity ? backendActivity.start_date : undefined;
 
   if (typeof startDateFromBackend === 'string' && startDateFromBackend.trim() !== '') {
     try {
@@ -350,37 +337,52 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
     createdAtTimestamp = Date.now(); // Fallback
   }
   
+  let daysOfWeekArray: number[] = [];
+  if (backendActivity.days_of_week && typeof backendActivity.days_of_week === 'string') {
+    daysOfWeekArray = backendActivity.days_of_week.split(',').map(dayStr => parseInt(dayStr.trim(), 10)).filter(num => !isNaN(num));
+  } else if (Array.isArray(backendActivity.days_of_week)) { // Handle if backend sends it as array of numbers/strings
+    daysOfWeekArray = backendActivity.days_of_week.map(dayStr => parseInt(String(dayStr).trim(), 10)).filter(num => !isNaN(num));
+  }
+
+
+  const recurrenceRule: RecurrenceRule = {
+    type: backendActivity.repeat_mode as RecurrenceType,
+    endDate: backendActivity.end_date ? parseISO(backendActivity.end_date).getTime() : null,
+    daysOfWeek: daysOfWeekArray,
+    dayOfMonth: backendActivity.day_of_month ?? undefined,
+  };
+  
   const todos: Todo[] = (backendActivity && Array.isArray(backendActivity.todos))
-    ? backendActivity.todos.map((bt: BackendTodo) => ({
-        id: typeof bt?.id === 'number' ? bt.id : Date.now() + Math.random(),
-        text: bt?.text || 'Untitled Todo from Backend',
-        completed: false, // Initialize all backend todos as not completed
-      }))
+    ? backendActivity.todos.map((bt: BackendTodo, index: number) => {
+        const todoId = typeof bt?.id === 'number' ? bt.id : Date.now() + Math.random() + index; // Ensure unique temp ID if backend ID is missing
+        if (typeof bt?.id !== 'number') {
+            console.warn(`[AppProvider] Warning: Todo at index ${index} for activity ID ${activityIdForLog} is missing a valid 'id' from backend. Using temporary ID ${todoId}. Backend todo:`, bt);
+        }
+        if (typeof bt?.text !== 'string') {
+             console.warn(`[AppProvider] Warning: Todo at index ${index} for activity ID ${activityIdForLog} is missing 'text'.`);
+        }
+        return {
+          id: todoId,
+          text: bt?.text || 'Untitled Todo from Backend',
+          completed: false, // Initialize all backend todos as not completed
+        };
+      })
     : [];
 
   if (!(backendActivity && Array.isArray(backendActivity.todos))) {
      console.warn(`[AppProvider] Warning: backendActivity.todos is missing or not an array for activity ID ${activityIdForLog}. Defaulting to empty array. Received:`, backendActivity ? backendActivity.todos : 'backendActivity_is_undefined_or_null');
   }
-  if (backendActivity && Array.isArray(backendActivity.todos)) {
-      backendActivity.todos.forEach((bt, index) => {
-          if (typeof bt?.id !== 'number') {
-              console.warn(`[AppProvider] Warning: Todo at index ${index} for activity ID ${activityIdForLog} is missing 'id'.`);
-          }
-          if (typeof bt?.text !== 'string') {
-              console.warn(`[AppProvider] Warning: Todo at index ${index} for activity ID ${activityIdForLog} is missing 'text'.`);
-          }
-      });
-  }
   
  const responsiblePersonIds = (backendActivity && Array.isArray(backendActivity.responsibles))
     ? backendActivity.responsibles.map(r => r.id)
     : [];
+
   if (!(backendActivity && Array.isArray(backendActivity.responsibles))) {
-    console.warn(`[AppProvider] Warning: backendActivity.responsibles is missing or not an array for activity ID ${activityIdForLog}. Defaulting to empty array. Received:`, backendActivity ? (typeof backendActivity.responsibles === 'object' ? JSON.stringify(backendActivity.responsibles) : backendActivity.responsibles) : 'FIELD_MISSING');
+    console.warn(`[AppProvider] Warning: backendActivity.responsibles is missing or not an array for activity ID ${activityIdForLog}. Defaulting to empty array. Received:`, backendActivity && backendActivity.responsibles !== undefined ? JSON.stringify(backendActivity.responsibles) : 'FIELD_MISSING_OR_UNDEFINED');
   }
 
 
-  const idToUse = typeof backendActivity?.id === 'number' ? backendActivity.id : Date.now() + Math.random();
+  const idToUse = typeof backendActivity?.id === 'number' ? backendActivity.id : Date.now() + Math.random(); 
   if (typeof backendActivity?.id !== 'number') {
       console.error(`[AppProvider] CRITICAL: Backend activity response did not contain a valid 'id'. Using fallback ID ${idToUse}. Received:`, typeof backendActivity === 'object' ? JSON.stringify(backendActivity) : backendActivity);
   }
@@ -427,9 +429,12 @@ const frontendToBackendActivityPayload = (
   }
 
 
-  if (!isUpdate && activity.todos) {
+  if (!isUpdate && activity.todos && activity.todos.length > 0) {
     (payload as BackendActivityCreatePayload).todos = activity.todos.map(t => ({ text: t.text }));
+  } else if (!isUpdate) {
+    (payload as BackendActivityCreatePayload).todos = []; // Ensure todos is an empty array if not provided for creation
   }
+
 
   return payload as BackendActivityCreatePayload | BackendActivityUpdatePayload;
 };
@@ -440,8 +445,8 @@ const backendToFrontendHistory = (backendHistory: BackendHistory): HistoryLogEnt
   actionKey: backendHistory.action as HistoryLogActionKey,
   backendAction: backendHistory.action,
   backendUserId: backendHistory.user_id,
-  scope: 'account',
-  details: { rawBackendAction: backendHistory.action }
+  scope: 'account', // Default scope, can be refined if backend provides more info
+  details: { rawBackendAction: backendHistory.action } // Generic detail
 });
 
 const formatBackendError = (errorData: any, defaultMessage: string): string => {
@@ -449,7 +454,6 @@ const formatBackendError = (errorData: any, defaultMessage: string): string => {
     if (Array.isArray(errorData.detail)) {
       return errorData.detail
         .map((validationError: any) => {
-          // Filter out 'body' from the location array for better readability
           const loc = validationError.loc && Array.isArray(validationError.loc) 
             ? validationError.loc.filter((item: any) => item !== 'body').join(' > ') 
             : 'Field';
@@ -477,12 +481,17 @@ const createApiErrorToast = (
 Error Name: ${error.name || 'UnknownError'}
 Error Message: ${error.message || 'No message'}.`;
     if (error.stack) consoleMessage += `\nStack: ${error.stack}`;
+
+    // More detailed logging of the cause if it's an object
     if (error.cause && typeof error.cause === 'object' && error.cause !== null) {
-        consoleMessage += `\nCause: ${JSON.stringify(error.cause)}`;
+        try {
+            consoleMessage += `\nCause: ${JSON.stringify(error.cause, Object.getOwnPropertyNames(error.cause))}`;
+        } catch (e) { // Fallback if stringify fails (e.g., circular structures)
+            consoleMessage += `\nCause (could not stringify): ${error.cause}`;
+        }
     } else if (error.cause) {
         consoleMessage += `\nCause: ${String(error.cause)}`;
     }
-
 
     console.error(consoleMessage);
 
@@ -493,10 +502,10 @@ Error Message: ${error.message || 'No message'}.`;
     if (error.name === 'TypeError' && error.message.toLowerCase().includes('failed to fetch')) {
       descriptionKey = 'toastFailedToFetchErrorDescription';
       descriptionParams = { endpoint: endpoint || API_BASE_URL };
-    } else if (error.message && error.message.toLowerCase().includes("unexpected token '<'")) {
-      descriptionKey = 'toastInvalidJsonErrorDescription';
+    } else if (error.message && error.message.toLowerCase().includes("unexpected token '<'") && error.message.toLowerCase().includes("html")) {
+      descriptionKey = 'toastInvalidJsonErrorDescription'; // More specific for HTML responses
       descriptionParams = { endpoint: endpoint || API_BASE_URL };
-    } else if (error.message) {
+    } else if (error.message) { // Use the error's message directly if available and not a generic fetch/parse error
         customDescription = error.message;
     }
     
@@ -678,7 +687,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     let initialAuth = false;
     const loadClientSideData = () => {
       try {
-        // Load from local storage as a fallback or initial quick display
         const storedPersonalActivities = localStorage.getItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES);
         if (storedPersonalActivities) setPersonalActivities(JSON.parse(storedPersonalActivities));
         const storedWorkActivities = localStorage.getItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES);
@@ -734,7 +742,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             console.warn("[AppProvider] Encountered a null or undefined activity object from backend GET /activities.");
             return;
           }
-          const feAct = backendToFrontendActivity(beAct, beAct.mode as AppMode);
+          const feAct = backendToFrontendActivity(beAct, beAct.mode as AppMode); // Use actual mode from backend if available
           if (feAct.appMode === 'personal') newPersonalActivities.push(feAct);
           else if (feAct.appMode === 'work') newWorkActivities.push(feAct);
         });
@@ -744,7 +752,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } catch (err) {
         createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`);
         setError(prev => prev ? `${prev} Activities failed. ` : "Activities failed. ");
-        // Keep existing localStorage activities if API fails
       } finally {
         setIsActivitiesLoading(false);
       }
@@ -785,17 +792,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     
     const fetchAllData = async () => {
-        loadClientSideData();
+        loadClientSideData(); // Load client-side data first (localStorage, etc.)
+        // Then fetch from API
         await Promise.all([fetchInitialActivities(), fetchInitialCategories(), fetchInitialAssignees()]);
-        if (initialAuth) {
+        if (initialAuth) { // Only fetch history if initially authenticated
             await fetchInitialHistory();
         } else {
-            setIsHistoryLoading(false);
+            setIsHistoryLoading(false); // If not auth, no need to load history
         }
-        setIsLoadingState(false);
+        setIsLoadingState(false); // Overall loading done
     };
     fetchAllData();
-  }, [logout, t, toast]);
+  }, [logout, t, toast]); // Dependencies for main setup effect
 
 
   useEffect(() => {
@@ -1152,14 +1160,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const payload: Partial<BackendUserUpdatePayload> = {};
     if (updates.name) payload.name = updates.name;
     if (updates.username) payload.username = updates.username;
-    // Note: Password update is not handled here as backend expects Form data for password
-    // This assumes backend PUT /users/{user_id} can handle JSON for name/username updates
-    // and optionally password if it were Form data.
 
     try {
       const response = await fetch(`${API_BASE_URL}/users/${assigneeId}`, {
          method: 'PUT',
-         headers: { 'Content-Type': 'application/json' }, // Sending JSON
+         headers: { 'Content-Type': 'application/json' }, 
          body: JSON.stringify(payload)
       });
 
@@ -1215,10 +1220,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     ) => {
     setError(null);
     const frontendActivityShell: Activity = {
-      id: 0, // Placeholder, backend will assign
+      id: 0, 
       title: activityData.title,
       categoryId: activityData.categoryId,
-      todos: (activityData.todos || []).map(t => ({ id: 0, text: t.text, completed: false })), // Placeholder IDs for todos
+      todos: (activityData.todos || []).map(t => ({ id: 0, text: t.text, completed: false })), 
       createdAt: customCreatedAt !== undefined ? customCreatedAt : Date.now(),
       time: activityData.time,
       notes: activityData.notes,
@@ -1248,7 +1253,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (err) { createApiErrorToast(err, toast, "toastActivityAddedTitle", "adding", t, `${API_BASE_URL}/activities`); setError((err as Error).message); throw err; }
   }, [appModeState, toast, t, addHistoryLogEntry]);
 
-  const updateActivity = useCallback(async (activityId: number, updates: Partial<Omit<Activity, 'id'>>, originalActivity?: Activity) => {
+ const updateActivity = useCallback(async (activityId: number, updates: Partial<Omit<Activity, 'id'>>, originalActivity?: Activity) => {
     setError(null);
     let currentActivitiesList = appModeState === 'work' ? workActivities : personalActivities;
     let activityToUpdate = currentActivitiesList.find(a => a.id === activityId);
@@ -1259,36 +1264,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       activityToUpdate = currentActivitiesList.find(a => a.id === activityId);
       targetSetter = appModeState === 'work' ? setPersonalActivities : setWorkActivities;
        if(!activityToUpdate) {
-         console.error("Activity not found for update in any list:", activityId);
+         console.error("[AppProvider] Activity not found for update in any list:", activityId);
          toast({variant: "destructive", title: "Error", description: "Activity not found for update."});
          return;
        }
     }
     
     const effectiveAppMode = updates.appMode || activityToUpdate.appMode;
-    const updatedFrontendShell: Activity = { ...activityToUpdate, ...updates, appMode: effectiveAppMode };
-    const payload = frontendToBackendActivityPayload(updatedFrontendShell, true) as BackendActivityUpdatePayload;
+    const payload = frontendToBackendActivityPayload({ ...activityToUpdate, ...updates, appMode: effectiveAppMode }, true) as BackendActivityUpdatePayload;
 
     try {
       const response = await fetch(`${API_BASE_URL}/activities/${activityId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to update activity: HTTP ${response.status}`));}
       const updatedBackendActivity: BackendActivity = await response.json();
-      const finalFrontendActivity = {
-        ...backendToFrontendActivity(updatedBackendActivity, appModeState),
-        completedOccurrences: activityToUpdate.completedOccurrences,
-      };
-      // Preserve client-side todo completion status after backend update
-      if (updates.todos && Array.isArray(updates.todos)) {
-         finalFrontendActivity.todos = updates.todos;
+      
+      let processedActivityFromBackend = backendToFrontendActivity(updatedBackendActivity, appModeState);
+
+      // Preserve client-side todos if the backend PUT response doesn't include them
+      if (activityToUpdate && (!processedActivityFromBackend.todos || processedActivityFromBackend.todos.length === 0) && activityToUpdate.todos.length > 0) {
+          processedActivityFromBackend.todos = activityToUpdate.todos;
       }
 
+      // If the 'updates' object (e.g., from form save) contains a 'todos' array, it's the most current.
+      if (updates.todos && Array.isArray(updates.todos)) {
+         processedActivityFromBackend.todos = updates.todos;
+      }
+      
+      const finalFrontendActivity = {
+        ...processedActivityFromBackend,
+        completedOccurrences: activityToUpdate.completedOccurrences || {}, // Carry over from original
+        completed: updates.completed !== undefined ? updates.completed : activityToUpdate.completed,
+        completedAt: updates.completedAt !== undefined ? updates.completedAt : activityToUpdate.completedAt,
+      };
 
       if (updates.completedOccurrences) {
         finalFrontendActivity.completedOccurrences = { ...finalFrontendActivity.completedOccurrences, ...updates.completedOccurrences };
       }
-      if (updates.completed !== undefined) finalFrontendActivity.completed = updates.completed;
-      if (updates.completedAt !== undefined) finalFrontendActivity.completedAt = updates.completedAt;
-
 
       if (originalActivity && finalFrontendActivity.appMode !== originalActivity.appMode) {
         if (originalActivity.appMode === 'personal') setPersonalActivities(prev => prev.filter(act => act.id !== activityId));
@@ -1318,7 +1329,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     
     if (!activityToDelete) {
-      console.error("Activity not found for deletion:", activityId);
+      console.error("[AppProvider] Activity not found for deletion:", activityId);
       toast({variant: "destructive", title: "Error", description: "Activity not found for deletion."});
       return;
     }
@@ -1365,7 +1376,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [personalActivities, workActivities, toast, t]);
 
   const updateTodoInActivity = useCallback((activityId: number, todoId: number, updates: Partial<Todo>) => {
-    // This remains client-side only for now, as backend does not support PUT /todos/{id}
     if (updates.hasOwnProperty('completed') || updates.hasOwnProperty('text')) {
       const updateInList = (list: Activity[], setter: React.Dispatch<React.SetStateAction<Activity[]>>) => {
           const activityIndex = list.findIndex(act => act.id === activityId);
