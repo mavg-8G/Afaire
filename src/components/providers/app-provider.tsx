@@ -51,9 +51,9 @@ export interface AppContextType {
   updateActivity: (activityId: number, updates: Partial<Omit<Activity, 'id'>>, originalActivity?: Activity) => Promise<void>;
   deleteActivity: (activityId: number) => Promise<void>;
   toggleOccurrenceCompletion: (masterActivityId: number, occurrenceDateTimestamp: number, completed: boolean) => void;
-  addTodoToActivity: (activityId: number, todoText: string) => void; // ActivityId is number
+  addTodoToActivity: (activityId: number, todoText: string) => Promise<void>;
   updateTodoInActivity: (activityId: number, todoId: number, updates: Partial<Todo>) => void; // IDs are numbers
-  deleteTodoFromActivity: (activityId: number, todoId: number, masterActivityId?: number) => void; // IDs are numbers
+  deleteTodoFromActivity: (activityId: number, todoId: number) => Promise<void>; // IDs are numbers
   getCategoryById: (categoryId: number) => Category | undefined;
   addCategory: (name: string, iconName: string, mode: AppMode | 'all') => Promise<void>;
   updateCategory: (categoryId: number, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => Promise<void>;
@@ -107,8 +107,8 @@ export interface AppContextType {
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities_v3_api';
-const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities_v3_api';
+const LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES = 'todoFlowPersonalActivities_v3_api_backend_driven';
+const LOCAL_STORAGE_KEY_WORK_ACTIVITIES = 'todoFlowWorkActivities_v3_api_backend_driven';
 const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode';
 const LOCAL_STORAGE_KEY_IS_AUTHENTICATED = 'todoFlowIsAuthenticated';
 const LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS = 'todoFlowLoginAttempts';
@@ -307,7 +307,7 @@ const backendToFrontendActivity = (backendActivity: BackendActivity, currentAppM
   let daysOfWeekArray: number[] = [];
   if (backendActivity.days_of_week && typeof backendActivity.days_of_week === 'string') {
     daysOfWeekArray = backendActivity.days_of_week.split(',').map(dayStr => parseInt(dayStr.trim(), 10)).filter(num => !isNaN(num));
-  } else if (Array.isArray(backendActivity.days_of_week)) { // Handle if backend already sends array of strings
+  } else if (Array.isArray(backendActivity.days_of_week)) { 
     daysOfWeekArray = backendActivity.days_of_week.map(dayStr => parseInt(dayStr.trim(), 10)).filter(num => !isNaN(num));
   }
 
@@ -319,6 +319,19 @@ const backendToFrontendActivity = (backendActivity: BackendActivity, currentAppM
     dayOfMonth: backendActivity.day_of_month ?? undefined,
   };
 
+  let createdAtTimestamp: number;
+  if (typeof backendActivity.start_date === 'string' && backendActivity.start_date.trim() !== '') {
+    try {
+      createdAtTimestamp = parseISO(backendActivity.start_date).getTime();
+    } catch (e) {
+      console.error(`[AppProvider] Failed to parse start_date: "${backendActivity.start_date}" from backend for activity ID ${backendActivity.id}. Error:`, e);
+      createdAtTimestamp = Date.now(); // Fallback to current time
+    }
+  } else {
+    console.error(`[AppProvider] Critical: backendActivity.start_date is missing, null, or invalid in response for activity ID ${backendActivity.id}:`, backendActivity.start_date);
+    createdAtTimestamp = Date.now(); // Fallback to current time
+  }
+
   return {
     id: backendActivity.id,
     title: backendActivity.title,
@@ -326,15 +339,15 @@ const backendToFrontendActivity = (backendActivity: BackendActivity, currentAppM
     todos: (backendActivity.todos || []).map((bt: BackendTodo) => ({
       id: bt.id,
       text: bt.text,
-      completed: false, // Backend todo doesn't have completion status
+      completed: false, 
     })),
-    createdAt: parseISO(backendActivity.start_date).getTime(),
+    createdAt: createdAtTimestamp,
     time: backendActivity.time,
     notes: backendActivity.notes ?? undefined,
     recurrence: recurrenceRule.type === 'none' ? { type: 'none' } : recurrenceRule,
-    completedOccurrences: {}, // To be managed client-side
+    completedOccurrences: {}, 
     responsiblePersonIds: backendActivity.responsibles.map(r => r.id),
-    appMode: backendActivity.mode === 'both' ? currentAppMode : backendActivity.mode, // Use current appMode if 'both'
+    appMode: backendActivity.mode === 'both' ? currentAppMode : backendActivity.mode, 
   };
 };
 
@@ -345,10 +358,10 @@ const frontendToBackendActivityPayload = (
   const payload: Partial<BackendActivityCreatePayload & BackendActivityUpdatePayload> = {
     title: activity.title,
     start_date: new Date(activity.createdAt).toISOString(),
-    time: activity.time || "00:00", // Backend expects time
+    time: activity.time || "00:00", 
     category_id: activity.categoryId,
     notes: activity.notes,
-    mode: activity.appMode, // Directly use appMode, backend CategoryMode includes 'personal'/'work'
+    mode: activity.appMode, 
     responsible_ids: activity.responsiblePersonIds || [],
   };
 
@@ -358,7 +371,7 @@ const frontendToBackendActivityPayload = (
       payload.end_date = new Date(activity.recurrence.endDate).toISOString();
     }
     if (activity.recurrence.type === 'weekly' && activity.recurrence.daysOfWeek) {
-      payload.days_of_week = activity.recurrence.daysOfWeek.map(String); // Backend expects string array
+      payload.days_of_week = activity.recurrence.daysOfWeek.map(String); 
     }
     if (activity.recurrence.type === 'monthly' && activity.recurrence.dayOfMonth) {
       payload.day_of_month = activity.recurrence.dayOfMonth;
@@ -367,7 +380,6 @@ const frontendToBackendActivityPayload = (
     payload.repeat_mode = 'none';
   }
 
-  // For create, include todos. For update, todos are handled differently by backend if at all via this endpoint.
   if (!isUpdate && activity.todos) {
     (payload as BackendActivityCreatePayload).todos = activity.todos.map(t => ({ text: t.text }));
   }
@@ -378,11 +390,10 @@ const frontendToBackendActivityPayload = (
 const backendToFrontendHistory = (backendHistory: BackendHistory): HistoryLogEntry => ({
   id: backendHistory.id,
   timestamp: parseISO(backendHistory.timestamp).getTime(),
-  actionKey: backendHistory.action as HistoryLogActionKey, // Attempt to cast
-  backendAction: backendHistory.action, // Store original for display if key unknown
+  actionKey: backendHistory.action as HistoryLogActionKey, 
+  backendAction: backendHistory.action, 
   backendUserId: backendHistory.user_id,
-  // 'scope' and 'details' are frontend enrichments not directly from this backend model
-  scope: 'account', // Default, can be refined based on actionKey
+  scope: 'account', 
   details: { rawBackendAction: backendHistory.action }
 });
 
@@ -391,7 +402,7 @@ const formatBackendError = (errorData: any, defaultMessage: string): string => {
     if (Array.isArray(errorData.detail)) {
       return errorData.detail
         .map((validationError: any) => {
-          const loc = validationError.loc && Array.isArray(validationError.loc) ? validationError.loc.slice(1).join(' > ') : 'Field'; // Skip "body"
+          const loc = validationError.loc && Array.isArray(validationError.loc) ? validationError.loc.slice(1).join(' > ') : 'Field';
           return `${loc}: ${validationError.msg}`;
         })
         .join('; ');
@@ -431,7 +442,7 @@ Error Message: ${error.message || 'No message'}.`;
       descriptionKey = 'toastInvalidJsonErrorDescription';
       descriptionParams = { endpoint: endpoint || API_BASE_URL };
     } else if (error.message) {
-        customDescription = error.message; // Use the specific message from the error (now better formatted)
+        customDescription = error.message; 
     }
     
     toastFn({ 
@@ -449,7 +460,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [assignees, setAllAssignees] = useState<Assignee[]>([]);
   const [appModeState, setAppModeState] = useState<AppMode>('personal');
 
-  const [isLoadingState, setIsLoadingState] = useState<boolean>(true); // General loading for initial local storage reads
+  const [isLoadingState, setIsLoadingState] = useState<boolean>(true); 
+  const [isActivitiesLoading, setIsActivitiesLoading] = useState(true);
   const [isCategoriesLoading, setIsCategoriesLoading] = useState(true);
   const [isAssigneesLoading, setIsAssigneesLoading] = useState(true);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
@@ -527,7 +539,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const addHistoryLogEntry = useCallback((actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope: HistoryLogEntry['scope'] = 'account') => {
     const newEntry: HistoryLogEntry = {
-      id: Date.now() + Math.random(), // Temporary client-side ID
+      id: Date.now() + Math.random(), 
       timestamp: Date.now(),
       actionKey,
       details,
@@ -611,6 +623,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     let initialAuth = false;
     const loadClientSideData = () => {
       try {
+        // Load from localStorage as a fallback or initial fast load, but backend is source of truth
         const storedPersonalActivities = localStorage.getItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES);
         if (storedPersonalActivities) setPersonalActivities(JSON.parse(storedPersonalActivities));
         const storedWorkActivities = localStorage.getItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES);
@@ -650,6 +663,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (storedPin) setAppPinState(storedPin);
       else if (HARDCODED_APP_PIN) setAppPinState(HARDCODED_APP_PIN);
     };
+    
+    const fetchInitialActivities = async () => {
+      setIsActivitiesLoading(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/activities`);
+        if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to fetch activities: HTTP ${response.status}`));}
+        const backendActivities: BackendActivity[] = await response.json();
+        
+        const newPersonalActivities: Activity[] = [];
+        const newWorkActivities: Activity[] = [];
+        
+        backendActivities.forEach(beAct => {
+          const feAct = backendToFrontendActivity(beAct, beAct.mode as AppMode); // Assuming beAct.mode is 'personal' or 'work' directly
+          if (feAct.appMode === 'personal') newPersonalActivities.push(feAct);
+          else if (feAct.appMode === 'work') newWorkActivities.push(feAct);
+          // If backend sends 'both', backendToFrontendActivity maps it based on currentAppMode,
+          // which might not be ideal for initial load. For now, it will pick one.
+          // A better approach might be to load based on the activity's explicit mode from backend.
+        });
+        setPersonalActivities(newPersonalActivities);
+        setWorkActivities(newWorkActivities);
+
+      } catch (err) { 
+        createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`); 
+        setError(prev => prev ? `${prev} Activities failed. ` : "Activities failed. ");
+        // Keep existing localStorage activities if fetch fails
+      } finally {
+        setIsActivitiesLoading(false);
+      }
+    };
+
 
     const fetchInitialCategories = async () => {
       setIsCategoriesLoading(true);
@@ -686,7 +730,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     
     const fetchAllData = async () => {
         loadClientSideData(); 
-        await Promise.all([fetchInitialCategories(), fetchInitialAssignees()]);
+        await Promise.all([fetchInitialActivities(), fetchInitialCategories(), fetchInitialAssignees()]);
         if (initialAuth) { 
             await fetchInitialHistory();
         } else {
@@ -699,16 +743,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
   useEffect(() => {
-    if (!isLoadingState) {
+    if (!isLoadingState && !isActivitiesLoading) {
       localStorage.setItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES, JSON.stringify(personalActivities));
     }
-  }, [personalActivities, isLoadingState]);
+  }, [personalActivities, isLoadingState, isActivitiesLoading]);
 
   useEffect(() => {
-    if (!isLoadingState) {
+    if (!isLoadingState && !isActivitiesLoading) {
       localStorage.setItem(LOCAL_STORAGE_KEY_WORK_ACTIVITIES, JSON.stringify(workActivities));
     }
-  }, [workActivities, isLoadingState]);
+  }, [workActivities, isLoadingState, isActivitiesLoading]);
 
   useEffect(() => {
     if (!isLoadingState) {
@@ -1052,8 +1096,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const payload: Partial<BackendUserUpdatePayload> = {};
     if (updates.name) payload.name = updates.name;
     if (updates.username) payload.username = updates.username;
-    // Password is not included here based on previous decision for simpler assignee updates.
-    // If backend's PUT /users requires password, this needs to change or backend needs to allow optional password for update.
+    
 
     try {
       const response = await fetch(`${API_BASE_URL}/users/${assigneeId}`, {
@@ -1135,22 +1178,34 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const newBackendActivity: BackendActivity = await response.json();
       const newFrontendActivity = backendToFrontendActivity(newBackendActivity, appModeState); 
       
-      currentActivitySetter(prev => [...prev, newFrontendActivity]);
+      if (newFrontendActivity.appMode === 'personal') {
+        setPersonalActivities(prev => [...prev, newFrontendActivity]);
+      } else {
+        setWorkActivities(prev => [...prev, newFrontendActivity]);
+      }
       toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
       addHistoryLogEntry(appModeState === 'personal' ? 'historyLogAddActivityPersonal' : 'historyLogAddActivityWork', { title: newFrontendActivity.title }, appModeState);
     } catch (err) { createApiErrorToast(err, toast, "toastActivityAddedTitle", "adding", t, `${API_BASE_URL}/activities`); setError((err as Error).message); throw err; }
-  }, [currentActivitySetter, appModeState, toast, t, addHistoryLogEntry]);
+  }, [appModeState, toast, t, addHistoryLogEntry]);
 
   const updateActivity = useCallback(async (activityId: number, updates: Partial<Omit<Activity, 'id'>>, originalActivity?: Activity) => {
     setError(null);
-    const currentActivitiesList = appModeState === 'work' ? workActivities : personalActivities;
-    const activityToUpdate = currentActivitiesList.find(a => a.id === activityId);
+    let currentActivitiesList = appModeState === 'work' ? workActivities : personalActivities;
+    let activityToUpdate = currentActivitiesList.find(a => a.id === activityId);
+    let targetSetter = appModeState === 'work' ? setWorkActivities : setPersonalActivities;
 
     if (!activityToUpdate) {
-      console.error("Activity not found for update:", activityId);
-      toast({variant: "destructive", title: "Error", description: "Activity not found for update."});
-      return;
+      // If not in current mode's list, check the other mode's list (e.g., if appMode changed or activity's mode changed)
+      currentActivitiesList = appModeState === 'work' ? personalActivities : workActivities;
+      activityToUpdate = currentActivitiesList.find(a => a.id === activityId);
+      targetSetter = appModeState === 'work' ? setPersonalActivities : setWorkActivities; // Set to the list where it was found
+       if(!activityToUpdate) {
+         console.error("Activity not found for update in any list:", activityId);
+         toast({variant: "destructive", title: "Error", description: "Activity not found for update."});
+         return;
+       }
     }
+    
     const effectiveAppMode = updates.appMode || activityToUpdate.appMode;
     const updatedFrontendShell: Activity = { ...activityToUpdate, ...updates, appMode: effectiveAppMode };
     const payload = frontendToBackendActivityPayload(updatedFrontendShell, true) as BackendActivityUpdatePayload;
@@ -1170,65 +1225,151 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (updates.completedAt !== undefined) finalFrontendActivity.completedAt = updates.completedAt;
 
 
-      currentActivitySetter(prev => prev.map(act => (act.id === activityId ? finalFrontendActivity : act)));
+      // Handle if activity mode changed
+      if (originalActivity && finalFrontendActivity.appMode !== originalActivity.appMode) {
+        // Remove from old list
+        if (originalActivity.appMode === 'personal') setPersonalActivities(prev => prev.filter(act => act.id !== activityId));
+        else setWorkActivities(prev => prev.filter(act => act.id !== activityId));
+        // Add to new list
+        if (finalFrontendActivity.appMode === 'personal') setPersonalActivities(prev => [...prev, finalFrontendActivity]);
+        else setWorkActivities(prev => [...prev, finalFrontendActivity]);
+      } else {
+         targetSetter(prev => prev.map(act => (act.id === activityId ? finalFrontendActivity : act)));
+      }
+
       toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
       addHistoryLogEntry(appModeState === 'personal' ? 'historyLogUpdateActivityPersonal' : 'historyLogUpdateActivityWork', { title: finalFrontendActivity.title }, appModeState);
     } catch (err) { createApiErrorToast(err, toast, "toastActivityUpdatedTitle", "updating", t, `${API_BASE_URL}/activities/${activityId}`); setError((err as Error).message); throw err; }
-  }, [currentActivitySetter, appModeState, personalActivities, workActivities, toast, t, addHistoryLogEntry]);
+  }, [appModeState, personalActivities, workActivities, toast, t, addHistoryLogEntry]);
 
   const deleteActivity = useCallback(async (activityId: number) => {
     setError(null);
-    const currentActivitiesList = appModeState === 'work' ? workActivities : personalActivities;
-    const activityToDelete = currentActivitiesList.find(a => a.id === activityId);
-    if (!activityToDelete) return;
+    
+    let activityToDelete = personalActivities.find(a => a.id === activityId);
+    let setter = setPersonalActivities;
+    let modeForLog: AppMode = 'personal';
+
+    if (!activityToDelete) {
+        activityToDelete = workActivities.find(a => a.id === activityId);
+        setter = setWorkActivities;
+        modeForLog = 'work';
+    }
+    
+    if (!activityToDelete) {
+      console.error("Activity not found for deletion:", activityId);
+      toast({variant: "destructive", title: "Error", description: "Activity not found for deletion."});
+      return;
+    }
 
     try {
       const response = await fetch(`${API_BASE_URL}/activities/${activityId}`, { method: 'DELETE' });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete activity: HTTP ${response.status}`));}
-      currentActivitySetter(prev => prev.filter(act => act.id !== activityId));
+      setter(prev => prev.filter(act => act.id !== activityId));
       toast({ title: t('toastActivityDeletedTitle'), description: t('toastActivityDeletedDescription', { activityTitle: activityToDelete.title }) });
-      addHistoryLogEntry(appModeState === 'personal' ? 'historyLogDeleteActivityPersonal' : 'historyLogDeleteActivityWork', { title: activityToDelete.title }, appModeState);
+      addHistoryLogEntry(modeForLog === 'personal' ? 'historyLogDeleteActivityPersonal' : 'historyLogDeleteActivityWork', { title: activityToDelete.title }, modeForLog);
     } catch (err) { createApiErrorToast(err, toast, "toastActivityDeletedTitle", "deleting", t, `${API_BASE_URL}/activities/${activityId}`); setError((err as Error).message); throw err; }
-  }, [currentActivitySetter, appModeState, personalActivities, workActivities, toast, t, addHistoryLogEntry]);
+  }, [personalActivities, workActivities, toast, t, addHistoryLogEntry]);
 
 
-  const addTodoToActivity = useCallback((activityId: number, todoText: string) => {
-    const newTodo: Todo = { id: Date.now() + Math.random(), text: todoText, completed: false };
-    currentActivitySetter(prev =>
-      prev.map(act =>
-        act.id === activityId ? { ...act, todos: [...act.todos, newTodo] } : act
-      )
-    );
-  }, [currentActivitySetter]);
+  const addTodoToActivity = useCallback(async (activityId: number, todoText: string) => {
+    setError(null);
+    const payload: BackendTodoCreate = { text: todoText };
+    try {
+      const response = await fetch(`${API_BASE_URL}/activities/${activityId}/todos`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add todo: HTTP ${response.status}`));}
+      const newBackendTodo: BackendTodo = await response.json();
+      const newFrontendTodo: Todo = { id: newBackendTodo.id, text: newBackendTodo.text, completed: false };
+
+      const updateInList = (list: Activity[], setter: React.Dispatch<React.SetStateAction<Activity[]>>) => {
+          const activityIndex = list.findIndex(act => act.id === activityId);
+          if (activityIndex !== -1) {
+            const updatedActivity = { ...list[activityIndex], todos: [...list[activityIndex].todos, newFrontendTodo] };
+            setter(prev => prev.map(act => act.id === activityId ? updatedActivity : act));
+          }
+      };
+      updateInList(personalActivities, setPersonalActivities);
+      updateInList(workActivities, setWorkActivities);
+
+      toast({ title: t('toastTodoAddedTitle'), description: t('toastTodoAddedDescription', { todoText }) });
+    } catch (err) { createApiErrorToast(err, toast, "toastTodoAddedTitle", "adding", t, `${API_BASE_URL}/activities/${activityId}/todos`); setError((err as Error).message); throw err; }
+  }, [personalActivities, workActivities, toast, t]);
 
   const updateTodoInActivity = useCallback((activityId: number, todoId: number, updates: Partial<Todo>) => {
-    currentActivitySetter(prev =>
-      prev.map(act =>
-        act.id === activityId
-          ? { ...act, todos: act.todos.map(todo => todo.id === todoId ? { ...todo, ...updates } : todo) }
-          : act
-      )
-    );
-  }, [currentActivitySetter]);
+    // Currently, backend doesn't support direct todo updates (text or arbitrary fields).
+    // Only completion status is client-side.
+    if (updates.hasOwnProperty('completed')) {
+      const updateInList = (list: Activity[], setter: React.Dispatch<React.SetStateAction<Activity[]>>) => {
+          const activityIndex = list.findIndex(act => act.id === activityId);
+          if (activityIndex !== -1) {
+            const updatedTodos = list[activityIndex].todos.map(todo =>
+              todo.id === todoId ? { ...todo, ...updates } : todo
+            );
+            const updatedActivity = { ...list[activityIndex], todos: updatedTodos };
+            setter(prev => prev.map(act => act.id === activityId ? updatedActivity : act));
+          }
+      };
+      updateInList(personalActivities, setPersonalActivities);
+      updateInList(workActivities, setWorkActivities);
+    } else if (updates.hasOwnProperty('text')) {
+      // Client-side only update for text, as no backend endpoint exists
+       const updateInList = (list: Activity[], setter: React.Dispatch<React.SetStateAction<Activity[]>>) => {
+          const activityIndex = list.findIndex(act => act.id === activityId);
+          if (activityIndex !== -1) {
+            const updatedTodos = list[activityIndex].todos.map(todo =>
+              todo.id === todoId ? { ...todo, ...updates } : todo
+            );
+            const updatedActivity = { ...list[activityIndex], todos: updatedTodos };
+            setter(prev => prev.map(act => act.id === activityId ? updatedActivity : act));
+            toast({ title: t('toastTodoUpdatedTitle'), description: t('toastTodoUpdatedDescription', { todoText: updates.text || "" }) });
+          }
+      };
+      updateInList(personalActivities, setPersonalActivities);
+      updateInList(workActivities, setWorkActivities);
+    }
+  }, [personalActivities, workActivities, t, toast]);
 
-  const deleteTodoFromActivity = useCallback((activityId: number, todoId: number) => {
-    currentActivitySetter(prev =>
-      prev.map(act =>
-        act.id === activityId
-          ? { ...act, todos: act.todos.filter(todo => todo.id !== todoId) }
-          : act
-      )
-    );
-  }, [currentActivitySetter]);
+  const deleteTodoFromActivity = useCallback(async (activityId: number, todoId: number) => {
+    setError(null);
+    const todoToDelete = 
+      personalActivities.find(act => act.id === activityId)?.todos.find(t => t.id === todoId) ||
+      workActivities.find(act => act.id === activityId)?.todos.find(t => t.id === todoId);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/todos/${todoId}`, { method: 'DELETE' });
+      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete todo: HTTP ${response.status}`));}
+      
+      const updateInList = (list: Activity[], setter: React.Dispatch<React.SetStateAction<Activity[]>>) => {
+          const activityIndex = list.findIndex(act => act.id === activityId);
+          if (activityIndex !== -1) {
+            const updatedTodos = list[activityIndex].todos.filter(todo => todo.id !== todoId);
+            const updatedActivity = { ...list[activityIndex], todos: updatedTodos };
+            setter(prev => prev.map(act => act.id === activityId ? updatedActivity : act));
+          }
+      };
+      updateInList(personalActivities, setPersonalActivities);
+      updateInList(workActivities, setWorkActivities);
+
+      toast({ title: t('toastTodoDeletedTitle'), description: t('toastTodoDeletedDescription', { todoText: todoToDelete?.text || "Todo" }) });
+    } catch (err) { createApiErrorToast(err, toast, "toastTodoDeletedTitle", "deleting", t, `${API_BASE_URL}/todos/${todoId}`); setError((err as Error).message); throw err; }
+  }, [personalActivities, workActivities, toast, t]);
 
   const toggleOccurrenceCompletion = useCallback((masterActivityId: number, occurrenceDateTimestamp: number, completedState: boolean) => {
     let activityTitleForLog = 'Unknown Activity';
-    const masterActivity = getRawActivities().find(act => act.id === masterActivityId);
+    let masterActivity = personalActivities.find(act => act.id === masterActivityId);
+    let setter = setPersonalActivities;
+    let modeForLog: AppMode = 'personal';
+
+    if (!masterActivity) {
+        masterActivity = workActivities.find(act => act.id === masterActivityId);
+        setter = setWorkActivities;
+        modeForLog = 'work';
+    }
+    
     if (masterActivity) activityTitleForLog = masterActivity.title;
 
     const occurrenceDateKey = formatDateFns(new Date(occurrenceDateTimestamp), 'yyyy-MM-dd');
 
-    currentActivitySetter(prevActivities =>
+    setter(prevActivities =>
       prevActivities.map(act => {
         if (act.id === masterActivityId) {
           const updatedOccurrences = { ...act.completedOccurrences };
@@ -1242,8 +1383,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return act;
       })
     );
-    addHistoryLogEntry(appModeState === 'personal' ? 'historyLogToggleActivityCompletionPersonal' : 'historyLogToggleActivityCompletionWork', { title: activityTitleForLog, completed: completedState ? 1 : 0 }, appModeState);
-  }, [currentActivitySetter, appModeState, addHistoryLogEntry, getRawActivities]);
+    addHistoryLogEntry(modeForLog === 'personal' ? 'historyLogToggleActivityCompletionPersonal' : 'historyLogToggleActivityCompletionWork', { title: activityTitleForLog, completed: completedState ? 1 : 0 }, modeForLog);
+  }, [personalActivities, workActivities, addHistoryLogEntry]);
 
 
   const getCategoryById = useCallback((categoryId: number) => allCategories.find(cat => cat.id === categoryId), [allCategories]);
@@ -1264,7 +1405,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [isAuthenticated, appPinState]);
 
-  const combinedIsLoading = isLoadingState || isCategoriesLoading || isAssigneesLoading || (isAuthenticated && isHistoryLoading);
+  const combinedIsLoading = isLoadingState || isActivitiesLoading || isCategoriesLoading || isAssigneesLoading || (isAuthenticated && isHistoryLoading);
 
   return (
     <AppContext.Provider
