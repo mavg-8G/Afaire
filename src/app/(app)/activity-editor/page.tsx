@@ -33,9 +33,11 @@ import { useTranslations } from '@/contexts/language-context';
 import { enUS, es, fr } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Link from 'next/link';
+import { v4 as uuidv4 } from 'uuid';
+
 
 const todoSchema = z.object({
-  id: z.number().optional(),
+  id: z.union([z.number(), z.string()]).optional(), // Allow string for temp UUIDs
   text: z.string().min(1, "Todo text cannot be empty."),
   completed: z.boolean().optional(),
 });
@@ -61,7 +63,7 @@ export default function ActivityEditorPage() {
     getRawActivities,
     getCategoryById,
     isLoading: isAppStoreLoading,
-    categories
+    categories // Destructure categories here
   } = useAppStore();
   const { toast } = useToast();
   const { t, locale } = useTranslations();
@@ -121,17 +123,31 @@ export default function ActivityEditorPage() {
       const foundActivity = currentActivities.find(a => a.id === activityId);
       if (foundActivity) {
         setActivityToEdit(foundActivity);
+        // Diagnostic logs
+        // console.log("[EditorPage] Found activity for editing:", JSON.stringify(foundActivity, null, 2));
+        // console.log("[EditorPage] Todos in foundActivity for form.reset:", JSON.stringify(foundActivity.todos, null, 2));
+
         const baseDate = new Date(foundActivity.createdAt);
+        
+        const todosForForm = (Array.isArray(foundActivity.todos) ? foundActivity.todos : []).map(t => {
+          if (typeof t !== 'object' || t === null) {
+            // console.warn("[EditorPage] Invalid todo item found (not an object):", t);
+            return { id: `malformed_${uuidv4()}`, text: 'Invalid todo data', completed: false };
+          }
+          return {
+            id: t.id, 
+            text: String(t.text || ''), 
+            completed: !!t.completed 
+          };
+        });
+        // console.log("[EditorPage] Todos prepared for form:", JSON.stringify(todosForForm, null, 2));
+
         form.reset({
           title: foundActivity.title,
           categoryId: foundActivity.categoryId,
           activityDate: baseDate,
           time: foundActivity.time || "",
-          todos: foundActivity.todos?.map(t => ({
-            id: t.id,
-            text: t.text,
-            completed: !!t.completed
-          })) || [],
+          todos: todosForForm,
           notes: foundActivity.notes || "",
           recurrence: {
             type: foundActivity.recurrence?.type || 'none',
@@ -168,31 +184,31 @@ export default function ActivityEditorPage() {
 
   const onSubmit = async (data: ActivityFormData) => {
     setIsSubmittingForm(true);
-    const recurrenceRule: RecurrenceRule | null = data.recurrence.type === 'none' ? null : {
-      type: data.recurrence.type,
-      endDate: data.recurrence.endDate ? data.recurrence.endDate.getTime() : null,
-      daysOfWeek: data.recurrence.type === 'weekly' ? data.recurrence.daysOfWeek || [] : undefined,
-      dayOfMonth: data.recurrence.type === 'monthly' ? data.recurrence.dayOfMonth || undefined : undefined,
-    };
-
-    const activityPayloadBase = {
-      title: data.title,
-      categoryId: data.categoryId,
-      time: data.time === "" ? undefined : data.time,
-      notes: data.notes,
-      recurrence: recurrenceRule,
-      responsiblePersonIds: (appMode === 'personal') ? data.responsiblePersonIds?.map(id => Number(id)) : [],
-      appMode: appMode,
-    };
-
     try {
+      const recurrenceRule: RecurrenceRule | null = data.recurrence.type === 'none' ? null : {
+        type: data.recurrence.type,
+        endDate: data.recurrence.endDate ? data.recurrence.endDate.getTime() : null,
+        daysOfWeek: data.recurrence.type === 'weekly' ? data.recurrence.daysOfWeek || [] : undefined,
+        dayOfMonth: data.recurrence.type === 'monthly' ? data.recurrence.dayOfMonth || undefined : undefined,
+      };
+
+      const activityPayloadBase = {
+        title: data.title,
+        categoryId: data.categoryId,
+        time: data.time === "" ? undefined : data.time,
+        notes: data.notes,
+        recurrence: recurrenceRule,
+        responsiblePersonIds: (appMode === 'personal') ? data.responsiblePersonIds?.map(id => Number(id)) : [],
+        appMode: appMode,
+      };
+
       if (activityToEdit && activityToEdit.id !== undefined) {
         const formTodos = data.todos || [];
         const originalTodos = activityToEdit.todos || [];
 
-        const newTodosFromForm = formTodos.filter(ft => ft.id === undefined || ft.id === null || typeof ft.id !== 'number');
+        const newTodosFromForm = formTodos.filter(ft => ft.id === undefined || ft.id === null || (typeof ft.id === 'string' && ft.id.startsWith('malformed_')));
         for (const newTodo of newTodosFromForm) {
-          if (newTodo.text.trim() !== "") {
+          if (newTodo.text.trim() !== "" && newTodo.text !== 'Invalid todo data') {
             await addTodoToActivity(activityToEdit.id, newTodo.text);
           }
         }
@@ -201,7 +217,7 @@ export default function ActivityEditorPage() {
           .filter(ot => !formTodos.some(ft => ft.id === ot.id))
           .map(ot => ot.id);
         for (const todoId of deletedTodoIds) {
-          if (typeof todoId === 'number') { // Ensure ID is a number before calling API
+          if (typeof todoId === 'number') { 
              await deleteTodoFromActivity(activityToEdit.id, todoId);
           }
         }
@@ -209,6 +225,7 @@ export default function ActivityEditorPage() {
         const updatePayload = {
             ...activityPayloadBase,
             createdAt: data.activityDate.getTime(),
+             // Pass current form todos to updateActivity so it can update AppProvider's state
             todos: formTodos.map(t => ({ id: t.id, text: t.text, completed: !!t.completed })),
         };
         await updateActivity(activityToEdit.id, updatePayload as Partial<Omit<Activity, 'id'>>, activityToEdit);
@@ -217,6 +234,7 @@ export default function ActivityEditorPage() {
       } else {
         const addPayload = {
             ...activityPayloadBase,
+            // For new activities, backend handles todo creation from this text list
             todos: data.todos?.map(t => ({ text: t.text })),
         };
         await addActivity(
@@ -228,8 +246,10 @@ export default function ActivityEditorPage() {
       router.replace('/');
     } catch (error) {
       console.error("Failed to save activity:", error);
-      setIsSubmittingForm(false);
+      // Ensure isSubmittingForm is reset on error
+      setIsSubmittingForm(false); 
     }
+    // Removed setIsSubmittingForm(false) from here, it's now in catch or after router.replace
   };
 
   const dialogTitle = activityToEdit ? t('editActivityTitle') : t('addActivityTitle');
@@ -497,3 +517,5 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
+
+    
