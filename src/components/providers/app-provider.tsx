@@ -29,7 +29,6 @@ import { useTheme } from 'next-themes';
 
 const API_BASE_URL = 'http://62.171.187.41:10242';
 
-
 export interface AppContextType {
   activities: Activity[];
   getRawActivities: () => Activity[];
@@ -308,7 +307,10 @@ const backendToFrontendActivity = (backendActivity: BackendActivity, currentAppM
   let daysOfWeekArray: number[] = [];
   if (backendActivity.days_of_week && typeof backendActivity.days_of_week === 'string') {
     daysOfWeekArray = backendActivity.days_of_week.split(',').map(dayStr => parseInt(dayStr.trim(), 10)).filter(num => !isNaN(num));
+  } else if (Array.isArray(backendActivity.days_of_week)) { // Handle if backend already sends array of strings
+    daysOfWeekArray = backendActivity.days_of_week.map(dayStr => parseInt(dayStr.trim(), 10)).filter(num => !isNaN(num));
   }
+
 
   const recurrenceRule: RecurrenceRule = {
     type: backendActivity.repeat_mode as RecurrenceType,
@@ -384,6 +386,23 @@ const backendToFrontendHistory = (backendHistory: BackendHistory): HistoryLogEnt
   details: { rawBackendAction: backendHistory.action }
 });
 
+const formatBackendError = (errorData: any, defaultMessage: string): string => {
+  if (errorData && errorData.detail) {
+    if (Array.isArray(errorData.detail)) {
+      return errorData.detail
+        .map((validationError: any) => {
+          const loc = validationError.loc && Array.isArray(validationError.loc) ? validationError.loc.slice(1).join(' > ') : 'Field'; // Skip "body"
+          return `${loc}: ${validationError.msg}`;
+        })
+        .join('; ');
+    } else if (typeof errorData.detail === 'string') {
+      return errorData.detail;
+    }
+  }
+  return defaultMessage;
+};
+
+
 const createApiErrorToast = (
     err: unknown,
     toastFn: (options: any) => void,
@@ -403,6 +422,7 @@ Error Message: ${error.message || 'No message'}.`;
 
     let descriptionKey: keyof Translations = 'toastDefaultErrorDescription';
     let descriptionParams: any = {};
+    let customDescription: string | null = null;
 
     if (error.name === 'TypeError' && error.message.toLowerCase().includes('failed to fetch')) {
       descriptionKey = 'toastFailedToFetchErrorDescription';
@@ -411,12 +431,14 @@ Error Message: ${error.message || 'No message'}.`;
       descriptionKey = 'toastInvalidJsonErrorDescription';
       descriptionParams = { endpoint: endpoint || API_BASE_URL };
     } else if (error.message) {
-      // If it's not a generic fetch/JSON error, display the specific message from the error
-      toastFn({ variant: "destructive", title: translationFn(defaultTitleKey), description: error.message });
-      return;
+        customDescription = error.message; // Use the specific message from the error (now better formatted)
     }
     
-    toastFn({ variant: "destructive", title: translationFn(defaultTitleKey), description: translationFn(descriptionKey, descriptionParams) });
+    toastFn({ 
+        variant: "destructive", 
+        title: translationFn(defaultTitleKey), 
+        description: customDescription || translationFn(descriptionKey, descriptionParams) 
+    });
 };
 
 
@@ -570,9 +592,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setLoginAttemptsState(0);
     setLockoutEndTimeState(null);
     setSessionExpiryTimestampState(null);
-    // Do not clear history log on logout as it's now fetched from backend (or should be)
-    // setHistoryLog([]);
-    setIsAppLocked(false); // Reset app lock on logout
+    setIsAppLocked(false); 
 
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({ type: 'RESET_TIMER', payload: { locale } });
@@ -588,45 +608,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [addHistoryLogEntry, locale]);
 
  useEffect(() => {
-    setIsLoadingState(true); // General loading flag
-    setIsCategoriesLoading(true);
-    setIsAssigneesLoading(true);
-    setIsHistoryLoading(true);
-    let initialAuthStatus = false; // To track auth status after checking localStorage
-
-    const fetchInitialCategories = async () => {
-      setIsCategoriesLoading(true);
-      try {
-        const response = await fetch(`${API_BASE_URL}/categories`);
-        if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to fetch categories: HTTP ${response.status}`);}
-        const backendCategories: BackendCategory[] = await response.json();
-        setAllCategories(backendCategories.map(cat => backendToFrontendCategory(cat)));
-      } catch (err) { createApiErrorToast(err, toast, "toastCategoryLoadErrorTitle", "loading", t, `${API_BASE_URL}/categories`); setError(prev => prev ? `${prev} Categories failed. ` : "Categories failed. "); setAllCategories([]); }
-      finally { setIsCategoriesLoading(false); }
-    };
-
-    const fetchInitialAssignees = async () => {
-      setIsAssigneesLoading(true);
-      try {
-        const response = await fetch(`${API_BASE_URL}/users`);
-        if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to fetch users: HTTP ${response.status}`);}
-        const backendUsers: BackendUser[] = await response.json();
-        setAllAssignees(backendUsers.map(user => backendToFrontendAssignee(user)));
-      } catch (err) { createApiErrorToast(err, toast, "toastAssigneeLoadErrorTitle", "loading", t, `${API_BASE_URL}/users`); setError(prev => prev ? `${prev} Assignees failed. ` : "Assignees failed. "); setAllAssignees([]); }
-      finally { setIsAssigneesLoading(false); }
-    };
-
-    const fetchInitialHistory = async () => {
-      setIsHistoryLoading(true);
-      try {
-        const response = await fetch(`${API_BASE_URL}/history`);
-        if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to fetch history: HTTP ${response.status}`);}
-        const backendHistoryItems: BackendHistory[] = await response.json();
-        setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
-      } catch (err) { createApiErrorToast(err, toast, "historyLoadErrorTitle", "loading", t, `${API_BASE_URL}/history`); setError(prev => prev ? `${prev} History failed. ` : "History failed. "); setHistoryLog([]);}
-      finally { setIsHistoryLoading(false); }
-    };
-
+    let initialAuth = false;
     const loadClientSideData = () => {
       try {
         const storedPersonalActivities = localStorage.getItem(LOCAL_STORAGE_KEY_PERSONAL_ACTIVITIES);
@@ -643,16 +625,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (storedAuth === 'true' && storedExpiry) {
           const expiryTime = parseInt(storedExpiry, 10);
           if (Date.now() > expiryTime) {
-            initialAuthStatus = false; // Session expired
-            logout(); // Perform logout actions
+            initialAuth = false;
+            logout();
           } else {
-            initialAuthStatus = true;
+            initialAuth = true;
             setSessionExpiryTimestampState(expiryTime);
           }
       } else {
-        initialAuthStatus = false; // No stored auth or expiry
+        initialAuth = false;
       }
-      setIsAuthenticatedState(initialAuthStatus); // Set auth state based on localStorage check
+      setIsAuthenticatedState(initialAuth);
 
       const storedAttempts = localStorage.getItem(LOCAL_STORAGE_KEY_LOGIN_ATTEMPTS);
       setLoginAttemptsState(storedAttempts ? parseInt(storedAttempts, 10) : 0);
@@ -669,21 +651,60 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       else if (HARDCODED_APP_PIN) setAppPinState(HARDCODED_APP_PIN);
     };
 
-    const fetchAllData = async () => {
-        loadClientSideData(); // Load local storage stuff first
-        // Fetch categories and assignees regardless of auth state as they might be needed for login selection or general app view
-        await Promise.all([fetchInitialCategories(), fetchInitialAssignees()]);
+    const fetchInitialCategories = async () => {
+      setIsCategoriesLoading(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/categories`);
+        if (!response.ok) { 
+          const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+          throw new Error(formatBackendError(errorData, `Failed to fetch categories: HTTP ${response.status}`));
+        }
+        const backendCategories: BackendCategory[] = await response.json();
+        setAllCategories(backendCategories.map(cat => backendToFrontendCategory(cat)));
+      } catch (err) { createApiErrorToast(err, toast, "toastCategoryLoadErrorTitle", "loading", t, `${API_BASE_URL}/categories`); setError(prev => prev ? `${prev} Categories failed. ` : "Categories failed. "); setAllCategories([]); }
+      finally { setIsCategoriesLoading(false); }
+    };
 
-        if (initialAuthStatus) { // Fetch history only if initially authenticated from localStorage
+    const fetchInitialAssignees = async () => {
+      setIsAssigneesLoading(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/users`);
+        if (!response.ok) { 
+          const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+          throw new Error(formatBackendError(errorData, `Failed to fetch users: HTTP ${response.status}`));
+        }
+        const backendUsers: BackendUser[] = await response.json();
+        setAllAssignees(backendUsers.map(user => backendToFrontendAssignee(user)));
+      } catch (err) { createApiErrorToast(err, toast, "toastAssigneeLoadErrorTitle", "loading", t, `${API_BASE_URL}/users`); setError(prev => prev ? `${prev} Assignees failed. ` : "Assignees failed. "); setAllAssignees([]); }
+      finally { setIsAssigneesLoading(false); }
+    };
+
+    const fetchInitialHistory = async () => {
+      setIsHistoryLoading(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/history`);
+        if (!response.ok) { 
+          const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+          throw new Error(formatBackendError(errorData, `Failed to fetch history: HTTP ${response.status}`));
+        }
+        const backendHistoryItems: BackendHistory[] = await response.json();
+        setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
+      } catch (err) { createApiErrorToast(err, toast, "historyLoadErrorTitle", "loading", t, `${API_BASE_URL}/history`); setError(prev => prev ? `${prev} History failed. ` : "History failed. "); setHistoryLog([]);}
+      finally { setIsHistoryLoading(false); }
+    };
+    
+    const fetchAllData = async () => {
+        loadClientSideData(); 
+        await Promise.all([fetchInitialCategories(), fetchInitialAssignees()]);
+        if (initialAuth) { 
             await fetchInitialHistory();
         } else {
-            setIsHistoryLoading(false); // Not loading history if not authenticated
+            setIsHistoryLoading(false); 
         }
-        setIsLoadingState(false); // All initial loading done
+        setIsLoadingState(false); 
     };
     fetchAllData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [logout, t, toast]);
 
 
   useEffect(() => {
@@ -940,13 +961,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setIsAuthenticatedState(value);
     if (value && !wasAuthenticated) {
         addHistoryLogEntry('historyLogLogin', undefined, 'account');
-        // Clear and re-fetch history only if newly authenticated
         setHistoryLog([]);
         if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === "granted") {
             const title = t('loginSuccessNotificationTitle');
             const description = t('loginSuccessNotificationDescription');
-            stableAddUINotification({ title, description }); // UI notification
-            showSystemNotification(title, description); // System notification
+            stableAddUINotification({ title, description }); 
+            showSystemNotification(title, description); 
         }
     }
     if (value) {
@@ -966,7 +986,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const payload: BackendCategoryCreatePayload = { name, icon_name: iconName, mode: frontendToBackendCategoryMode(mode) };
     try {
       const response = await fetch(`${API_BASE_URL}/categories`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to add category: HTTP ${response.status}`);}
+      if (!response.ok) { 
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(formatBackendError(errorData, `Failed to add category: HTTP ${response.status}`));
+      }
       const newBackendCategory: BackendCategory = await response.json();
       setAllCategories(prev => [...prev, backendToFrontendCategory(newBackendCategory)]);
       toast({ title: t('toastCategoryAddedTitle'), description: t('toastCategoryAddedDescription', { categoryName: name }) });
@@ -983,7 +1006,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     try {
       const response = await fetch(`${API_BASE_URL}/categories/${categoryId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to update category: HTTP ${response.status}`);}
+      if (!response.ok) { 
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(formatBackendError(errorData, `Failed to update category: HTTP ${response.status}`));
+      }
       const updatedBackendCategory: BackendCategory = await response.json();
       const updatedFrontendCategory = backendToFrontendCategory(updatedBackendCategory);
       setAllCategories(prev => prev.map(cat => (cat.id === categoryId ? updatedFrontendCategory : cat)));
@@ -1001,7 +1027,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!categoryToDelete) return;
     try {
       const response = await fetch(`${API_BASE_URL}/categories/${categoryId}`, { method: 'DELETE' });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to delete category: HTTP ${response.status}`);}
+      if (!response.ok) { 
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(formatBackendError(errorData, `Failed to delete category: HTTP ${response.status}`));
+      }
       setAllCategories(prev => prev.filter(cat => cat.id !== categoryId));
       toast({ title: t('toastCategoryDeletedTitle'), description: t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name }) });
       addHistoryLogEntry('historyLogDeleteCategory', { name: categoryToDelete.name, mode: categoryToDelete.mode as string }, 'category');
@@ -1016,7 +1045,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     try {
       const response = await fetch(`${API_BASE_URL}/users`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to add assignee: HTTP ${response.status}`);}
+      if (!response.ok) { 
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(formatBackendError(errorData, `Failed to add assignee: HTTP ${response.status}`));
+      }
       const newBackendUser: BackendUser = await response.json();
       setAllAssignees(prev => [...prev, backendToFrontendAssignee(newBackendUser)]);
       toast({ title: t('toastAssigneeAddedTitle'), description: t('toastAssigneeAddedDescription', { assigneeName: name }) });
@@ -1041,17 +1073,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const payload: Partial<BackendUserUpdatePayload> = {};
     if (updates.name) payload.name = updates.name;
     if (updates.username) payload.username = updates.username;
-    // Password is not sent here as per frontend design for simple name/username update
 
     try {
-      // NOTE: Backend expects Form data for password. This JSON payload might need backend adjustment.
       const response = await fetch(`${API_BASE_URL}/users/${assigneeId}`, {
          method: 'PUT',
          headers: { 'Content-Type': 'application/json' },
          body: JSON.stringify(payload) 
       });
 
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to update assignee: HTTP ${response.status}`);}
+      if (!response.ok) { 
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(formatBackendError(errorData, `Failed to update assignee: HTTP ${response.status}`));
+      }
       const updatedBackendUser: BackendUser = await response.json();
       setAllAssignees(prev => prev.map(asg => (asg.id === assigneeId ? backendToFrontendAssignee(updatedBackendUser) : asg)));
       toast({ title: t('toastAssigneeUpdatedTitle'), description: t('toastAssigneeUpdatedDescription', { assigneeName: updatedBackendUser.name }) });
@@ -1080,9 +1113,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!assigneeToDelete) return;
     try {
       const response = await fetch(`${API_BASE_URL}/users/${assigneeId}`, { method: 'DELETE' });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to delete assignee: HTTP ${response.status}`);}
+      if (!response.ok) { 
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(formatBackendError(errorData, `Failed to delete assignee: HTTP ${response.status}`));
+      }
       setAllAssignees(prev => prev.filter(asg => asg.id !== assigneeId));
-      // Also update activities locally to remove this assignee from responsiblePersonIds
       const updateActivities = (acts: Activity[]) => 
         acts.map(act => ({
           ...act,
@@ -1103,18 +1138,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }, customCreatedAt?: number
     ) => {
     setError(null);
-    // Create a shell of the frontend activity to pass to the payload transformer
     const frontendActivityShell: Activity = {
-      id: 0, // Placeholder, will be replaced by backend ID
+      id: 0, 
       title: activityData.title,
       categoryId: activityData.categoryId,
-      todos: (activityData.todos || []).map(t => ({ id: 0, text: t.text, completed: false })), // Placeholder IDs
+      todos: (activityData.todos || []).map(t => ({ id: 0, text: t.text, completed: false })), 
       createdAt: customCreatedAt !== undefined ? customCreatedAt : Date.now(),
       time: activityData.time,
       notes: activityData.notes,
       recurrence: activityData.recurrence,
       responsiblePersonIds: activityData.responsiblePersonIds,
-      appMode: activityData.appMode, // Pass appMode
+      appMode: activityData.appMode, 
       completedOccurrences: {},
     };
 
@@ -1122,9 +1156,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     try {
       const response = await fetch(`${API_BASE_URL}/activities`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to add activity: HTTP ${response.status}`);}
+      if (!response.ok) { 
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(formatBackendError(errorData, `Failed to add activity: HTTP ${response.status}`));
+      }
       const newBackendActivity: BackendActivity = await response.json();
-      const newFrontendActivity = backendToFrontendActivity(newBackendActivity, appModeState); // Use appModeState here
+      const newFrontendActivity = backendToFrontendActivity(newBackendActivity, appModeState); 
       
       currentActivitySetter(prev => [...prev, newFrontendActivity]);
       toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
@@ -1142,22 +1179,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       toast({variant: "destructive", title: "Error", description: "Activity not found for update."});
       return;
     }
-    // Ensure appMode is correctly passed from the existing activity if not explicitly in updates
     const effectiveAppMode = updates.appMode || activityToUpdate.appMode;
     const updatedFrontendShell: Activity = { ...activityToUpdate, ...updates, appMode: effectiveAppMode };
     const payload = frontendToBackendActivityPayload(updatedFrontendShell, true) as BackendActivityUpdatePayload;
 
     try {
       const response = await fetch(`${API_BASE_URL}/activities/${activityId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to update activity: HTTP ${response.status}`);}
+      if (!response.ok) { 
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(formatBackendError(errorData, `Failed to update activity: HTTP ${response.status}`));
+      }
       const updatedBackendActivity: BackendActivity = await response.json();
-      // When transforming back, ensure to use the correct appMode context
       const finalFrontendActivity = {
-        ...backendToFrontendActivity(updatedBackendActivity, appModeState), // Use current appModeState for context
-        // Preserve client-side only states if necessary
-        completedOccurrences: activityToUpdate.completedOccurrences, // Preserve existing completedOccurrences
+        ...backendToFrontendActivity(updatedBackendActivity, appModeState), 
+        completedOccurrences: activityToUpdate.completedOccurrences, 
       };
-      // If updates included specific client-side states, re-apply them
       if (updates.completedOccurrences) {
         finalFrontendActivity.completedOccurrences = { ...finalFrontendActivity.completedOccurrences, ...updates.completedOccurrences };
       }
@@ -1179,7 +1215,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     try {
       const response = await fetch(`${API_BASE_URL}/activities/${activityId}`, { method: 'DELETE' });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(errorData.detail || `Failed to delete activity: HTTP ${response.status}`);}
+      if (!response.ok) { 
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(formatBackendError(errorData, `Failed to delete activity: HTTP ${response.status}`));
+      }
       currentActivitySetter(prev => prev.filter(act => act.id !== activityId));
       toast({ title: t('toastActivityDeletedTitle'), description: t('toastActivityDeletedDescription', { activityTitle: activityToDelete.title }) });
       addHistoryLogEntry(appModeState === 'personal' ? 'historyLogDeleteActivityPersonal' : 'historyLogDeleteActivityWork', { title: activityToDelete.title }, appModeState);
@@ -1188,18 +1227,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
   const addTodoToActivity = useCallback((activityId: number, todoText: string) => {
-    // This remains client-side only for now as backend doesn't have specific todo add endpoint
     const newTodo: Todo = { id: Date.now() + Math.random(), text: todoText, completed: false };
     currentActivitySetter(prev =>
       prev.map(act =>
         act.id === activityId ? { ...act, todos: [...act.todos, newTodo] } : act
       )
     );
-    // Optionally, trigger an updateActivity call if you want to sync the whole activity
   }, [currentActivitySetter]);
 
   const updateTodoInActivity = useCallback((activityId: number, todoId: number, updates: Partial<Todo>) => {
-    // Client-side only for now
     currentActivitySetter(prev =>
       prev.map(act =>
         act.id === activityId
@@ -1210,7 +1246,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [currentActivitySetter]);
 
   const deleteTodoFromActivity = useCallback((activityId: number, todoId: number) => {
-    // Client-side only for now
     currentActivitySetter(prev =>
       prev.map(act =>
         act.id === activityId
@@ -1221,9 +1256,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [currentActivitySetter]);
 
   const toggleOccurrenceCompletion = useCallback((masterActivityId: number, occurrenceDateTimestamp: number, completedState: boolean) => {
-    // This is a client-side concept for managing recurring task instances.
-    // The backend doesn't store completedOccurrences directly in this way.
-    // This function updates the local `completedOccurrences` map.
     let activityTitleForLog = 'Unknown Activity';
     const masterActivity = getRawActivities().find(act => act.id === masterActivityId);
     if (masterActivity) activityTitleForLog = masterActivity.title;
@@ -1239,10 +1271,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           } else {
             delete updatedOccurrences[occurrenceDateKey];
           }
-          // Optionally: if marking a specific instance of a master as complete/incomplete,
-          // and this action should also update the master 'completed' or 'completedAt' status
-          // (e.g., if it's the *only* or *first* occurrence), add logic here.
-          // For now, master 'completed' status is separate.
           return { ...act, completedOccurrences: updatedOccurrences };
         }
         return act;
