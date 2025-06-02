@@ -9,10 +9,11 @@ import { useAppStore } from '@/hooks/use-app-store';
 import { useTranslations } from '@/contexts/language-context';
 import { Progress } from "@/components/ui/progress";
 import { cn } from '@/lib/utils';
-
-const POMODORO_WORK_DURATION_SECONDS = 25 * 60;
-const POMODORO_SHORT_BREAK_DURATION_SECONDS = 5 * 60;
-const POMODORO_LONG_BREAK_DURATION_SECONDS = 15 * 60;
+import {
+  POMODORO_WORK_DURATION_SECONDS,
+  POMODORO_SHORT_BREAK_DURATION_SECONDS,
+  POMODORO_LONG_BREAK_DURATION_SECONDS
+} from '@/lib/constants';
 
 function formatTime(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);

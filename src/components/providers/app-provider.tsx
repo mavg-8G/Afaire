@@ -7,7 +7,7 @@ import type {
   BackendCategoryCreatePayload, BackendCategory, BackendUser, BackendUserCreatePayload, BackendUserUpdatePayload, BackendActivityCreatePayload, BackendActivityUpdatePayload, BackendActivity, BackendTodoCreate, BackendHistory, RecurrenceType, BackendCategoryMode, BackendRepeatMode, BackendTodo,
   Token, DecodedToken, BackendHistoryCreatePayload, BackendCategoryUpdatePayload
 } from '@/lib/types';
-import { HARDCODED_APP_PIN, DEFAULT_JWT_SECRET_KEY } from '@/lib/constants';
+import { HARDCODED_APP_PIN, DEFAULT_JWT_SECRET_KEY, POMODORO_WORK_DURATION_SECONDS } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import * as jose from 'jose';
@@ -350,7 +350,7 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
         todos.push({
           id: todoId,
           text: bt?.text || 'Untitled Todo from Backend',
-          completed: bt?.complete || false, // Use 'complete' from backend
+          completed: bt?.complete || false, 
         });
       });
   } else {
@@ -401,7 +401,6 @@ const frontendToBackendActivityPayload = (
   if (activity.recurrence && activity.recurrence.type !== 'none') {
     payload.repeat_mode = activity.recurrence.type as BackendRepeatMode;
     payload.end_date = activity.recurrence.endDate ? new Date(activity.recurrence.endDate).toISOString() : null;
-    // Backend expects list of strings for days_of_week
     payload.days_of_week = activity.recurrence.type === 'weekly' ? (activity.recurrence.daysOfWeek || []).map(String) : null;
     payload.day_of_month = activity.recurrence.type === 'monthly' ? (activity.recurrence.dayOfMonth ?? null) : null;
   } else {
@@ -1197,7 +1196,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const addAssignee = useCallback(async (name: string, username: string, password?: string, isAdmin?: boolean) => {
     setError(null);
-    if (!password) { // Backend requires password for UserCreate
+    if (!password) { 
         toast({variant: "destructive", title: t('loginErrorTitle'), description: "Password is required to create a user."});
         throw new Error("Password is required to create a user.");
     }
@@ -1217,8 +1216,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setError(null);
     const currentAssignee = assignees.find(a => a.id === assigneeId);
     
-    const payload: BackendUserUpdatePayload = { ...updates };
+    const payload: BackendUserUpdatePayload = {  };
+    if (updates.name) payload.name = updates.name;
+    if (updates.username) payload.username = updates.username;
     if (newPassword) payload.password = newPassword;
+    if (updates.isAdmin !== undefined) payload.is_admin = updates.isAdmin;
 
 
     try {
@@ -1297,7 +1299,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     const payload = frontendToBackendActivityPayload(frontendActivityShell) as BackendActivityCreatePayload;
-    // Ensure todos in payload match BackendTodoCreate (with 'complete' field)
     payload.todos = (activityData.todos || []).map(t => ({text: t.text, complete: false}));
 
 
@@ -1325,9 +1326,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     let targetSetter = appModeState === 'work' ? setWorkActivities : setPersonalActivities;
 
     if (!activityToUpdate) {
-      currentActivitiesList = appModeState === 'work' ? personalActivities : workActivities; // Check other list
+      currentActivitiesList = appModeState === 'work' ? personalActivities : workActivities; 
       activityToUpdate = currentActivitiesList.find(a => a.id === activityId);
-      targetSetter = appModeState === 'work' ? setPersonalActivities : setWorkActivities; // Set setter for the other list
+      targetSetter = appModeState === 'work' ? setPersonalActivities : setWorkActivities; 
        if(!activityToUpdate) {
          console.error("[AppProvider] Activity not found for update in any list:", activityId);
          toast({variant: "destructive", title: "Error", description: "Activity not found for update."});
@@ -1352,8 +1353,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             completed: !!t.completed
          }));
       } else if (activityToUpdate && (!processedActivityFromBackend.todos || processedActivityFromBackend.todos.length === 0) && activityToUpdate.todos.length > 0) {
-          // If backend response for PUT doesn't include todos, but client had them, preserve client's todos
-          // This is important because PUT /activities/{id} doesn't update todos list itself, only activity fields
           processedActivityFromBackend.todos = activityToUpdate.todos;
       }
       
@@ -1419,7 +1418,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add todo: HTTP ${response.status}`));}
       const newBackendTodo: BackendTodo = await response.json();
       const newFrontendTodo: Todo = {
-        id: newBackendTodo.id, // Use ID from backend
+        id: newBackendTodo.id, 
         text: newBackendTodo.text,
         completed: newBackendTodo.complete
       };
@@ -1444,7 +1443,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (updates.text !== undefined) payload.text = updates.text;
     if (updates.completed !== undefined) payload.complete = updates.completed;
 
-    if (Object.keys(payload).length === 0) return; // No actual updates
+    if (Object.keys(payload).length === 0) return; 
 
     try {
         const response = await fetchWithAuth(`${API_BASE_URL}/todos/${todoId}`, {
@@ -1585,3 +1584,4 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+
