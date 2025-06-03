@@ -7,7 +7,7 @@ import type {
   BackendCategoryCreatePayload, BackendCategory, BackendUser, BackendUserCreatePayload, BackendUserUpdatePayload, BackendActivityCreatePayload, BackendActivityUpdatePayload, BackendActivity, BackendTodoCreate, BackendHistory, RecurrenceType, BackendCategoryMode, BackendRepeatMode, BackendTodo,
   Token, DecodedToken, BackendHistoryCreatePayload, BackendCategoryUpdatePayload
 } from '@/lib/types';
-import { HARDCODED_APP_PIN, DEFAULT_JWT_SECRET_KEY, POMODORO_WORK_DURATION_SECONDS } from '@/lib/constants';
+import { DEFAULT_JWT_SECRET_KEY, POMODORO_WORK_DURATION_SECONDS, POMODORO_SHORT_BREAK_DURATION_SECONDS, POMODORO_LONG_BREAK_DURATION_SECONDS } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import * as jose from 'jose';
@@ -542,7 +542,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const prevPomodoroPhaseRef = useRef<PomodoroPhase>(pomodoroPhase);
 
   const [isAppLocked, setIsAppLocked] = useState(false);
-  const [appPinState, setAppPinState] = useState<string | null>(HARDCODED_APP_PIN);
+  const [appPinState, setAppPinState] = useState<string | null>(null); // Default to null, no pin
 
   const isAuthenticated = !!jwtToken;
 
@@ -574,17 +574,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [decodedJwt]);
 
 
-  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}): Promise<Response> => {
-    if (!jwtToken) {
-      // This case should ideally not be hit if isAuthenticated guards are used properly
-      // but as a fallback, force logout.
-      // logout(); // This creates a loop if called during initial data fetch when token is null
+  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}, tokenToUse?: string | null): Promise<Response> => {
+    const currentToken = tokenToUse || jwtToken;
+
+    if (!currentToken) {
+      // logout(); // This can create loops if called during initial data fetch when token is null
       throw new Error("No JWT token available for authenticated request.");
     }
 
     const headers = new Headers(options.headers || {});
-    headers.append('Authorization', `Bearer ${jwtToken}`);
-    if (!(options.body instanceof FormData)) { // Don't set Content-Type for FormData
+    headers.append('Authorization', `Bearer ${currentToken}`);
+    if (!(options.body instanceof FormData) && !(options.body instanceof URLSearchParams)) { 
         if (!headers.has('Content-Type') && options.method && ['POST', 'PUT', 'PATCH'].includes(options.method.toUpperCase())) {
              headers.append('Content-Type', 'application/json');
         }
@@ -598,7 +598,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         throw new Error(`Unauthorized: ${response.statusText}`); // Propagate error
     }
     return response;
-  }, [jwtToken]);
+  }, [jwtToken]); // Removed logout from dependency array
 
 
   const logout = useCallback(() => {
@@ -606,7 +606,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     decodeAndSetToken(null); // Clears token from state and localStorage
     setIsAppLocked(false); // Unlock app on logout
 
-    // Clear other session-related data if any, e.g., history, notifications for privacy
+    setPersonalActivities([]);
+    setWorkActivities([]);
+    setAllCategories([]);
+    setAllAssignees([]);
     setHistoryLog([]);
     setUINotifications([]);
 
@@ -614,7 +617,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         navigator.serviceWorker.controller.postMessage({ type: 'RESET_TIMER', payload: { locale } });
     }
     if (logoutChannel) logoutChannel.postMessage('logout_event_v2');
-  }, [decodeAndSetToken, locale]); // addHistoryLogEntry removed from deps to avoid cycle, it will use getCurrentUserId
+  }, [decodeAndSetToken, locale]); // addHistoryLogEntry removed from deps to avoid cycle
 
   const addHistoryLogEntry = useCallback(async (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope: HistoryLogEntry['scope'] = 'account') => {
     const currentUserId = getCurrentUserId();
@@ -624,12 +627,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     const payload: BackendHistoryCreatePayload = {
-        action: actionKey, // Assuming actionKey matches backend's expected action string
+        action: actionKey, 
         user_id: currentUserId,
     };
-    // Add details to action string if needed, or send separately if backend supports
+    
     const actionWithDetails = details ? `${actionKey} ${JSON.stringify(details)}` : actionKey;
-    payload.action = actionWithDetails.substring(0, 255); // Truncate if too long for backend
+    payload.action = actionWithDetails.substring(0, 255);
 
     try {
         const response = await fetchWithAuth(`${API_BASE_URL}/history`, {
@@ -643,7 +646,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const newBackendHistoryEntry: BackendHistory = await response.json();
         setHistoryLog(prevLog => [backendToFrontendHistory(newBackendHistoryEntry), ...prevLog.slice(0, 99)]);
     } catch (err) {
-        // Don't show toast for history logging failure to avoid spamming user
         console.error(`[AppProvider] Failed logging history for action ${actionKey}:`, (err as Error).message);
     }
   }, [fetchWithAuth, getCurrentUserId]);
@@ -751,19 +753,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) setAppModeState(storedAppMode);
 
       const storedToken = localStorage.getItem(LOCAL_STORAGE_KEY_JWT);
+      // await decodeAndSetToken before checking jwtToken directly in this effect
       if (storedToken) {
-        await decodeAndSetToken(storedToken); // This sets jwtToken and decodedJwt
+          await decodeAndSetToken(storedToken);
       }
 
       const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
       if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
       if (typeof window !== 'undefined' && 'Notification' in window) setSystemNotificationPermission(Notification.permission);
+      
       const storedPin = localStorage.getItem(LOCAL_STORAGE_KEY_APP_PIN);
-      if (storedPin) setAppPinState(storedPin);
-      else if (HARDCODED_APP_PIN) setAppPinState(HARDCODED_APP_PIN);
+      if (storedPin) {
+        setAppPinState(storedPin);
+        // Only lock if a pin exists and user was previously authenticated.
+        // If no stored token, don't lock, let them go to login page.
+        if (storedToken) setIsAppLocked(true); 
+      }
 
-      // Fetch initial data if token is now set (meaning it was valid or just obtained)
-      if (jwtToken || storedToken) { // Check against current jwtToken OR storedToken if decodeAndSetToken is async
+
+      // Fetch initial data only if a token was present and successfully decoded (jwtToken state would be set)
+      if (jwtToken) { // Check the state variable *after* decodeAndSetToken has run
         try {
             setIsActivitiesLoading(true);
             const actResponse = await fetchWithAuth(`${API_BASE_URL}/activities`);
@@ -806,14 +815,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } catch (err) { createApiErrorToast(err, toast, "historyLoadErrorTitle", "loading", t, `${API_BASE_URL}/history`); }
         finally { setIsHistoryLoading(false); }
       } else {
-        // No token, so skip fetching protected resources
         setIsActivitiesLoading(false); setIsCategoriesLoading(false); setIsAssigneesLoading(false); setIsHistoryLoading(false);
       }
       setIsLoadingState(false);
     };
     
     loadClientSideDataAndFetchInitial();
-  }, [decodeAndSetToken, fetchWithAuth, t, toast, jwtToken]); // jwtToken dependency ensures re-fetch if token changes (e.g. after login)
+  }, [decodeAndSetToken, jwtToken, t, toast]); // Rely on jwtToken state changing to trigger data fetch part
 
 
   useEffect(() => {
@@ -1068,36 +1076,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const tokenData: Token = await response.json();
       await decodeAndSetToken(tokenData.access_token);
       
-      // After successful login and token set, fetch initial data
+      // After successful login and token set, fetch initial data using the new token explicitly
         setIsActivitiesLoading(true);
-        const actResponse = await fetchWithAuth(`${API_BASE_URL}/activities`);
+        const actResponse = await fetchWithAuth(`${API_BASE_URL}/activities`, {}, tokenData.access_token);
         if (!actResponse.ok) throw new Error(`Activities fetch failed: ${actResponse.statusText}`);
         const backendActivities: BackendActivity[] = await actResponse.json();
         const newPersonal: Activity[] = [], newWork: Activity[] = [];
         backendActivities.forEach(beAct => {
             if (!beAct) return;
-            const feAct = backendToFrontendActivity(beAct, beAct.mode as AppMode); // Use the mode from backend for initial sort
+            const feAct = backendToFrontendActivity(beAct, beAct.mode as AppMode); 
             if (feAct.appMode === 'personal') newPersonal.push(feAct); else newWork.push(feAct);
         });
         setPersonalActivities(newPersonal); setWorkActivities(newWork);
         setIsActivitiesLoading(false);
 
         setIsCategoriesLoading(true);
-        const catResponse = await fetchWithAuth(`${API_BASE_URL}/categories`);
+        const catResponse = await fetchWithAuth(`${API_BASE_URL}/categories`, {}, tokenData.access_token);
         if (!catResponse.ok) throw new Error(`Categories fetch failed: ${catResponse.statusText}`);
         const backendCategories: BackendCategory[] = await catResponse.json();
         setAllCategories(backendCategories.map(cat => backendToFrontendCategory(cat)));
         setIsCategoriesLoading(false);
 
         setIsAssigneesLoading(true);
-        const userResponse = await fetchWithAuth(`${API_BASE_URL}/users`);
+        const userResponse = await fetchWithAuth(`${API_BASE_URL}/users`, {}, tokenData.access_token);
         if (!userResponse.ok) throw new Error(`Users fetch failed: ${userResponse.statusText}`);
         const backendUsers: BackendUser[] = await userResponse.json();
         setAllAssignees(backendUsers.map(user => backendToFrontendAssignee(user)));
         setIsAssigneesLoading(false);
 
         setIsHistoryLoading(true);
-        const histResponse = await fetchWithAuth(`${API_BASE_URL}/history`);
+        const histResponse = await fetchWithAuth(`${API_BASE_URL}/history`, {}, tokenData.access_token);
         if (!histResponse.ok) throw new Error(`History fetch failed: ${histResponse.statusText}`);
         const backendHistoryItems: BackendHistory[] = await histResponse.json();
         setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
@@ -1136,7 +1144,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const errorData = await response.json().catch(() => ({ detail: response.statusText }));
             throw new Error(formatBackendError(errorData, `Password change failed: HTTP ${response.status}`));
         }
-        addHistoryLogEntry('historyLogPasswordChangeAttempt', undefined, 'account'); // Renamed key
+        addHistoryLogEntry('historyLogPasswordChangeAttempt', undefined, 'account'); 
         toast({ title: t('passwordUpdateSuccessTitle'), description: t('passwordUpdateSuccessDescription') });
         return true;
     } catch (err) {
