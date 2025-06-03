@@ -183,15 +183,13 @@ export type Translations = {
   loginPasswordPlaceholder: string;
   loginButtonText: string;
   loginLoggingIn: string;
-  loginInvalidCredentials: string; // Generic, backend might provide specifics via toast
+  loginInvalidCredentials: string;
   loginErrorTitle: string;
-  // loginLockoutTitle: string; // Lockout handled by backend
-  // loginLockoutMessage: (params: { seconds: number }) => string; // Lockout handled by backend
   loginUsernameRequired: string;
   loginPasswordRequired: string;
-  loginSecurityNoticeBackend: string; // Updated security notice
+  loginSecurityNoticeBackend: string; 
   loginRedirecting: string;
-  rememberMeLabel: string; // Keep if client-side session management is desired
+  rememberMeLabel: string; 
   showPassword?: string;
   hidePassword?: string;
 
@@ -217,7 +215,7 @@ export type Translations = {
   passwordUpdateFailedError: string;
 
 
-  // AppProvider Toasts & Notifications (some may be generic now if backend provides details)
+  // AppProvider Toasts & Notifications
   toastCategoryAddedTitle: string;
   toastCategoryAddedDescription: (params: { categoryName: string }) => string;
   toastCategoryUpdatedTitle: string;
@@ -249,10 +247,10 @@ export type Translations = {
   toastDefaultErrorDescription: string;
   toastFailedToFetchErrorDescription: (params: { endpoint: string }) => string;
   toastInvalidJsonErrorDescription: (params: { endpoint: string }) => string;
-  toastActivityLoadErrorTitle: string; // For get_activities
-  toastCategoryLoadErrorTitle: string; // For get_categories
-  toastAssigneeLoadErrorTitle: string; // For get_users
-  historyLoadErrorTitle: string; // For get_history
+  toastActivityLoadErrorTitle: string; 
+  toastCategoryLoadErrorTitle: string; 
+  toastAssigneeLoadErrorTitle: string; 
+  historyLoadErrorTitle: string; 
 
   // Dashboard Page
   dashboardTitle: string;
@@ -297,21 +295,13 @@ export type Translations = {
   noHistoryYet: string;
   historyLogLogin: string;
   historyLogLogout: string;
-  historyLogAddActivityPersonal: (params: { title: string }) => string;
-  historyLogAddActivityWork: (params: { title: string }) => string;
-  historyLogUpdateActivityPersonal: (params: { title: string }) => string;
-  historyLogUpdateActivityWork: (params: { title: string }) => string;
-  historyLogDeleteActivityPersonal: (params: { title: string }) => string;
-  historyLogDeleteActivityWork: (params: { title: string }) => string;
-  historyLogToggleActivityCompletionPersonal: (params: { title: string, completed: boolean }) => string;
-  historyLogToggleActivityCompletionWork: (params: { title: string, completed: boolean }) => string;
-  historyLogAddCategoryPersonal: (params: { name: string }) => string;
-  historyLogAddCategoryWork: (params: { name: string }) => string;
-  historyLogAddCategoryAll: (params: { name: string }) => string;
-  historyLogUpdateCategoryPersonal: (params: { name: string, oldName?: string, oldMode?: string }) => string;
-  historyLogUpdateCategoryWork: (params: { name: string, oldName?: string, oldMode?: string }) => string;
-  historyLogUpdateCategoryAll: (params: { name: string, oldName?: string, oldMode?: string }) => string;
-  historyLogDeleteCategory: (params: { name: string, mode: string }) => string;
+  historyLogAddActivity: (params: { title: string, mode: string, categoryName?: string | null, date: string, time?: string | null }) => string;
+  historyLogUpdateActivity: (params: { title: string, mode: string, oldTitle?: string | null, oldCategoryName?: string | null, categoryName?: string | null, oldDate?: string | null, date?: string | null, oldTime?: string | null, time?: string | null }) => string;
+  historyLogDeleteActivity: (params: { title: string, mode: string, categoryName?: string | null, date: string, time?: string | null }) => string;
+  historyLogToggleActivityCompletion: (params: { title: string, mode: string, completed: boolean, date: string, time?: string | null }) => string;
+  historyLogAddCategory: (params: { name: string, iconName: string, mode: string }) => string;
+  historyLogUpdateCategory: (params: { newName: string, oldName?: string | null, newIconName: string, oldIconName?: string | null, newMode: string, oldMode?: string | null }) => string;
+  historyLogDeleteCategory: (params: { name: string, iconName: string, mode: string }) => string;
   historyLogSwitchToPersonalMode: string;
   historyLogSwitchToWorkMode: string;
   historyLogPasswordChangeAttempt: string;
@@ -529,7 +519,7 @@ export const translations: Record<Locale, Translations> = {
     loginPasswordPlaceholder: "Enter your password",
     loginButtonText: "Login",
     loginLoggingIn: "Logging in...",
-    loginInvalidCredentials: "Incorrect username or password. Please try again.",
+    loginInvalidCredentials: "Incorrect username or password. Please double-check your credentials. If you are new, you might need to create an account first or ensure your administrator has created one for you.",
     loginErrorTitle: "Login Error",
     loginUsernameRequired: "Username is required.",
     loginPasswordRequired: "Password is required.",
@@ -630,21 +620,58 @@ export const translations: Record<Locale, Translations> = {
     noHistoryYet: "No activity recorded in this session yet.",
     historyLogLogin: "Logged in.",
     historyLogLogout: "Logged out.",
-    historyLogAddActivityPersonal: (params) => `Added Personal Activity: "${params.title}".`,
-    historyLogAddActivityWork: (params) => `Added Work Activity: "${params.title}".`,
-    historyLogUpdateActivityPersonal: (params) => `Updated Personal Activity: "${params.title}".`,
-    historyLogUpdateActivityWork: (params) => `Updated Work Activity: "${params.title}".`,
-    historyLogDeleteActivityPersonal: (params) => `Deleted Personal Activity: "${params.title}".`,
-    historyLogDeleteActivityWork: (params) => `Deleted Work Activity: "${params.title}".`,
-    historyLogToggleActivityCompletionPersonal: (params) => `Marked Personal Activity "${params.title}" as ${params.completed ? 'completed' : 'incomplete'}.`,
-    historyLogToggleActivityCompletionWork: (params) => `Marked Work Activity "${params.title}" as ${params.completed ? 'completed' : 'incomplete'}.`,
-    historyLogAddCategoryPersonal: (params) => `Added Personal Category: "${params.name}".`,
-    historyLogAddCategoryWork: (params) => `Added Work Category: "${params.name}".`,
-    historyLogAddCategoryAll: (params) => `Added Category (All Modes): "${params.name}".`,
-    historyLogUpdateCategoryPersonal: (params) => `Updated Personal Category: "${params.oldName ? params.oldName + ' to ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'personal' ? ` (mode changed from ${params.oldMode})` : ''}.`,
-    historyLogUpdateCategoryWork: (params) => `Updated Work Category: "${params.oldName ? params.oldName + ' to ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'work' ? ` (mode changed from ${params.oldMode})` : ''}.`,
-    historyLogUpdateCategoryAll: (params) => `Updated Category (All Modes): "${params.oldName ? params.oldName + ' to ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'all' ? ` (mode changed from ${params.oldMode})` : ''}.`,
-    historyLogDeleteCategory: (params) => `Deleted Category: "${params.name}" (Mode: ${params.mode}).`,
+    historyLogAddActivity: (params) => `Added ${params.mode} Activity: "${params.title}"${params.categoryName ? ` in category "${params.categoryName}"` : ''} for ${params.date}${params.time ? ` at ${params.time}` : ''}.`,
+    historyLogUpdateActivity: (params) => {
+      let desc = `Updated ${params.mode} Activity: `;
+      const changes: string[] = [];
+      if (params.oldTitle && params.oldTitle !== params.title) {
+        changes.push(`Title from "${params.oldTitle}" to "${params.title}"`);
+      } else {
+        desc += `"${params.title}".`;
+      }
+      if (params.oldCategoryName !== params.categoryName) {
+        changes.push(`Category from "${params.oldCategoryName || 'None'}" to "${params.categoryName || 'None'}"`);
+      }
+      if (params.oldDate !== params.date && params.date) {
+        changes.push(`Date from "${params.oldDate || 'Not set'}" to "${params.date}"`);
+      }
+      if (params.oldTime !== params.time) {
+        changes.push(`Time from "${params.oldTime || 'Not Set'}" to "${params.time || 'Not Set'}"`);
+      }
+      if (changes.length > 0) {
+        if (params.oldTitle && params.oldTitle === params.title) desc += `"${params.title}".`; // Add title if not part of changes
+        desc += ` Changes: ${changes.join(', ')}.`;
+      } else if (!params.oldTitle || params.oldTitle === params.title) {
+         desc += ` (no details changed in log).`;
+      }
+      return desc.trim();
+    },
+    historyLogDeleteActivity: (params) => `Deleted ${params.mode} Activity: "${params.title}"${params.categoryName ? ` from category "${params.categoryName}"` : ''} (was for ${params.date}${params.time ? ` at ${params.time}` : ''}).`,
+    historyLogToggleActivityCompletion: (params) => `Marked ${params.mode} Activity "${params.title}" for ${params.date}${params.time ? ` at ${params.time}` : ''} as ${params.completed ? 'completed' : 'incomplete'}.`,
+    historyLogAddCategory: (params) => `Added ${params.mode} Category: "${params.name}" (Icon: ${params.iconName}).`,
+    historyLogUpdateCategory: (params) => {
+        let desc = `Updated Category: `;
+        const changes: string[] = [];
+        if (params.oldName && params.oldName !== params.newName) {
+            changes.push(`Name from "${params.oldName}" to "${params.newName}"`);
+        } else {
+            desc += `"${params.newName}".`;
+        }
+        if (params.oldIconName && params.oldIconName !== params.newIconName) {
+            changes.push(`Icon from "${params.oldIconName}" to "${params.newIconName}"`);
+        }
+        if (params.oldMode && params.oldMode !== params.newMode) {
+            changes.push(`Mode from "${params.oldMode}" to "${params.newMode}"`);
+        }
+        if (changes.length > 0) {
+            if(params.oldName && params.oldName === params.newName) desc += `"${params.newName}".`; // Add name if not part of changes
+            desc += ` Changes: ${changes.join(', ')}.`;
+        } else if (!params.oldName || params.oldName === params.newName) {
+            desc += ` (Icon: ${params.newIconName}, Mode: ${params.newMode}).`;
+        }
+        return desc.trim();
+    },
+    historyLogDeleteCategory: (params) => `Deleted ${params.mode} Category: "${params.name}" (Icon: ${params.iconName}).`,
     historyLogSwitchToPersonalMode: "Switched to Personal Mode.",
     historyLogSwitchToWorkMode: "Switched to Work Mode.",
     historyLogPasswordChangeAttempt: "Password change attempt.",
@@ -865,7 +892,7 @@ export const translations: Record<Locale, Translations> = {
     loginPasswordPlaceholder: "Introduce tu contraseña",
     loginButtonText: "Iniciar Sesión",
     loginLoggingIn: "Iniciando sesión...",
-    loginInvalidCredentials: "Usuario o contraseña incorrectos. Inténtalo de nuevo.",
+    loginInvalidCredentials: "Usuario o contraseña incorrectos. Por favor, verifica tus credenciales. Si eres nuevo, puede que necesites crear una cuenta primero o asegurarte de que tu administrador te haya creado una.",
     loginErrorTitle: "Error de Inicio de Sesión",
     loginUsernameRequired: "El nombre de usuario es obligatorio.",
     loginPasswordRequired: "La contraseña es obligatoria.",
@@ -966,21 +993,58 @@ export const translations: Record<Locale, Translations> = {
     noHistoryYet: "Aún no se ha registrado actividad en esta sesión.",
     historyLogLogin: "Sesión iniciada.",
     historyLogLogout: "Sesión cerrada.",
-    historyLogAddActivityPersonal: (params) => `Actividad Personal añadida: "${params.title}".`,
-    historyLogAddActivityWork: (params) => `Actividad de Trabajo añadida: "${params.title}".`,
-    historyLogUpdateActivityPersonal: (params) => `Actividad Personal actualizada: "${params.title}".`,
-    historyLogUpdateActivityWork: (params) => `Actividad de Trabajo actualizada: "${params.title}".`,
-    historyLogDeleteActivityPersonal: (params) => `Actividad Personal eliminada: "${params.title}".`,
-    historyLogDeleteActivityWork: (params) => `Actividad de Trabajo eliminada: "${params.title}".`,
-    historyLogToggleActivityCompletionPersonal: (params) => `Actividad Personal "${params.title}" marcada como ${params.completed ? 'completada' : 'incompleta'}.`,
-    historyLogToggleActivityCompletionWork: (params) => `Actividad de Trabajo "${params.title}" marcada como ${params.completed ? 'completada' : 'incompleta'}.`,
-    historyLogAddCategoryPersonal: (params) => `Categoría Personal añadida: "${params.name}".`,
-    historyLogAddCategoryWork: (params) => `Categoría de Trabajo añadida: "${params.name}".`,
-    historyLogAddCategoryAll: (params) => `Categoría (Todos los Modos) añadida: "${params.name}".`,
-    historyLogUpdateCategoryPersonal: (params) => `Categoría Personal actualizada: "${params.oldName ? params.oldName + ' a ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'personal' ? ` (modo cambiado de ${params.oldMode})` : ''}.`,
-    historyLogUpdateCategoryWork: (params) => `Categoría de Trabajo actualizada: "${params.oldName ? params.oldName + ' a ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'work' ? ` (modo cambiado de ${params.oldMode})` : ''}.`,
-    historyLogUpdateCategoryAll: (params) => `Categoría (Todos los Modos) actualizada: "${params.oldName ? params.oldName + ' a ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'all' ? ` (modo cambiado de ${params.oldMode})` : ''}.`,
-    historyLogDeleteCategory: (params) => `Categoría eliminada: "${params.name}" (Modo: ${params.mode}).`,
+    historyLogAddActivity: (params) => `Añadida Actividad (${params.mode}): "${params.title}"${params.categoryName ? ` en categoría "${params.categoryName}"` : ''} para ${params.date}${params.time ? ` a las ${params.time}` : ''}.`,
+    historyLogUpdateActivity: (params) => {
+      let desc = `Actualizada Actividad (${params.mode}): `;
+      const changes: string[] = [];
+      if (params.oldTitle && params.oldTitle !== params.title) {
+        changes.push(`Título de "${params.oldTitle}" a "${params.title}"`);
+      } else {
+        desc += `"${params.title}".`;
+      }
+      if (params.oldCategoryName !== params.categoryName) {
+        changes.push(`Categoría de "${params.oldCategoryName || 'Ninguna'}" a "${params.categoryName || 'Ninguna'}"`);
+      }
+      if (params.oldDate !== params.date && params.date) {
+        changes.push(`Fecha de "${params.oldDate || 'No establecida'}" a "${params.date}"`);
+      }
+      if (params.oldTime !== params.time) {
+        changes.push(`Hora de "${params.oldTime || 'No establecida'}" a "${params.time || 'No establecida'}"`);
+      }
+      if (changes.length > 0) {
+        if (params.oldTitle && params.oldTitle === params.title) desc += `"${params.title}".`;
+        desc += ` Cambios: ${changes.join(', ')}.`;
+      } else if (!params.oldTitle || params.oldTitle === params.title) {
+         desc += ` (sin detalles cambiados en el registro).`;
+      }
+      return desc.trim();
+    },
+    historyLogDeleteActivity: (params) => `Eliminada Actividad (${params.mode}): "${params.title}"${params.categoryName ? ` de categoría "${params.categoryName}"` : ''} (era para ${params.date}${params.time ? ` a las ${params.time}` : ''}).`,
+    historyLogToggleActivityCompletion: (params) => `Marcada Actividad (${params.mode}) "${params.title}" para ${params.date}${params.time ? ` a las ${params.time}` : ''} como ${params.completed ? 'completada' : 'incompleta'}.`,
+    historyLogAddCategory: (params) => `Añadida Categoría (${params.mode}): "${params.name}" (Icono: ${params.iconName}).`,
+    historyLogUpdateCategory: (params) => {
+        let desc = `Actualizada Categoría: `;
+        const changes: string[] = [];
+        if (params.oldName && params.oldName !== params.newName) {
+            changes.push(`Nombre de "${params.oldName}" a "${params.newName}"`);
+        } else {
+            desc += `"${params.newName}".`;
+        }
+        if (params.oldIconName && params.oldIconName !== params.newIconName) {
+            changes.push(`Icono de "${params.oldIconName}" a "${params.newIconName}"`);
+        }
+        if (params.oldMode && params.oldMode !== params.newMode) {
+            changes.push(`Modo de "${params.oldMode}" a "${params.newMode}"`);
+        }
+        if (changes.length > 0) {
+            if(params.oldName && params.oldName === params.newName) desc += `"${params.newName}".`;
+            desc += ` Cambios: ${changes.join(', ')}.`;
+        } else if (!params.oldName || params.oldName === params.newName) {
+             desc += ` (Icono: ${params.newIconName}, Modo: ${params.newMode}).`;
+        }
+        return desc.trim();
+    },
+    historyLogDeleteCategory: (params) => `Eliminada Categoría (${params.mode}): "${params.name}" (Icono: ${params.iconName}).`,
     historyLogSwitchToPersonalMode: "Cambiado a Modo Personal.",
     historyLogSwitchToWorkMode: "Cambiado a Modo Trabajo.",
     historyLogPasswordChangeAttempt: "Intento de cambio de contraseña.",
@@ -1201,7 +1265,7 @@ export const translations: Record<Locale, Translations> = {
     loginPasswordPlaceholder: "Entrez votre mot de passe",
     loginButtonText: "Connexion",
     loginLoggingIn: "Connexion en cours...",
-    loginInvalidCredentials: "Nom d'utilisateur ou mot de passe incorrect. Veuillez réessayer.",
+    loginInvalidCredentials: "Nom d'utilisateur ou mot de passe incorrect. Veuillez vérifier vos identifiants. Si vous êtes nouveau, vous devrez peut-être d'abord créer un compte ou vous assurer que votre administrateur en a créé un pour vous.",
     loginErrorTitle: "Erreur de connexion",
     loginUsernameRequired: "Le nom d'utilisateur est requis.",
     loginPasswordRequired: "Le mot de passe est requis.",
@@ -1302,21 +1366,58 @@ export const translations: Record<Locale, Translations> = {
     noHistoryYet: "Aucune activité enregistrée dans cette session pour le moment.",
     historyLogLogin: "Connecté.",
     historyLogLogout: "Déconnecté.",
-    historyLogAddActivityPersonal: (params) => `Activité personnelle ajoutée : "${params.title}".`,
-    historyLogAddActivityWork: (params) => `Activité professionnelle ajoutée : "${params.title}".`,
-    historyLogUpdateActivityPersonal: (params) => `Activité personnelle mise à jour : "${params.title}".`,
-    historyLogUpdateActivityWork: (params) => `Activité professionnelle mise à jour : "${params.title}".`,
-    historyLogDeleteActivityPersonal: (params) => `Activité personnelle supprimée : "${params.title}".`,
-    historyLogDeleteActivityWork: (params) => `Activité professionnelle supprimée : "${params.title}".`,
-    historyLogToggleActivityCompletionPersonal: (params) => `Activité personnelle "${params.title}" marquée comme ${params.completed ? 'terminée' : 'non terminée'}.`,
-    historyLogToggleActivityCompletionWork: (params) => `Activité professionnelle "${params.title}" marquée comme ${params.completed ? 'terminée' : 'non terminée'}.`,
-    historyLogAddCategoryPersonal: (params) => `Catégorie personnelle ajoutée : "${params.name}".`,
-    historyLogAddCategoryWork: (params) => `Catégorie professionnelle ajoutée : "${params.name}".`,
-    historyLogAddCategoryAll: (params) => `Catégorie (Tous modes) ajoutée : "${params.name}".`,
-    historyLogUpdateCategoryPersonal: (params) => `Catégorie personnelle mise à jour : "${params.oldName ? params.oldName + ' à ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'personal' ? ` (mode changé de ${params.oldMode})` : ''}.`,
-    historyLogUpdateCategoryWork: (params) => `Catégorie professionnelle mise à jour : "${params.oldName ? params.oldName + ' à ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'work' ? ` (mode changé de ${params.oldMode})` : ''}.`,
-    historyLogUpdateCategoryAll: (params) => `Catégorie (Tous modes) mise à jour : "${params.oldName ? params.oldName + ' à ' : ''}${params.name}"${params.oldMode && params.oldMode !== 'all' ? ` (mode changé de ${params.oldMode})` : ''}.`,
-    historyLogDeleteCategory: (params) => `Catégorie supprimée : "${params.name}" (Mode : ${params.mode}).`,
+    historyLogAddActivity: (params) => `Activité (${params.mode}) ajoutée : "${params.title}"${params.categoryName ? ` dans la catégorie "${params.categoryName}"` : ''} pour le ${params.date}${params.time ? ` à ${params.time}` : ''}.`,
+    historyLogUpdateActivity: (params) => {
+      let desc = `Activité (${params.mode}) mise à jour : `;
+      const changes: string[] = [];
+      if (params.oldTitle && params.oldTitle !== params.title) {
+        changes.push(`Titre de "${params.oldTitle}" à "${params.title}"`);
+      } else {
+        desc += `"${params.title}".`;
+      }
+      if (params.oldCategoryName !== params.categoryName) {
+        changes.push(`Catégorie de "${params.oldCategoryName || 'Aucune'}" à "${params.categoryName || 'Aucune'}"`);
+      }
+      if (params.oldDate !== params.date && params.date) {
+        changes.push(`Date de "${params.oldDate || 'Non définie'}" à "${params.date}"`);
+      }
+      if (params.oldTime !== params.time) {
+        changes.push(`Heure de "${params.oldTime || 'Non définie'}" à "${params.time || 'Non définie'}"`);
+      }
+      if (changes.length > 0) {
+        if (params.oldTitle && params.oldTitle === params.title) desc += `"${params.title}".`;
+        desc += ` Changements : ${changes.join(', ')}.`;
+      } else if (!params.oldTitle || params.oldTitle === params.title) {
+         desc += ` (aucun détail modifié dans le journal).`;
+      }
+      return desc.trim();
+    },
+    historyLogDeleteActivity: (params) => `Activité (${params.mode}) supprimée : "${params.title}"${params.categoryName ? ` de la catégorie "${params.categoryName}"` : ''} (était pour le ${params.date}${params.time ? ` à ${params.time}` : ''}).`,
+    historyLogToggleActivityCompletion: (params) => `Activité (${params.mode}) "${params.title}" pour le ${params.date}${params.time ? ` à ${params.time}` : ''} marquée comme ${params.completed ? 'terminée' : 'non terminée'}.`,
+    historyLogAddCategory: (params) => `Catégorie (${params.mode}) ajoutée : "${params.name}" (Icône : ${params.iconName}).`,
+    historyLogUpdateCategory: (params) => {
+        let desc = `Catégorie mise à jour : `;
+        const changes: string[] = [];
+        if (params.oldName && params.oldName !== params.newName) {
+            changes.push(`Nom de "${params.oldName}" à "${params.newName}"`);
+        } else {
+            desc += `"${params.newName}".`;
+        }
+        if (params.oldIconName && params.oldIconName !== params.newIconName) {
+            changes.push(`Icône de "${params.oldIconName}" à "${params.newIconName}"`);
+        }
+        if (params.oldMode && params.oldMode !== params.newMode) {
+            changes.push(`Mode de "${params.oldMode}" à "${params.newMode}"`);
+        }
+        if (changes.length > 0) {
+             if(params.oldName && params.oldName === params.newName) desc += `"${params.newName}".`;
+            desc += ` Changements : ${changes.join(', ')}.`;
+        } else if (!params.oldName || params.oldName === params.newName) {
+             desc += ` (Icône : ${params.newIconName}, Mode : ${params.newMode}).`;
+        }
+        return desc.trim();
+    },
+    historyLogDeleteCategory: (params) => `Catégorie (${params.mode}) supprimée : "${params.name}" (Icône : ${params.iconName}).`,
     historyLogSwitchToPersonalMode: "Passé en mode Personnel.",
     historyLogSwitchToWorkMode: "Passé en mode Travail.",
     historyLogPasswordChangeAttempt: "Tentative de changement de mot de passe.",
@@ -1386,4 +1487,3 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
-

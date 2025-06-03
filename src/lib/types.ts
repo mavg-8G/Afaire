@@ -194,21 +194,13 @@ export interface UINotification {
 export type HistoryLogActionKey =
   | 'historyLogLogin'
   | 'historyLogLogout'
-  | 'historyLogAddActivityPersonal'
-  | 'historyLogAddActivityWork'
-  | 'historyLogUpdateActivityPersonal'
-  | 'historyLogUpdateActivityWork'
-  | 'historyLogDeleteActivityPersonal'
-  | 'historyLogDeleteActivityWork'
-  | 'historyLogToggleActivityCompletionPersonal'
-  | 'historyLogToggleActivityCompletionWork'
-  | 'historyLogAddCategoryPersonal'
-  | 'historyLogAddCategoryWork'
-  | 'historyLogAddCategoryAll'
-  | 'historyLogUpdateCategoryPersonal'
-  | 'historyLogUpdateCategoryWork'
-  | 'historyLogUpdateCategoryAll'
-  | 'historyLogDeleteCategory'
+  | 'historyLogAddActivity' // Simplified
+  | 'historyLogUpdateActivity' // Simplified
+  | 'historyLogDeleteActivity' // Simplified
+  | 'historyLogToggleActivityCompletion' // Simplified
+  | 'historyLogAddCategory' // Simplified
+  | 'historyLogUpdateCategory' // Simplified
+  | 'historyLogDeleteCategory' // Simplified
   | 'historyLogSwitchToPersonalMode'
   | 'historyLogSwitchToWorkMode'
   | 'historyLogPasswordChangeAttempt'
@@ -220,7 +212,7 @@ export interface HistoryLogEntry {
   id: number;
   timestamp: number;
   actionKey: HistoryLogActionKey;
-  details?: Record<string, string | number | boolean | undefined>;
+  details?: Record<string, string | number | boolean | undefined | null>; // Allow null for optional old values
   scope: 'account' | 'personal' | 'work' | 'category' | 'assignee';
   backendAction?: string;
   backendUserId?: number;

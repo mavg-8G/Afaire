@@ -473,7 +473,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const isAuthenticated = !!jwtToken;
 
-  const addHistoryLogEntryRef = useRef<((actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope?: HistoryLogEntry['scope']) => Promise<void>) | null>(null);
+  const addHistoryLogEntryRef = useRef<((actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined | null>, scope?: HistoryLogEntry['scope']) => Promise<void>) | null>(null);
 
 
   // --- ORDERED useCallback DEFINITIONS ---
@@ -550,7 +550,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return response;
   }, [jwtToken, API_BASE_URL]); 
 
-  const addHistoryLogEntry = useCallback(async (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope: HistoryLogEntry['scope'] = 'account') => {
+  const addHistoryLogEntry = useCallback(async (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined | null>, scope: HistoryLogEntry['scope'] = 'account') => {
     const currentUserId = getCurrentUserId();
     if (!currentUserId) {
         console.warn("[AppProvider] Cannot add history log: User ID not available.");
@@ -1024,7 +1024,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const setAppMode = useCallback((mode: AppMode) => {
     if (mode !== appModeState) {
-      addHistoryLogEntryRef.current?.(mode === 'personal' ? 'historyLogSwitchToPersonalMode' : 'historyLogSwitchToWorkMode', undefined, 'account');
+      addHistoryLogEntryRef.current?.('historyLogSwitchToPersonalMode', { mode: 'Personal' }, 'account');
     }
     setAppModeState(mode);
   }, [appModeState]); 
@@ -1169,9 +1169,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (err) {
         if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {
             createApiErrorToast(err, toast, "changePasswordModalTitle", "updating", t, `${API_BASE_URL}/users/${currentUserId}/change-password`);
-        } else if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) {
-            logout();
-        }
+        } else if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
         setError((err as Error).message);
         return false;
     }
@@ -1187,7 +1185,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const newBackendCategory: BackendCategory = await response.json();
       setAllCategories(prev => [...prev, backendToFrontendCategory(newBackendCategory)]);
       toast({ title: t('toastCategoryAddedTitle'), description: t('toastCategoryAddedDescription', { categoryName: name }) });
-      addHistoryLogEntryRef.current?.(mode === 'personal' ? 'historyLogAddCategoryPersonal' : mode === 'work' ? 'historyLogAddCategoryWork' : 'historyLogAddCategoryAll', { name }, 'category');
+      const historyMode = mode === 'all' ? 'All Modes' : mode.charAt(0).toUpperCase() + mode.slice(1);
+      addHistoryLogEntryRef.current?.('historyLogAddCategory', { name, iconName, mode: historyMode }, 'category');
     } catch (err) { if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) { createApiErrorToast(err, toast, "toastCategoryAddedTitle", "adding", t, `${API_BASE_URL}/categories`);} else if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); } setError((err as Error).message); throw err; }
   }, [fetchWithAuth, toast, t, logout, API_BASE_URL]);
 
@@ -1205,10 +1204,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const updatedFrontendCategory = backendToFrontendCategory(updatedBackendCategory);
       setAllCategories(prev => prev.map(cat => (cat.id === categoryId ? updatedFrontendCategory : cat)));
       toast({ title: t('toastCategoryUpdatedTitle'), description: t('toastCategoryUpdatedDescription', { categoryName: updatedFrontendCategory.name }) });
-      let actionKey: HistoryLogActionKey = 'historyLogUpdateCategoryAll';
-      if (updatedFrontendCategory.mode === 'personal') actionKey = 'historyLogUpdateCategoryPersonal';
-      else if (updatedFrontendCategory.mode === 'work') actionKey = 'historyLogUpdateCategoryWork';
-      addHistoryLogEntryRef.current?.(actionKey, { name: updatedFrontendCategory.name, oldName: oldCategoryData?.name !== updatedFrontendCategory.name ? oldCategoryData?.name : undefined , oldMode: oldCategoryData?.mode !== updatedFrontendCategory.mode ? oldCategoryData?.mode : undefined }, 'category');
+      
+      const historyDetails: HistoryLogEntry['details'] = {
+        newName: updatedFrontendCategory.name,
+        oldName: oldCategoryData?.name !== updatedFrontendCategory.name ? oldCategoryData?.name : null,
+        newIconName: updatedFrontendCategory.iconName,
+        oldIconName: oldCategoryData?.iconName !== updatedFrontendCategory.iconName ? oldCategoryData?.iconName : null,
+        newMode: updatedFrontendCategory.mode === 'all' ? 'All Modes' : updatedFrontendCategory.mode.charAt(0).toUpperCase() + updatedFrontendCategory.mode.slice(1),
+        oldMode: oldCategoryData?.mode !== updatedFrontendCategory.mode ? (oldCategoryData?.mode === 'all' ? 'All Modes' : oldCategoryData?.mode.charAt(0).toUpperCase() + oldCategoryData!.mode.slice(1)) : null,
+      };
+      addHistoryLogEntryRef.current?.('historyLogUpdateCategory', historyDetails, 'category');
     } catch (err) { if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {createApiErrorToast(err, toast, "toastCategoryUpdatedTitle", "updating", t, `${API_BASE_URL}/categories/${categoryId}`);} else if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); } setError((err as Error).message); throw err; }
   }, [fetchWithAuth, toast, t, logout, API_BASE_URL]);
 
@@ -1224,7 +1229,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setPersonalActivities(prev => updateActivitiesCategory(prev));
       setWorkActivities(prev => updateActivitiesCategory(prev));
       toast({ title: t('toastCategoryDeletedTitle'), description: t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name }) });
-      addHistoryLogEntryRef.current?.('historyLogDeleteCategory', { name: categoryToDelete.name, mode: categoryToDelete.mode as string }, 'category');
+      const historyMode = categoryToDelete.mode === 'all' ? 'All Modes' : categoryToDelete.mode.charAt(0).toUpperCase() + categoryToDelete.mode.slice(1);
+      addHistoryLogEntryRef.current?.('historyLogDeleteCategory', { name: categoryToDelete.name, iconName: categoryToDelete.iconName, mode: historyMode }, 'category');
     } catch (err) { if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) { createApiErrorToast(err, toast, "toastCategoryDeletedTitle", "deleting", t, `${API_BASE_URL}/categories/${categoryId}`);} else if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); } setError((err as Error).message); throw err; }
   }, [fetchWithAuth, allCategories, toast, t, logout, API_BASE_URL]);
 
@@ -1269,7 +1275,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setAllAssignees(prev => prev.map(asg => (asg.id === assigneeId ? frontendAssignee : asg)));
       toast({ title: t('toastAssigneeUpdatedTitle'), description: t('toastAssigneeUpdatedDescription', { assigneeName: updatedBackendUser.name }) });
       
-      const historyDetails: Record<string, string | number | undefined> = { name: updatedBackendUser.name };
+      const historyDetails: HistoryLogEntry['details'] = { name: updatedBackendUser.name };
       if (currentAssignee?.name !== updatedBackendUser.name) historyDetails.oldName = currentAssignee?.name;
       if (updates.username && currentAssignee?.username !== updatedBackendUser.username) {
         historyDetails.oldUsername = currentAssignee?.username;
@@ -1350,9 +1356,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setWorkActivities(prev => [...prev, newFrontendActivity]);
       }
       toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
-      addHistoryLogEntryRef.current?.(newFrontendActivity.appMode === 'personal' ? 'historyLogAddActivityPersonal' : 'historyLogAddActivityWork', { title: newFrontendActivity.title }, newFrontendActivity.appMode);
+      
+      const category = allCategories.find(c => c.id === newFrontendActivity.categoryId);
+      const historyDetails: HistoryLogEntry['details'] = {
+        title: newFrontendActivity.title,
+        mode: newFrontendActivity.appMode.charAt(0).toUpperCase() + newFrontendActivity.appMode.slice(1),
+        categoryName: category?.name || null,
+        date: formatDateFns(new Date(newFrontendActivity.createdAt), 'PP', { locale: dateFnsLocale }),
+        time: newFrontendActivity.time || null,
+      };
+      addHistoryLogEntryRef.current?.('historyLogAddActivity', historyDetails, newFrontendActivity.appMode);
     } catch (err) { if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) { createApiErrorToast(err, toast, "toastActivityAddedTitle", "adding", t, `${API_BASE_URL}/activities`);} else if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); } setError((err as Error).message); throw err; }
-  }, [fetchWithAuth, appModeState, toast, t, logout, API_BASE_URL]);
+  }, [fetchWithAuth, appModeState, toast, t, logout, API_BASE_URL, allCategories, dateFnsLocale]);
 
  const updateActivity = useCallback(async (activityId: number, updates: Partial<Omit<Activity, 'id' | 'todos'>>, originalActivity?: Activity) => {
     setError(null);
@@ -1396,9 +1411,41 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
 
       toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
-      addHistoryLogEntryRef.current?.(finalFrontendActivity.appMode === 'personal' ? 'historyLogUpdateActivityPersonal' : 'historyLogUpdateActivityWork', { title: finalFrontendActivity.title }, finalFrontendActivity.appMode);
+      
+      const historyDetails: HistoryLogEntry['details'] = {
+        title: finalFrontendActivity.title,
+        mode: finalFrontendActivity.appMode.charAt(0).toUpperCase() + finalFrontendActivity.appMode.slice(1),
+        oldTitle: originalActivity?.title !== finalFrontendActivity.title ? originalActivity?.title : null,
+      };
+      if (originalActivity) {
+        const oldCat = allCategories.find(c => c.id === originalActivity.categoryId);
+        const newCat = allCategories.find(c => c.id === finalFrontendActivity.categoryId);
+        if (oldCat?.name !== newCat?.name) {
+            historyDetails.oldCategoryName = oldCat?.name || null;
+            historyDetails.categoryName = newCat?.name || null;
+        } else {
+            historyDetails.categoryName = newCat?.name || null;
+        }
+
+        const oldDateStr = formatDateFns(new Date(originalActivity.createdAt), 'PP', { locale: dateFnsLocale });
+        const newDateStr = formatDateFns(new Date(finalFrontendActivity.createdAt), 'PP', { locale: dateFnsLocale });
+        if (oldDateStr !== newDateStr) {
+            historyDetails.oldDate = oldDateStr;
+            historyDetails.date = newDateStr;
+        } else {
+             historyDetails.date = newDateStr;
+        }
+        
+        if (originalActivity.time !== finalFrontendActivity.time) {
+            historyDetails.oldTime = originalActivity.time || null;
+            historyDetails.time = finalFrontendActivity.time || null;
+        } else {
+            historyDetails.time = finalFrontendActivity.time || null;
+        }
+      }
+      addHistoryLogEntryRef.current?.('historyLogUpdateActivity', historyDetails, finalFrontendActivity.appMode);
     } catch (err) { if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {createApiErrorToast(err, toast, "toastActivityUpdatedTitle", "updating", t, `${API_BASE_URL}/activities/${activityId}`);} else if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); } setError((err as Error).message); throw err; }
-  }, [fetchWithAuth, appModeState, personalActivities, workActivities, toast, t, logout, API_BASE_URL]);
+  }, [fetchWithAuth, appModeState, personalActivities, workActivities, toast, t, logout, API_BASE_URL, allCategories, dateFnsLocale]);
 
   const deleteActivity = useCallback(async (activityId: number) => {
     setError(null);
@@ -1424,9 +1471,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!response.ok) { if (response.status === 401) { logout(); } const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete activity: HTTP ${response.status}`));}
       setter(prev => prev.filter(act => act.id !== activityId));
       toast({ title: t('toastActivityDeletedTitle'), description: t('toastActivityDeletedDescription', { activityTitle: activityToDelete.title }) });
-      addHistoryLogEntryRef.current?.(modeForLog === 'personal' ? 'historyLogDeleteActivityPersonal' : 'historyLogDeleteActivityWork', { title: activityToDelete.title }, modeForLog);
+      
+      const category = allCategories.find(c => c.id === activityToDelete!.categoryId);
+      const historyDetails: HistoryLogEntry['details'] = {
+        title: activityToDelete.title,
+        mode: modeForLog.charAt(0).toUpperCase() + modeForLog.slice(1),
+        categoryName: category?.name || null,
+        date: formatDateFns(new Date(activityToDelete.createdAt), 'PP', { locale: dateFnsLocale }),
+        time: activityToDelete.time || null,
+      };
+      addHistoryLogEntryRef.current?.('historyLogDeleteActivity', historyDetails, modeForLog);
     } catch (err) { if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {createApiErrorToast(err, toast, "toastActivityDeletedTitle", "deleting", t, `${API_BASE_URL}/activities/${activityId}`);} else if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); } setError((err as Error).message); throw err; }
-  }, [fetchWithAuth, personalActivities, workActivities, toast, t, logout, API_BASE_URL]);
+  }, [fetchWithAuth, personalActivities, workActivities, toast, t, logout, API_BASE_URL, allCategories, dateFnsLocale]);
 
 
   const addTodoToActivity = useCallback(async (activityId: number, todoText: string, completed: boolean = false): Promise<Todo | null> => {
@@ -1567,8 +1623,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return act;
       })
     );
-    addHistoryLogEntryRef.current?.(modeForLog === 'personal' ? 'historyLogToggleActivityCompletionPersonal' : 'historyLogToggleActivityCompletionWork', { title: activityTitleForLog, completed: completedState ? 1 : 0 }, modeForLog);
-  }, [personalActivities, workActivities]); 
+    
+    const historyDetails: HistoryLogEntry['details'] = {
+        title: activityTitleForLog,
+        mode: modeForLog.charAt(0).toUpperCase() + modeForLog.slice(1),
+        completed: completedState,
+        date: formatDateFns(new Date(occurrenceDateTimestamp), 'PP', { locale: dateFnsLocale }),
+        time: masterActivity?.time || null
+    };
+    addHistoryLogEntryRef.current?.('historyLogToggleActivityCompletion', historyDetails, modeForLog);
+  }, [personalActivities, workActivities, dateFnsLocale]); 
 
  const fetchAndSetSpecificActivityDetails = useCallback(async (activityId: number): Promise<Activity | null> => {
     try {
