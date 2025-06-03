@@ -14,9 +14,6 @@ export const INITIAL_CATEGORIES: Category[] = [
 
 export const APP_NAME = 'À faire';
 
-// This username can be used for initial testing if you create a user with this username in your DB.
-export const HARDCODED_USERNAME_FOR_TESTING = "pruebas"; 
-
 // Hardcoded PIN for app lock (prototype only - NOT SECURE FOR PRODUCTION)
 // Set to null to disable PIN lock feature
 export const HARDCODED_APP_PIN: string | null = "1234";
@@ -28,3 +25,4 @@ export const DEFAULT_JWT_SECRET_KEY = "your-secret-key-change-in-production";
 export const POMODORO_WORK_DURATION_SECONDS = 25 * 60;
 export const POMODORO_SHORT_BREAK_DURATION_SECONDS = 5 * 60;
 export const POMODORO_LONG_BREAK_DURATION_SECONDS = 15 * 60;
+

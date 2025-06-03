@@ -207,7 +207,7 @@ export type Translations = {
   confirmNewPasswordPlaceholder: string;
   updatePasswordButton: string;
   passwordUpdateSuccessTitle: string;
-  passwordUpdateSuccessDescription: string; // Updated for clarity
+  passwordUpdateSuccessDescription: string; 
   passwordUpdateErrorIncorrectCurrent: string;
   passwordUpdateErrorNewPasswordRequired: string;
   passwordUpdateErrorConfirmPasswordRequired: string;
@@ -314,7 +314,7 @@ export type Translations = {
   historyLogDeleteCategory: (params: { name: string, mode: string }) => string;
   historyLogSwitchToPersonalMode: string;
   historyLogSwitchToWorkMode: string;
-  historyLogPasswordChangeAttempt: string; // Updated
+  historyLogPasswordChangeAttempt: string;
   historyLogAddAssignee: (params: { name: string, isAdmin?: boolean }) => string;
   historyLogUpdateAssignee: (params: { name: string, oldName?: string, oldUsername?: string, newUsername?: string, isAdmin?: boolean, oldIsAdmin?: boolean }) => string;
   historyLogDeleteAssignee: (params: { name: string }) => string;
@@ -529,11 +529,11 @@ export const translations: Record<Locale, Translations> = {
     loginPasswordPlaceholder: "Enter your password",
     loginButtonText: "Login",
     loginLoggingIn: "Logging in...",
-    loginInvalidCredentials: "Invalid username or password. Please try again.",
+    loginInvalidCredentials: "Incorrect username or password. Please try again.",
     loginErrorTitle: "Login Error",
     loginUsernameRequired: "Username is required.",
     loginPasswordRequired: "Password is required.",
-    loginSecurityNoticeBackend: "Secure login. Your credentials are encrypted.",
+    loginSecurityNoticeBackend: "Secure login with backend. Ensure your credentials match your backend user data.",
     loginRedirecting: "Redirecting...",
     rememberMeLabel: "Keep me logged in",
     showPassword: "Show password",
@@ -869,7 +869,7 @@ export const translations: Record<Locale, Translations> = {
     loginErrorTitle: "Error de Inicio de Sesión",
     loginUsernameRequired: "El nombre de usuario es obligatorio.",
     loginPasswordRequired: "La contraseña es obligatoria.",
-    loginSecurityNoticeBackend: "Inicio de sesión seguro. Tus credenciales están encriptadas.",
+    loginSecurityNoticeBackend: "Inicio de sesión seguro con backend. Asegúrate que tus credenciales coincidan con tus datos de usuario en el backend.",
     loginRedirecting: "Redirigiendo...",
     rememberMeLabel: "Mantenerme conectado",
     showPassword: "Mostrar contraseña",
@@ -1205,7 +1205,7 @@ export const translations: Record<Locale, Translations> = {
     loginErrorTitle: "Erreur de connexion",
     loginUsernameRequired: "Le nom d'utilisateur est requis.",
     loginPasswordRequired: "Le mot de passe est requis.",
-    loginSecurityNoticeBackend: "Connexion sécurisée. Vos identifiants sont chiffrés.",
+    loginSecurityNoticeBackend: "Connexion sécurisée avec le backend. Assurez-vous que vos identifiants correspondent à vos données utilisateur backend.",
     loginRedirecting: "Redirection...",
     rememberMeLabel: "Rester connecté",
     showPassword: "Afficher le mot de passe",
@@ -1386,3 +1386,4 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
+
