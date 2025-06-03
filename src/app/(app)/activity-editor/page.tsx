@@ -57,13 +57,14 @@ export default function ActivityEditorPage() {
     addActivity,
     updateActivity,
     addTodoToActivity,
+    updateTodoInActivity,
     deleteTodoFromActivity,
     appMode,
     assignees,
     getRawActivities,
     getCategoryById,
     isLoading: isAppStoreLoading,
-    categories // Destructure categories here
+    categories
   } = useAppStore();
   const { toast } = useToast();
   const { t, locale } = useTranslations();
@@ -123,29 +124,22 @@ export default function ActivityEditorPage() {
       const foundActivity = currentActivities.find(a => a.id === activityId);
       if (foundActivity) {
         setActivityToEdit(foundActivity);
-        // Diagnostic logs
-        // console.log("[EditorPage] Found activity for editing:", JSON.stringify(foundActivity, null, 2));
-        // console.log("[EditorPage] Todos in foundActivity for form.reset:", JSON.stringify(foundActivity.todos, null, 2));
-
-        const baseDate = new Date(foundActivity.createdAt);
         
-        const todosForForm = (Array.isArray(foundActivity.todos) ? foundActivity.todos : []).map(t => {
-          if (typeof t !== 'object' || t === null) {
-            // console.warn("[EditorPage] Invalid todo item found (not an object):", t);
+        const todosForForm = (Array.isArray(foundActivity.todos) ? foundActivity.todos : []).map(tItem => {
+          if (typeof tItem !== 'object' || tItem === null) {
             return { id: `malformed_${uuidv4()}`, text: 'Invalid todo data', completed: false };
           }
           return {
-            id: t.id, 
-            text: String(t.text || ''), 
-            completed: !!t.completed 
+            id: tItem.id, 
+            text: String(tItem.text || ''), 
+            completed: !!tItem.completed 
           };
         });
-        // console.log("[EditorPage] Todos prepared for form:", JSON.stringify(todosForForm, null, 2));
 
         form.reset({
           title: foundActivity.title,
           categoryId: foundActivity.categoryId,
-          activityDate: baseDate,
+          activityDate: new Date(foundActivity.createdAt), // Use createdAt for the date picker
           time: foundActivity.time || "",
           todos: todosForForm,
           notes: foundActivity.notes || "",
@@ -153,7 +147,7 @@ export default function ActivityEditorPage() {
             type: foundActivity.recurrence?.type || 'none',
             endDate: foundActivity.recurrence?.endDate ? new Date(foundActivity.recurrence.endDate) : null,
             daysOfWeek: foundActivity.recurrence?.daysOfWeek || [],
-            dayOfMonth: foundActivity.recurrence?.dayOfMonth || baseDate.getDate(),
+            dayOfMonth: foundActivity.recurrence?.dayOfMonth || new Date(foundActivity.createdAt).getDate(),
           },
           responsiblePersonIds: foundActivity.responsiblePersonIds?.map(id => Number(id)) || [],
         });
@@ -175,7 +169,7 @@ export default function ActivityEditorPage() {
         });
     }
     setIsLoadingActivity(false);
-  }, [activityId, getRawActivities, form, defaultInitialDate, router, toast, categories, getCategoryById]);
+  }, [activityId, getRawActivities, form, defaultInitialDate, router, toast, categories]);
 
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "todos" });
@@ -200,45 +194,52 @@ export default function ActivityEditorPage() {
         recurrence: recurrenceRule,
         responsiblePersonIds: (appMode === 'personal') ? data.responsiblePersonIds?.map(id => Number(id)) : [],
         appMode: appMode,
+        createdAt: data.activityDate.getTime(), // This is for the core activity start_date
       };
 
       if (activityToEdit && activityToEdit.id !== undefined) {
+        const currentActivityId = activityToEdit.id;
         const formTodos = data.todos || [];
         const originalTodos = activityToEdit.todos || [];
 
-        const newTodosFromForm = formTodos.filter(ft => ft.id === undefined || ft.id === null || (typeof ft.id === 'string' && ft.id.startsWith('malformed_')));
-        for (const newTodo of newTodosFromForm) {
-          if (newTodo.text.trim() !== "" && newTodo.text !== 'Invalid todo data') {
-            await addTodoToActivity(activityToEdit.id, newTodo.text);
-          }
+        // 1. Handle New Todos
+        const newTodosToAdd = formTodos.filter(ft => ft.id === undefined || ft.id === null || (typeof ft.id === 'string' && ft.id.startsWith('malformed_')));
+        for (const newTodo of newTodosToAdd) {
+            if (newTodo.text.trim() !== "" && newTodo.text !== 'Invalid todo data') {
+                await addTodoToActivity(currentActivityId, newTodo.text, newTodo.completed);
+            }
         }
 
-        const deletedTodoIds = originalTodos
-          .filter(ot => !formTodos.some(ft => ft.id === ot.id))
-          .map(ot => ot.id);
-        for (const todoId of deletedTodoIds) {
-          if (typeof todoId === 'number') { 
-             await deleteTodoFromActivity(activityToEdit.id, todoId);
-          }
+        // 2. Handle Deleted Todos
+        const formTodoIds = new Set(formTodos.map(ft => ft.id).filter(id => typeof id === 'number'));
+        const todosToDelete = originalTodos.filter(ot => typeof ot.id === 'number' && !formTodoIds.has(ot.id));
+        for (const deletedTodo of todosToDelete) {
+            await deleteTodoFromActivity(currentActivityId, deletedTodo.id as number);
+        }
+
+        // 3. Handle Updated Todos (text or completion change)
+        const potentiallyUpdatedTodos = formTodos.filter(ft => typeof ft.id === 'number');
+        for (const formTodo of potentiallyUpdatedTodos) {
+            const originalTodo = originalTodos.find(ot => ot.id === formTodo.id);
+            if (originalTodo && (originalTodo.text !== formTodo.text || originalTodo.completed !== formTodo.completed)) {
+                await updateTodoInActivity(currentActivityId, formTodo.id as number, { text: formTodo.text, completed: formTodo.completed });
+            }
         }
         
-        const updatePayload = {
-            ...activityPayloadBase,
-            createdAt: data.activityDate.getTime(),
-             // Pass current form todos to updateActivity so it can update AppProvider's state
-            todos: formTodos.map(t => ({ id: t.id, text: t.text, completed: !!t.completed })),
-        };
-        await updateActivity(activityToEdit.id, updatePayload as Partial<Omit<Activity, 'id'>>, activityToEdit);
+        // 4. Update Core Activity Fields (excluding todos from this payload)
+        const { todos, ...updatePayloadForCore } = activityPayloadBase; // Destructure to remove todos
+        await updateActivity(currentActivityId, updatePayloadForCore as Partial<Omit<Activity, 'id' | 'todos'>>, activityToEdit);
+        
         toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
 
       } else {
+        // For new activities, backend handles todo creation from this text list
         const addPayload = {
             ...activityPayloadBase,
-            // For new activities, backend handles todo creation from this text list
-            todos: data.todos?.map(t => ({ text: t.text })),
+            todos: data.todos?.map(t => ({ text: t.text, completed: !!t.completed })), // Send full todo structure
         };
         await addActivity(
-          addPayload as Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId'| 'appMode'| 'masterActivityId' | 'isRecurringInstance' | 'originalInstanceDate'> & { todos?: Omit<Todo, 'id'|'completed'>[], time?: string, notes?: string, recurrence?: RecurrenceRule | null, responsiblePersonIds?: number[], categoryId: number, appMode: AppMode },
+          addPayload as Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId'| 'appMode'| 'masterActivityId' | 'isRecurringInstance' | 'originalInstanceDate'> & { todos?: Omit<Todo, 'id'>[], time?: string, notes?: string, recurrence?: RecurrenceRule | null, responsiblePersonIds?: number[], categoryId: number, appMode: AppMode },
           data.activityDate.getTime()
         );
         toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
@@ -246,10 +247,8 @@ export default function ActivityEditorPage() {
       router.replace('/');
     } catch (error) {
       console.error("Failed to save activity:", error);
-      // Ensure isSubmittingForm is reset on error
       setIsSubmittingForm(false); 
     }
-    // Removed setIsSubmittingForm(false) from here, it's now in catch or after router.replace
   };
 
   const dialogTitle = activityToEdit ? t('editActivityTitle') : t('addActivityTitle');
@@ -517,5 +516,3 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
-
-    
