@@ -291,9 +291,9 @@ const backendToFrontendAssignee = (backendUser: BackendUser): Assignee => ({
 });
 
 const backendToFrontendActivity = (backendActivity: BackendActivity | null | undefined, currentAppMode: AppMode): Activity => {
-  if (!backendActivity || typeof backendActivity !== 'object' || Object.keys(backendActivity).length === 0) {
+   if (!backendActivity || typeof backendActivity !== 'object' || Object.keys(backendActivity).length === 0) {
     const fallbackId = Date.now() + Math.random();
-    console.error(`[AppProvider] CRITICAL: backendToFrontendActivity received invalid or empty backendActivity object. Using fallback ID ${fallbackId}. Received:`, typeof backendActivity === 'object' ? JSON.stringify(backendActivity) : backendActivity);
+    console.error(`[AppProvider] CRITICAL: backendToFrontendActivity received invalid or empty backendActivity object. Using fallback ID ${fallbackId}. Received:`, typeof backendActivity === 'object' ? JSON.stringify(backendActivity) : String(backendActivity));
     return {
       id: fallbackId,
       title: 'Error: Invalid Activity Data from Backend',
@@ -461,7 +461,7 @@ const createApiErrorToast = (
     operationType: 'loading' | 'adding' | 'updating' | 'deleting' | 'authenticating' | 'logging',
     translationFn: (key: keyof Translations, params?: any) => string,
     endpoint?: string,
-    logoutFn?: () => void // Added logoutFn as an optional parameter
+    logoutFnIfUnauthorized?: () => void 
   ) => {
     const error = err as Error & { cause?: unknown, name?: string, response?: Response };
     let consoleMessage = `[AppProvider] Failed ${operationType} for endpoint: ${endpoint || 'N/A'}.
@@ -478,14 +478,13 @@ Error Message: ${error.message || 'No message'}.`;
     } else if (error.cause) {
         consoleMessage += `\nCause: ${String(error.cause)}`;
     }
-
-    if (error.message && (error.message.toLowerCase().includes('unauthorized') || error.message.includes('401')) && operationType !== 'authenticating' && logoutFn) {
-       logoutFn(); // Call logout if unauthorized and logoutFn is provided
-       // Optionally, don't show a toast here, or show a specific "logged out" toast
+    console.error(consoleMessage);
+    
+    if (logoutFnIfUnauthorized && error.message && (error.message.toLowerCase().includes('unauthorized') || error.message.includes('401')) && operationType !== 'authenticating') {
+       logoutFnIfUnauthorized();
        return; 
     }
 
-    console.error(consoleMessage);
 
     let descriptionKey: keyof Translations = 'toastDefaultErrorDescription';
     let descriptionParams: any = {};
@@ -497,7 +496,7 @@ Error Message: ${error.message || 'No message'}.`;
     } else if (error.message && error.message.toLowerCase().includes("unexpected token '<'") && error.message.toLowerCase().includes("html")) {
       descriptionKey = 'toastInvalidJsonErrorDescription';
       descriptionParams = { endpoint: endpoint || API_BASE_URL };
-    } else if (error.message) {
+    } else if (error.message) { 
         customDescription = error.message;
     }
     
@@ -549,7 +548,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const isAuthenticated = !!jwtToken;
 
-  // Define functions in order of dependency
+  // --- ORDERED useCallback DEFINITIONS ---
+
   const getCurrentUserId = useCallback((): number | null => {
     return decodedJwt?.sub ? parseInt(decodedJwt.sub, 10) : null;
   }, [decodedJwt]);
@@ -574,7 +574,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
     }
   }, []);
-  
+
+  const postToServiceWorker = useCallback((message: any) => {
+    if (typeof window !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({...message, payload: { ...message.payload, locale } });
+    } else if (typeof window !== 'undefined'){
+      if (message.type !== 'GET_INITIAL_STATE' && !isPomodoroReady) { 
+        toast({ variant: 'destructive', title: t('pomodoroErrorTitle') as string, description: t('pomodoroSWNotReady') as string });
+      }
+    }
+  }, [locale, t, toast, isPomodoroReady]);
+
+  const startPomodoroWork = useCallback(() => postToServiceWorker({ type: 'START_WORK', payload: { cyclesCompleted: 0 } }), [postToServiceWorker]);
+  const startPomodoroShortBreak = useCallback(() => postToServiceWorker({ type: 'START_SHORT_BREAK' }), [postToServiceWorker]);
+  const startPomodoroLongBreak = useCallback(() => postToServiceWorker({ type: 'START_LONG_BREAK' }), [postToServiceWorker]);
+  const pausePomodoro = useCallback(() => postToServiceWorker({ type: 'PAUSE_TIMER' }), [postToServiceWorker]);
+  const resumePomodoro = useCallback(() => postToServiceWorker({ type: 'RESUME_TIMER' }), [postToServiceWorker]);
+  const resetPomodoro = useCallback(() => {
+    setIsPomodoroReady(false); 
+    postToServiceWorker({ type: 'RESET_TIMER' });
+  }, [postToServiceWorker]);
+
   const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}, tokenToUse?: string | null): Promise<Response> => {
     const currentToken = tokenToUse || jwtToken;
 
@@ -593,14 +613,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }
 
-    const response = await fetch(url, { ...options, headers });
+    const response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, { ...options, headers });
 
     if (response.status === 401 && !url.endsWith('/token')) {
         throw new Error(`Unauthorized: ${response.statusText}`); 
     }
     return response;
-  }, [jwtToken]); 
+  }, [jwtToken, API_BASE_URL]);
 
+  const addHistoryLogEntryRef = useRef<((actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope?: HistoryLogEntry['scope']) => Promise<void>) | null>(null);
 
   const addHistoryLogEntry = useCallback(async (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope: HistoryLogEntry['scope'] = 'account') => {
     const currentUserId = getCurrentUserId();
@@ -629,22 +650,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const newBackendHistoryEntry: BackendHistory = await response.json();
         setHistoryLog(prevLog => [backendToFrontendHistory(newBackendHistoryEntry), ...prevLog.slice(0, 99)]); 
     } catch (err) { 
+        // In addHistoryLogEntry, we avoid calling logout directly to prevent cycles if it was part of logout's dep array.
+        // The caller of functions that use addHistoryLogEntry (like logout itself) should handle auth errors.
+        createApiErrorToast(err, toast, "historyLoadErrorTitle", "logging", t, `${API_BASE_URL}/history`);
         console.error(`[AppProvider] Failed logging history for action ${actionKey}:`, (err as Error).message);
     }
-  }, [fetchWithAuth, getCurrentUserId]); 
-
- const postToServiceWorker = useCallback((message: any) => {
-    if (typeof window !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({...message, payload: { ...message.payload, locale } });
-    } else if (typeof window !== 'undefined'){ // Only show toast if in browser and SW not ready
-      if (message.type !== 'GET_INITIAL_STATE' && !isPomodoroReady) { 
-        toast({ variant: 'destructive', title: t('pomodoroErrorTitle') as string, description: t('pomodoroSWNotReady') as string });
-      }
-    }
-  }, [locale, t, toast, isPomodoroReady]);
+  }, [fetchWithAuth, getCurrentUserId, t, toast]); 
+  
+  useEffect(() => {
+      addHistoryLogEntryRef.current = addHistoryLogEntry;
+  }, [addHistoryLogEntry]);
 
   const logout = useCallback(() => {
-    addHistoryLogEntry('historyLogLogout', undefined, 'account');
+    if (addHistoryLogEntryRef.current) {
+      addHistoryLogEntryRef.current('historyLogLogout', undefined, 'account');
+    }
     decodeAndSetToken(null); 
     setIsAppLocked(false); 
 
@@ -657,7 +677,97 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     postToServiceWorker({ type: 'RESET_TIMER' });
     if (logoutChannel) logoutChannel.postMessage('logout_event_v2');
-  }, [decodeAndSetToken, locale, addHistoryLogEntry, postToServiceWorker]); 
+  }, [decodeAndSetToken, postToServiceWorker, addHistoryLogEntryRef]); // addHistoryLogEntryRef is correct here
+  
+  // --- AppProvider state and other functions ---
+
+  useEffect(() => {
+    const loadClientSideDataAndFetchInitial = async () => {
+      setIsLoadingState(true);
+      
+      const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
+      if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) setAppModeState(storedAppMode);
+
+      const storedToken = localStorage.getItem(LOCAL_STORAGE_KEY_JWT);
+      let currentTokenForInitialLoad: string | null = null;
+      if (storedToken) {
+          await decodeAndSetToken(storedToken); 
+          currentTokenForInitialLoad = storedToken;
+      }
+
+      const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
+      if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
+      if (typeof window !== 'undefined' && 'Notification' in window) setSystemNotificationPermission(Notification.permission);
+      
+      const storedPin = localStorage.getItem(LOCAL_STORAGE_KEY_APP_PIN);
+      if (storedPin) {
+        setAppPinState(storedPin);
+        if (storedToken) setIsAppLocked(true); 
+      }
+
+      if (currentTokenForInitialLoad) { 
+        try {
+            setIsActivitiesLoading(true);
+            const actResponse = await fetchWithAuth(`${API_BASE_URL}/activities`, {}, currentTokenForInitialLoad); 
+            if (!actResponse.ok) throw new Error(`Activities fetch failed: ${actResponse.statusText}`);
+            const backendActivities: BackendActivity[] = await actResponse.json();
+            const newPersonal: Activity[] = [], newWork: Activity[] = [];
+            backendActivities.forEach(beAct => {
+                if (!beAct) return; 
+                const feAct = backendToFrontendActivity(beAct, beAct.mode as AppMode); 
+                if (feAct.appMode === 'personal') newPersonal.push(feAct); else newWork.push(feAct);
+            });
+            setPersonalActivities(newPersonal); setWorkActivities(newWork);
+        } catch (err) { 
+            if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
+            createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`); 
+        }
+        finally { setIsActivitiesLoading(false); }
+
+        try {
+            setIsCategoriesLoading(true);
+            const catResponse = await fetchWithAuth(`${API_BASE_URL}/categories`, {}, currentTokenForInitialLoad);
+            if (!catResponse.ok) throw new Error(`Categories fetch failed: ${catResponse.statusText}`);
+            const backendCategories: BackendCategory[] = await catResponse.json();
+            setAllCategories(backendCategories.map(cat => backendToFrontendCategory(cat)));
+        } catch (err) { 
+            if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
+            createApiErrorToast(err, toast, "toastCategoryLoadErrorTitle", "loading", t, `${API_BASE_URL}/categories`); 
+        }
+        finally { setIsCategoriesLoading(false); }
+
+        try {
+            setIsAssigneesLoading(true);
+            const userResponse = await fetchWithAuth(`${API_BASE_URL}/users`, {}, currentTokenForInitialLoad);
+            if (!userResponse.ok) throw new Error(`Users fetch failed: ${userResponse.statusText}`);
+            const backendUsers: BackendUser[] = await userResponse.json();
+            setAllAssignees(backendUsers.map(user => backendToFrontendAssignee(user)));
+        } catch (err) { 
+             if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
+            createApiErrorToast(err, toast, "toastAssigneeLoadErrorTitle", "loading", t, `${API_BASE_URL}/users`); 
+        }
+        finally { setIsAssigneesLoading(false); }
+
+        try {
+            setIsHistoryLoading(true);
+            const histResponse = await fetchWithAuth(`${API_BASE_URL}/history`, {}, currentTokenForInitialLoad);
+            if (!histResponse.ok) throw new Error(`History fetch failed: ${histResponse.statusText}`);
+            const backendHistoryItems: BackendHistory[] = await histResponse.json();
+            setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
+        } catch (err) { 
+            if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
+            createApiErrorToast(err, toast, "historyLoadErrorTitle", "loading", t, `${API_BASE_URL}/history`); 
+        }
+        finally { setIsHistoryLoading(false); }
+      } else {
+        setIsActivitiesLoading(false); setIsCategoriesLoading(false); setIsAssigneesLoading(false); setIsHistoryLoading(false);
+      }
+      setIsLoadingState(false); 
+    };
+    
+    loadClientSideDataAndFetchInitial();
+  }, [decodeAndSetToken, t, toast, fetchWithAuth, logout]); // logout is a dependency here for the catch blocks
+
 
  useEffect(() => {
     if (typeof window === 'undefined' || isLoadingState) return; 
@@ -754,90 +864,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
  useEffect(() => {
-    const loadClientSideDataAndFetchInitial = async () => {
-      setIsLoadingState(true);
-      
-      const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
-      if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) setAppModeState(storedAppMode);
-
-      const storedToken = localStorage.getItem(LOCAL_STORAGE_KEY_JWT);
-      let currentTokenForInitialLoad: string | null = null;
-      if (storedToken) {
-          await decodeAndSetToken(storedToken); 
-          currentTokenForInitialLoad = storedToken;
-      }
-
-      const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
-      if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
-      if (typeof window !== 'undefined' && 'Notification' in window) setSystemNotificationPermission(Notification.permission);
-      
-      const storedPin = localStorage.getItem(LOCAL_STORAGE_KEY_APP_PIN);
-      if (storedPin) {
-        setAppPinState(storedPin);
-        if (storedToken) setIsAppLocked(true); 
-      }
-
-      if (currentTokenForInitialLoad) { 
-        try {
-            setIsActivitiesLoading(true);
-            const actResponse = await fetchWithAuth(`${API_BASE_URL}/activities`, {}, currentTokenForInitialLoad); 
-            if (!actResponse.ok) throw new Error(`Activities fetch failed: ${actResponse.statusText}`);
-            const backendActivities: BackendActivity[] = await actResponse.json();
-            const newPersonal: Activity[] = [], newWork: Activity[] = [];
-            backendActivities.forEach(beAct => {
-                if (!beAct) return; 
-                const feAct = backendToFrontendActivity(beAct, beAct.mode as AppMode); 
-                if (feAct.appMode === 'personal') newPersonal.push(feAct); else newWork.push(feAct);
-            });
-            setPersonalActivities(newPersonal); setWorkActivities(newWork);
-        } catch (err) { 
-            createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`, logout); 
-        }
-        finally { setIsActivitiesLoading(false); }
-
-        try {
-            setIsCategoriesLoading(true);
-            const catResponse = await fetchWithAuth(`${API_BASE_URL}/categories`, {}, currentTokenForInitialLoad);
-            if (!catResponse.ok) throw new Error(`Categories fetch failed: ${catResponse.statusText}`);
-            const backendCategories: BackendCategory[] = await catResponse.json();
-            setAllCategories(backendCategories.map(cat => backendToFrontendCategory(cat)));
-        } catch (err) { 
-            createApiErrorToast(err, toast, "toastCategoryLoadErrorTitle", "loading", t, `${API_BASE_URL}/categories`, logout); 
-        }
-        finally { setIsCategoriesLoading(false); }
-
-        try {
-            setIsAssigneesLoading(true);
-            const userResponse = await fetchWithAuth(`${API_BASE_URL}/users`, {}, currentTokenForInitialLoad);
-            if (!userResponse.ok) throw new Error(`Users fetch failed: ${userResponse.statusText}`);
-            const backendUsers: BackendUser[] = await userResponse.json();
-            setAllAssignees(backendUsers.map(user => backendToFrontendAssignee(user)));
-        } catch (err) { 
-            createApiErrorToast(err, toast, "toastAssigneeLoadErrorTitle", "loading", t, `${API_BASE_URL}/users`, logout); 
-        }
-        finally { setIsAssigneesLoading(false); }
-
-        try {
-            setIsHistoryLoading(true);
-            const histResponse = await fetchWithAuth(`${API_BASE_URL}/history`, {}, currentTokenForInitialLoad);
-            if (!histResponse.ok) throw new Error(`History fetch failed: ${histResponse.statusText}`);
-            const backendHistoryItems: BackendHistory[] = await histResponse.json();
-            setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
-        } catch (err) { 
-            createApiErrorToast(err, toast, "historyLoadErrorTitle", "loading", t, `${API_BASE_URL}/history`, logout); 
-        }
-        finally { setIsHistoryLoading(false); }
-      } else {
-        setIsActivitiesLoading(false); setIsCategoriesLoading(false); setIsAssigneesLoading(false); setIsHistoryLoading(false);
-      }
-      setIsLoadingState(false); 
-    };
-    
-    loadClientSideDataAndFetchInitial();
-  }, [decodeAndSetToken, t, toast, fetchWithAuth, logout]); // Added fetchWithAuth & logout to dependencies
-
-
-  useEffect(() => {
     if (!isLoadingState) { 
       localStorage.setItem(LOCAL_STORAGE_KEY_APP_MODE, appModeState);
       const root = document.documentElement;
@@ -1048,23 +1074,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     prevPomodoroPhaseRef.current = pomodoroPhase; 
   }, [pomodoroPhase, pomodoroCyclesCompleted, isPomodoroReady, stableAddUINotification, t, toast]);
 
-  const startPomodoroWork = useCallback(() => postToServiceWorker({ type: 'START_WORK', payload: { cyclesCompleted: 0 } }), [postToServiceWorker]);
-  const startPomodoroShortBreak = useCallback(() => postToServiceWorker({ type: 'START_SHORT_BREAK' }), [postToServiceWorker]);
-  const startPomodoroLongBreak = useCallback(() => postToServiceWorker({ type: 'START_LONG_BREAK' }), [postToServiceWorker]);
-  const pausePomodoro = useCallback(() => postToServiceWorker({ type: 'PAUSE_TIMER' }), [postToServiceWorker]);
-  const resumePomodoro = useCallback(() => postToServiceWorker({ type: 'RESUME_TIMER' }), [postToServiceWorker]);
-  const resetPomodoro = useCallback(() => {
-    setIsPomodoroReady(false); 
-    postToServiceWorker({ type: 'RESET_TIMER' });
-  }, [postToServiceWorker]);
-
 
   const setAppMode = useCallback((mode: AppMode) => {
     if (mode !== appModeState) {
-      addHistoryLogEntry(mode === 'personal' ? 'historyLogSwitchToPersonalMode' : 'historyLogSwitchToWorkMode', undefined, 'account');
+      addHistoryLogEntryRef.current?.('historyLogSwitchToPersonalMode', undefined, 'account');
     }
     setAppModeState(mode);
-  }, [appModeState, addHistoryLogEntry]);
+  }, [appModeState]); 
   
   const login = useCallback(async (username: string, password: string): Promise<boolean> => {
     setError(null);
@@ -1075,7 +1091,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     let newAccessToken: string | null = null;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/token`, { // Directly use fetch for /token
+      const response = await fetch(`${API_BASE_URL}/token`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: formData.toString(),
@@ -1088,7 +1104,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       newAccessToken = tokenData.access_token;
       await decodeAndSetToken(newAccessToken); 
       
-      addHistoryLogEntry('historyLogLogin', undefined, 'account');
+      addHistoryLogEntryRef.current?.('historyLogLogin', undefined, 'account');
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === "granted") {
         const title = t('loginSuccessNotificationTitle');
         const description = t('loginSuccessNotificationDescription');
@@ -1108,7 +1124,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                   if (feAct.appMode === 'personal') newPersonal.push(feAct); else newWork.push(feAct);
               });
               setPersonalActivities(newPersonal); setWorkActivities(newWork);
-          } catch (err) { createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`, logout); }
+          } catch (err) { 
+            if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
+            createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`); 
+          }
           finally { setIsActivitiesLoading(false); }
 
           try {
@@ -1117,7 +1136,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               if (!catResponse.ok) throw new Error(`Categories fetch failed: ${catResponse.statusText}`);
               const backendCategories: BackendCategory[] = await catResponse.json();
               setAllCategories(backendCategories.map(cat => backendToFrontendCategory(cat)));
-          } catch (err) { createApiErrorToast(err, toast, "toastCategoryLoadErrorTitle", "loading", t, `${API_BASE_URL}/categories`, logout); }
+          } catch (err) { 
+            if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
+            createApiErrorToast(err, toast, "toastCategoryLoadErrorTitle", "loading", t, `${API_BASE_URL}/categories`); 
+          }
           finally { setIsCategoriesLoading(false); }
 
           try {
@@ -1126,7 +1148,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               if (!userResponse.ok) throw new Error(`Users fetch failed: ${userResponse.statusText}`);
               const backendUsers: BackendUser[] = await userResponse.json();
               setAllAssignees(backendUsers.map(user => backendToFrontendAssignee(user)));
-          } catch (err) { createApiErrorToast(err, toast, "toastAssigneeLoadErrorTitle", "loading", t, `${API_BASE_URL}/users`, logout); }
+          } catch (err) { 
+            if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
+            createApiErrorToast(err, toast, "toastAssigneeLoadErrorTitle", "loading", t, `${API_BASE_URL}/users`); 
+          }
           finally { setIsAssigneesLoading(false); }
 
           try {
@@ -1135,7 +1160,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               if (!histResponse.ok) throw new Error(`History fetch failed: ${histResponse.statusText}`);
               const backendHistoryItems: BackendHistory[] = await histResponse.json();
               setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
-          } catch (err) { createApiErrorToast(err, toast, "historyLoadErrorTitle", "loading", t, `${API_BASE_URL}/history`, logout); }
+          } catch (err) { 
+            if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
+            createApiErrorToast(err, toast, "historyLoadErrorTitle", "loading", t, `${API_BASE_URL}/history`); 
+          }
           finally { setIsHistoryLoading(false); }
       }
       return true;
@@ -1144,7 +1172,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setError((err as Error).message);
       return false;
     }
-  }, [decodeAndSetToken, addHistoryLogEntry, t, toast, stableAddUINotification, showSystemNotification, fetchWithAuth, logout]); 
+  }, [decodeAndSetToken, t, toast, stableAddUINotification, showSystemNotification, fetchWithAuth, logout, API_BASE_URL]); 
 
   const changePassword = useCallback(async (oldPassword: string, newPassword: string): Promise<boolean> => {
     const currentUserId = getCurrentUserId();
@@ -1163,7 +1191,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const errorData = await response.json().catch(() => ({ detail: response.statusText }));
             throw new Error(formatBackendError(errorData, `Password change failed: HTTP ${response.status}`));
         }
-        addHistoryLogEntry('historyLogPasswordChangeAttempt', undefined, 'account'); 
+        addHistoryLogEntryRef.current?.('historyLogPasswordChangeAttempt', undefined, 'account'); 
         toast({ title: t('passwordUpdateSuccessTitle'), description: t('passwordUpdateSuccessDescription') });
         return true;
     } catch (err) {
@@ -1171,7 +1199,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setError((err as Error).message);
         return false;
     }
-  }, [fetchWithAuth, getCurrentUserId, addHistoryLogEntry, t, toast, logout]);
+  }, [fetchWithAuth, getCurrentUserId, t, toast, logout, API_BASE_URL]);
 
 
   const addCategory = useCallback(async (name: string, iconName: string, mode: AppMode | 'all') => {
@@ -1183,9 +1211,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const newBackendCategory: BackendCategory = await response.json();
       setAllCategories(prev => [...prev, backendToFrontendCategory(newBackendCategory)]);
       toast({ title: t('toastCategoryAddedTitle'), description: t('toastCategoryAddedDescription', { categoryName: name }) });
-      addHistoryLogEntry(mode === 'personal' ? 'historyLogAddCategoryPersonal' : mode === 'work' ? 'historyLogAddCategoryWork' : 'historyLogAddCategoryAll', { name }, 'category');
+      addHistoryLogEntryRef.current?.(mode === 'personal' ? 'historyLogAddCategoryPersonal' : mode === 'work' ? 'historyLogAddCategoryWork' : 'historyLogAddCategoryAll', { name }, 'category');
     } catch (err) { createApiErrorToast(err, toast, "toastCategoryAddedTitle", "adding", t, `${API_BASE_URL}/categories`, logout); setError((err as Error).message); throw err; }
-  }, [fetchWithAuth, toast, t, addHistoryLogEntry, logout]);
+  }, [fetchWithAuth, toast, t, logout, API_BASE_URL]);
 
   const updateCategory = useCallback(async (categoryId: number, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => {
     setError(null);
@@ -1204,9 +1232,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       let actionKey: HistoryLogActionKey = 'historyLogUpdateCategoryAll';
       if (updatedFrontendCategory.mode === 'personal') actionKey = 'historyLogUpdateCategoryPersonal';
       else if (updatedFrontendCategory.mode === 'work') actionKey = 'historyLogUpdateCategoryWork';
-      addHistoryLogEntry(actionKey, { name: updatedFrontendCategory.name, oldName: oldCategoryData?.name !== updatedFrontendCategory.name ? oldCategoryData?.name : undefined , oldMode: oldCategoryData?.mode !== updatedFrontendCategory.mode ? oldCategoryData?.mode : undefined }, 'category');
+      addHistoryLogEntryRef.current?.(actionKey, { name: updatedFrontendCategory.name, oldName: oldCategoryData?.name !== updatedFrontendCategory.name ? oldCategoryData?.name : undefined , oldMode: oldCategoryData?.mode !== updatedFrontendCategory.mode ? oldCategoryData?.mode : undefined }, 'category');
     } catch (err) { createApiErrorToast(err, toast, "toastCategoryUpdatedTitle", "updating", t, `${API_BASE_URL}/categories/${categoryId}`, logout); setError((err as Error).message); throw err; }
-  }, [fetchWithAuth, toast, t, addHistoryLogEntry, logout]);
+  }, [fetchWithAuth, toast, t, logout, API_BASE_URL]);
 
   const deleteCategory = useCallback(async (categoryId: number) => {
     setError(null);
@@ -1220,9 +1248,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setPersonalActivities(prev => updateActivitiesCategory(prev));
       setWorkActivities(prev => updateActivitiesCategory(prev));
       toast({ title: t('toastCategoryDeletedTitle'), description: t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name }) });
-      addHistoryLogEntry('historyLogDeleteCategory', { name: categoryToDelete.name, mode: categoryToDelete.mode as string }, 'category');
+      addHistoryLogEntryRef.current?.('historyLogDeleteCategory', { name: categoryToDelete.name, mode: categoryToDelete.mode as string }, 'category');
     } catch (err) { createApiErrorToast(err, toast, "toastCategoryDeletedTitle", "deleting", t, `${API_BASE_URL}/categories/${categoryId}`, logout); setError((err as Error).message); throw err; }
-  }, [fetchWithAuth, allCategories, toast, t, addHistoryLogEntry, logout]);
+  }, [fetchWithAuth, allCategories, toast, t, logout, API_BASE_URL]);
 
   const addAssignee = useCallback(async (name: string, username: string, password?: string, isAdmin?: boolean) => {
     setError(null);
@@ -1238,9 +1266,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const newBackendUser: BackendUser = await response.json();
       setAllAssignees(prev => [...prev, backendToFrontendAssignee(newBackendUser)]);
       toast({ title: t('toastAssigneeAddedTitle'), description: t('toastAssigneeAddedDescription', { assigneeName: name }) });
-      addHistoryLogEntry('historyLogAddAssignee', { name, isAdmin: newBackendUser.is_admin ? 1 : 0 }, 'assignee');
+      addHistoryLogEntryRef.current?.('historyLogAddAssignee', { name, isAdmin: newBackendUser.is_admin ? 1 : 0 }, 'assignee');
     } catch (err) { createApiErrorToast(err, toast, "toastAssigneeAddedTitle", "adding", t, `${API_BASE_URL}/users`, logout); setError((err as Error).message); throw err; }
-  }, [fetchWithAuth, toast, t, addHistoryLogEntry, logout]);
+  }, [fetchWithAuth, toast, t, logout, API_BASE_URL]);
 
   const updateAssignee = useCallback(async (assigneeId: number, updates: Partial<Pick<Assignee, 'name' | 'username' | 'isAdmin'>>, newPassword?: string) => {
     setError(null);
@@ -1275,7 +1303,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         historyDetails.isAdmin = updates.isAdmin ? 1 : 0;
         historyDetails.oldIsAdmin = currentAssignee?.isAdmin ? 1 : 0;
       }
-      addHistoryLogEntry('historyLogUpdateAssignee', historyDetails, 'assignee');
+      addHistoryLogEntryRef.current?.('historyLogUpdateAssignee', historyDetails, 'assignee');
 
     } catch (err) {
         if (!(err instanceof Error && err.message.includes(t('usernameTakenErrorDescription', {username: updates.username || ''})))) {
@@ -1283,7 +1311,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
         setError((err as Error).message); throw err;
     }
-  }, [fetchWithAuth, assignees, toast, t, addHistoryLogEntry, logout]);
+  }, [fetchWithAuth, assignees, toast, t, logout, API_BASE_URL]);
 
   const deleteAssignee = useCallback(async (assigneeId: number) => {
     setError(null);
@@ -1302,9 +1330,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setWorkActivities(prev => updateActivities(prev));
       
       toast({ title: t('toastAssigneeDeletedTitle'), description: t('toastAssigneeDeletedDescription', { assigneeName: assigneeToDelete.name }) });
-      addHistoryLogEntry('historyLogDeleteAssignee', { name: assigneeToDelete.name }, 'assignee');
+      addHistoryLogEntryRef.current?.('historyLogDeleteAssignee', { name: assigneeToDelete.name }, 'assignee');
     } catch (err) { createApiErrorToast(err, toast, "toastAssigneeDeletedTitle", "deleting", t, `${API_BASE_URL}/users/${assigneeId}`, logout); setError((err as Error).message); throw err; }
-  }, [fetchWithAuth, assignees, toast, t, addHistoryLogEntry, logout]);
+  }, [fetchWithAuth, assignees, toast, t, logout, API_BASE_URL]);
 
 
   const addActivity = useCallback(async (
@@ -1344,9 +1372,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setWorkActivities(prev => [...prev, newFrontendActivity]);
       }
       toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
-      addHistoryLogEntry(appModeState === 'personal' ? 'historyLogAddActivityPersonal' : 'historyLogAddActivityWork', { title: newFrontendActivity.title }, appModeState);
+      addHistoryLogEntryRef.current?.(appModeState === 'personal' ? 'historyLogAddActivityPersonal' : 'historyLogAddActivityWork', { title: newFrontendActivity.title }, appModeState);
     } catch (err) { createApiErrorToast(err, toast, "toastActivityAddedTitle", "adding", t, `${API_BASE_URL}/activities`, logout); setError((err as Error).message); throw err; }
-  }, [fetchWithAuth, appModeState, toast, t, addHistoryLogEntry, logout]);
+  }, [fetchWithAuth, appModeState, toast, t, logout, API_BASE_URL]);
 
  const updateActivity = useCallback(async (activityId: number, updates: Partial<Omit<Activity, 'id' | 'todos'>>, originalActivity?: Activity) => {
     setError(null);
@@ -1361,8 +1389,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     
     const effectiveAppMode = updates.appMode || activityToUpdate.appMode;
-    const { todos, ...coreUpdatesFromForm } = updates; 
-    const payload = frontendToBackendActivityPayload({ ...activityToUpdate, ...coreUpdatesFromForm, appMode: effectiveAppMode }, true) as BackendActivityUpdatePayload;
+    const payload = frontendToBackendActivityPayload({ ...activityToUpdate, ...updates, appMode: effectiveAppMode }, true) as BackendActivityUpdatePayload;
 
 
     try {
@@ -1375,7 +1402,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const finalFrontendActivity = {
         ...activityToUpdate, 
         ...processedActivityFromBackend, 
-        todos: activityToUpdate.todos || [], 
+        todos: activityToUpdate.todos || [],
         completedOccurrences: updates.completedOccurrences || activityToUpdate.completedOccurrences || {},
         completed: updates.completed !== undefined ? updates.completed : activityToUpdate.completed,
         completedAt: updates.completedAt !== undefined ? updates.completedAt : activityToUpdate.completedAt,
@@ -1392,9 +1419,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
 
       toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
-      addHistoryLogEntry(finalFrontendActivity.appMode === 'personal' ? 'historyLogUpdateActivityPersonal' : 'historyLogUpdateActivityWork', { title: finalFrontendActivity.title }, finalFrontendActivity.appMode);
+      addHistoryLogEntryRef.current?.(finalFrontendActivity.appMode === 'personal' ? 'historyLogUpdateActivityPersonal' : 'historyLogUpdateActivityWork', { title: finalFrontendActivity.title }, finalFrontendActivity.appMode);
     } catch (err) { createApiErrorToast(err, toast, "toastActivityUpdatedTitle", "updating", t, `${API_BASE_URL}/activities/${activityId}`, logout); setError((err as Error).message); throw err; }
-  }, [fetchWithAuth, appModeState, personalActivities, workActivities, toast, t, addHistoryLogEntry, logout]);
+  }, [fetchWithAuth, appModeState, personalActivities, workActivities, toast, t, logout, API_BASE_URL]);
 
   const deleteActivity = useCallback(async (activityId: number) => {
     setError(null);
@@ -1420,9 +1447,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete activity: HTTP ${response.status}`));}
       setter(prev => prev.filter(act => act.id !== activityId));
       toast({ title: t('toastActivityDeletedTitle'), description: t('toastActivityDeletedDescription', { activityTitle: activityToDelete.title }) });
-      addHistoryLogEntry(modeForLog === 'personal' ? 'historyLogDeleteActivityPersonal' : 'historyLogDeleteActivityWork', { title: activityToDelete.title }, modeForLog);
+      addHistoryLogEntryRef.current?.(modeForLog === 'personal' ? 'historyLogDeleteActivityPersonal' : 'historyLogDeleteActivityWork', { title: activityToDelete.title }, modeForLog);
     } catch (err) { createApiErrorToast(err, toast, "toastActivityDeletedTitle", "deleting", t, `${API_BASE_URL}/activities/${activityId}`, logout); setError((err as Error).message); throw err; }
-  }, [fetchWithAuth, personalActivities, workActivities, toast, t, addHistoryLogEntry, logout]);
+  }, [fetchWithAuth, personalActivities, workActivities, toast, t, logout, API_BASE_URL]);
 
 
   const addTodoToActivity = useCallback(async (activityId: number, todoText: string, completed: boolean = false): Promise<Todo | null> => {
@@ -1455,7 +1482,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setError((err as Error).message); 
         return null; 
     }
-  }, [fetchWithAuth, personalActivities, workActivities, toast, t, logout]); 
+  }, [fetchWithAuth, personalActivities, workActivities, toast, t, logout, API_BASE_URL]); 
 
   const updateTodoInActivity = useCallback(async (activityId: number, todoId: number, updates: Partial<Todo>) => {
     setError(null);
@@ -1501,7 +1528,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setError((err as Error).message);
         throw err;
     }
-  }, [fetchWithAuth, personalActivities, workActivities, t, toast, logout]); 
+  }, [fetchWithAuth, personalActivities, workActivities, t, toast, logout, API_BASE_URL]); 
 
   const deleteTodoFromActivity = useCallback(async (activityId: number, todoId: number) => {
     setError(null);
@@ -1526,7 +1553,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       toast({ title: t('toastTodoDeletedTitle'), description: t('toastTodoDeletedDescription', { todoText: todoToDelete?.text || "Todo" }) });
     } catch (err) { createApiErrorToast(err, toast, "toastTodoDeletedTitle", "deleting", t, `${API_BASE_URL}/todos/${todoId}`, logout); setError((err as Error).message); throw err; }
-  }, [fetchWithAuth, personalActivities, workActivities, toast, t, logout]); 
+  }, [fetchWithAuth, personalActivities, workActivities, toast, t, logout, API_BASE_URL]); 
 
   const toggleOccurrenceCompletion = useCallback((masterActivityId: number, occurrenceDateTimestamp: number, completedState: boolean) => {
     let activityTitleForLog = 'Unknown Activity';
@@ -1558,8 +1585,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return act;
       })
     );
-    addHistoryLogEntry(modeForLog === 'personal' ? 'historyLogToggleActivityCompletionPersonal' : 'historyLogToggleActivityCompletionWork', { title: activityTitleForLog, completed: completedState ? 1 : 0 }, modeForLog);
-  }, [personalActivities, workActivities, addHistoryLogEntry]); 
+    addHistoryLogEntryRef.current?.(modeForLog === 'personal' ? 'historyLogToggleActivityCompletionPersonal' : 'historyLogToggleActivityCompletionWork', { title: activityTitleForLog, completed: completedState ? 1 : 0 }, modeForLog);
+  }, [personalActivities, workActivities]); 
 
 
   const getCategoryById = useCallback((categoryId: number) => allCategories.find(cat => cat.id === categoryId), [allCategories]);
@@ -1612,4 +1639,3 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
-
