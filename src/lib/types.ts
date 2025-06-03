@@ -5,12 +5,18 @@ import type { LucideIcon } from 'lucide-react';
 export interface Token {
   access_token: string;
   token_type: string;
+  user_id: number;
+  username: string;
+  is_admin: boolean;
 }
 
 export interface DecodedToken {
-  sub: string; // User ID
+  sub: string; // User ID (from token's 'sub' claim)
   exp: number; // Expiry timestamp
-  // Add other claims if present
+  // Store additional user info directly from login response if needed
+  userId?: number; // Actual user ID from backend
+  username?: string;
+  isAdmin?: boolean;
 }
 
 // --- Backend Enums (mirroring FastAPI) ---
@@ -23,7 +29,7 @@ export type RecurrenceType = 'none' | 'daily' | 'weekly' | 'monthly';
 
 // --- TODO ---
 export interface Todo {
-  id: number; // Can be string for temp UUIDs on client before save
+  id: number;
   text: string;
   completed: boolean;
 }
@@ -56,11 +62,11 @@ export interface Activity {
   todos: Todo[];
   createdAt: number; // Start date timestamp
   time?: string;
-  completed?: boolean; 
+  completed?: boolean;
   completedAt?: number | null;
   notes?: string;
   recurrence?: RecurrenceRule | null;
-  completedOccurrences?: Record<string, boolean>; 
+  completedOccurrences?: Record<string, boolean>;
   isRecurringInstance?: boolean;
   originalInstanceDate?: number;
   masterActivityId?: number;
@@ -68,14 +74,52 @@ export interface Activity {
   appMode: AppMode;
 }
 
+// Represents the data structure from GET /activities (list view)
+export interface BackendActivityListItem {
+  id: number;
+  title: string;
+  start_date: string; // ISO string
+  time: string;
+  category_id: number;
+  repeat_mode: BackendRepeatMode;
+  end_date?: string | null; // ISO string
+  days_of_week?: string | null; // Comma-separated string "0,1,2"
+  day_of_month?: number | null;
+  notes?: string | null;
+  mode: BackendCategoryMode;
+  responsible_ids: number[];
+  // No 'category' object, no 'todos' list here
+}
+
+// Represents the richer data structure from GET /activities/{id}, POST /activities, PUT /activities/{id}
+// (direct ORM object serialization)
+export interface BackendActivity {
+  id: number;
+  title: string;
+  start_date: string; // ISO string
+  time: string;
+  category_id: number; // Still present, but also nested category object
+  repeat_mode: BackendRepeatMode;
+  end_date?: string | null; // ISO string
+  days_of_week?: string | null; // Comma-separated string "0,1,2"
+  day_of_month?: number | null;
+  notes?: string | null;
+  mode: BackendCategoryMode;
+  category: BackendCategory; // Nested category object
+  responsibles: BackendUser[]; // List of responsible user objects
+  todos: BackendTodo[]; // List of todo objects
+  // occurrences might be here if eager-loaded, but frontend manages completedOccurrences separately
+}
+
+
 export interface BackendActivityCreatePayload {
   title: string;
-  start_date: string; 
+  start_date: string;
   time: string;
   category_id: number;
   repeat_mode?: BackendRepeatMode;
   end_date?: string | null;
-  days_of_week?: string[] | null; 
+  days_of_week?: string[] | null;
   day_of_month?: number | null;
   notes?: string | null;
   mode: BackendCategoryMode;
@@ -90,29 +134,11 @@ export interface BackendActivityUpdatePayload {
   category_id?: number;
   repeat_mode?: BackendRepeatMode;
   end_date?: string | null;
-  days_of_week?: string[] | null; 
+  days_of_week?: string[] | null;
   day_of_month?: number | null;
   notes?: string | null;
   mode?: BackendCategoryMode;
   responsible_ids?: number[];
-  // Todos are not updated via this payload; use separate todo endpoints
-}
-
-export interface BackendActivity {
-  id: number;
-  title: string;
-  start_date: string; 
-  time: string;
-  category_id: number;
-  repeat_mode: BackendRepeatMode;
-  end_date?: string | null; 
-  days_of_week?: string | null; 
-  day_of_month?: number | null;
-  notes?: string | null;
-  mode: BackendCategoryMode;
-  category: BackendCategory; // Assuming backend sends this nested object
-  responsibles: BackendUser[]; // Assuming backend sends this
-  todos: BackendTodo[]; // Assuming backend sends this
 }
 
 // --- CATEGORY ---
@@ -154,14 +180,14 @@ export interface Assignee {
 export interface BackendUserCreatePayload {
   name: string;
   username: string;
-  password?: string; 
+  password?: string;
   is_admin?: boolean;
 }
 
 export interface BackendUserUpdatePayload {
   name?: string;
   username?: string;
-  password?: string; 
+  password?: string;
   is_admin?: boolean;
 }
 
@@ -169,13 +195,13 @@ export interface BackendUser {
   id: number;
   name: string;
   username: string;
-  is_admin: boolean; 
+  is_admin: boolean;
 }
 
 // --- CHANGE PASSWORD ---
 export interface ChangePasswordRequest {
     old_password: string;
-    new_password: string; // Corrected from str to string
+    new_password: string;
 }
 
 
@@ -186,7 +212,7 @@ export interface UINotification {
   description: string;
   timestamp: number;
   read: boolean;
-  activityId?: number | string; // Allow string for pomodoro IDs
+  activityId?: number | string;
   instanceDate?: number;
 }
 
@@ -194,13 +220,13 @@ export interface UINotification {
 export type HistoryLogActionKey =
   | 'historyLogLogin'
   | 'historyLogLogout'
-  | 'historyLogAddActivity' // Simplified
-  | 'historyLogUpdateActivity' // Simplified
-  | 'historyLogDeleteActivity' // Simplified
-  | 'historyLogToggleActivityCompletion' // Simplified
-  | 'historyLogAddCategory' // Simplified
-  | 'historyLogUpdateCategory' // Simplified
-  | 'historyLogDeleteCategory' // Simplified
+  | 'historyLogAddActivity'
+  | 'historyLogUpdateActivity'
+  | 'historyLogDeleteActivity'
+  | 'historyLogToggleActivityCompletion'
+  | 'historyLogAddCategory'
+  | 'historyLogUpdateCategory'
+  | 'historyLogDeleteCategory'
   | 'historyLogSwitchToPersonalMode'
   | 'historyLogSwitchToWorkMode'
   | 'historyLogPasswordChangeAttempt'
@@ -212,7 +238,7 @@ export interface HistoryLogEntry {
   id: number;
   timestamp: number;
   actionKey: HistoryLogActionKey;
-  details?: Record<string, string | number | boolean | undefined | null>; // Allow null for optional old values
+  details?: Record<string, string | number | boolean | undefined | null>;
   scope: 'account' | 'personal' | 'work' | 'category' | 'assignee';
   backendAction?: string;
   backendUserId?: number;
@@ -225,7 +251,7 @@ export interface BackendHistoryCreatePayload {
 
 export interface BackendHistory {
   id: number;
-  timestamp: string; 
+  timestamp: string;
   action: string;
   user_id: number;
   user?: BackendUser;
@@ -239,6 +265,61 @@ export type { Translations } from '@/lib/translations';
 
 // --- AppContextType additions ---
 export interface AppContextType {
-  // ... existing properties
+  activities: Activity[];
+  getRawActivities: () => Activity[];
+  categories: Category[];
+  assignees: Assignee[];
+  appMode: AppMode;
+  setAppMode: (mode: AppMode) => void;
+  addActivity: (
+    activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId'| 'appMode'| 'masterActivityId' | 'isRecurringInstance' | 'originalInstanceDate'> & {
+      todos?: Omit<Todo, 'id'>[]; time?: string; notes?: string; recurrence?: RecurrenceRule | null; responsiblePersonIds?: number[]; categoryId: number; appMode: AppMode;
+    }, customCreatedAt?: number
+  ) => Promise<void>;
+  updateActivity: (activityId: number, updates: Partial<Omit<Activity, 'id' | 'todos'>>, originalActivity?: Activity) => Promise<void>;
+  deleteActivity: (activityId: number) => Promise<void>;
+  toggleOccurrenceCompletion: (masterActivityId: number, occurrenceDateTimestamp: number, completedState: boolean) => void;
+  addTodoToActivity: (activityId: number, todoText: string, completed?: boolean) => Promise<Todo | null>;
+  updateTodoInActivity: (activityId: number, todoId: number, updates: Partial<Todo>) => Promise<void>;
+  deleteTodoFromActivity: (activityId: number, todoId: number) => Promise<void>;
+  getCategoryById: (categoryId: number) => Category | undefined;
+  addCategory: (name: string, iconName: string, mode: AppMode | 'all') => Promise<void>;
+  updateCategory: (categoryId: number, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => Promise<void>;
+  deleteCategory: (categoryId: number) => Promise<void>;
+  addAssignee: (name: string, username: string, password?: string, isAdmin?: boolean) => Promise<void>;
+  updateAssignee: (assigneeId: number, updates: Partial<Pick<Assignee, 'name' | 'username' | 'isAdmin'>>, newPassword?: string) => Promise<void>;
+  deleteAssignee: (assigneeId: number) => Promise<void>;
+  getAssigneeById: (assigneeId: number) => Assignee | undefined;
+  isLoading: boolean;
+  error: string | null;
+  isAuthenticated: boolean;
+  login: (username: string, password: string) => Promise<boolean>;
+  logout: () => void;
+  changePassword: (oldPassword: string, newPassword: string) => Promise<boolean>;
+  getCurrentUserId: () => number | null;
+  uiNotifications: UINotification[];
+  addUINotification: (data: Omit<UINotification, 'id' | 'timestamp' | 'read'>) => void;
+  markUINotificationAsRead: (notificationId: string) => void;
+  markAllUINotificationsAsRead: () => void;
+  clearAllUINotifications: () => void;
+  historyLog: HistoryLogEntry[];
+  addHistoryLogEntry: (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined | null>, scope?: HistoryLogEntry['scope']) => Promise<void>;
+  systemNotificationPermission: NotificationPermission | null;
+  requestSystemNotificationPermission: () => Promise<void>;
+  pomodoroPhase: PomodoroPhase;
+  pomodoroTimeRemaining: number;
+  pomodoroIsRunning: boolean;
+  pomodoroCyclesCompleted: number;
+  startPomodoroWork: () => void;
+  startPomodoroShortBreak: () => void;
+  startPomodoroLongBreak: () => void;
+  pausePomodoro: () => void;
+  resumePomodoro: () => void;
+  resetPomodoro: () => void;
+  isPomodoroReady: boolean;
+  isAppLocked: boolean;
+  appPinState: string | null;
+  unlockApp: (pinAttempt: string) => boolean;
+  setAppPin: (pin: string | null) => void;
   fetchAndSetSpecificActivityDetails: (activityId: number) => Promise<Activity | null>;
 }
