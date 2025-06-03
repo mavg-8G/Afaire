@@ -23,20 +23,20 @@ export type RecurrenceType = 'none' | 'daily' | 'weekly' | 'monthly';
 
 // --- TODO ---
 export interface Todo {
-  id: number;
+  id: number; // Can be string for temp UUIDs on client before save
   text: string;
   completed: boolean;
 }
 
 export interface BackendTodoCreate {
   text: string;
-  complete?: boolean; // Now aligns with backend
+  complete?: boolean;
 }
 
 export interface BackendTodo {
   id: number;
   text: string;
-  complete: boolean; // Backend now has this
+  complete: boolean;
   activity_id: number;
 }
 
@@ -56,11 +56,11 @@ export interface Activity {
   todos: Todo[];
   createdAt: number; // Start date timestamp
   time?: string;
-  completed?: boolean; // For master completion of non-recurring or overall series (client concept)
-  completedAt?: number | null; // Timestamp for non-recurring completion (client-side)
+  completed?: boolean; 
+  completedAt?: number | null;
   notes?: string;
   recurrence?: RecurrenceRule | null;
-  completedOccurrences?: Record<string, boolean>; // Key: YYYY-MM-DD (client-side)
+  completedOccurrences?: Record<string, boolean>; 
   isRecurringInstance?: boolean;
   originalInstanceDate?: number;
   masterActivityId?: number;
@@ -70,12 +70,12 @@ export interface Activity {
 
 export interface BackendActivityCreatePayload {
   title: string;
-  start_date: string; // ISO datetime string
+  start_date: string; 
   time: string;
   category_id: number;
   repeat_mode?: BackendRepeatMode;
   end_date?: string | null;
-  days_of_week?: string[] | null; // Backend expects list of strings for creation
+  days_of_week?: string[] | null; 
   day_of_month?: number | null;
   notes?: string | null;
   mode: BackendCategoryMode;
@@ -90,28 +90,29 @@ export interface BackendActivityUpdatePayload {
   category_id?: number;
   repeat_mode?: BackendRepeatMode;
   end_date?: string | null;
-  days_of_week?: string[] | null; // Backend expects list of strings for update
+  days_of_week?: string[] | null; 
   day_of_month?: number | null;
   notes?: string | null;
   mode?: BackendCategoryMode;
   responsible_ids?: number[];
+  // Todos are not updated via this payload; use separate todo endpoints
 }
 
 export interface BackendActivity {
   id: number;
   title: string;
-  start_date: string; // ISO string
+  start_date: string; 
   time: string;
   category_id: number;
   repeat_mode: BackendRepeatMode;
-  end_date?: string | null; // ISO string
-  days_of_week?: string | null; // Comma-separated string "0,1,2" from backend
+  end_date?: string | null; 
+  days_of_week?: string | null; 
   day_of_month?: number | null;
   notes?: string | null;
   mode: BackendCategoryMode;
-  category: BackendCategory;
-  responsibles: BackendUser[];
-  todos: BackendTodo[];
+  category: BackendCategory; // Assuming backend sends this nested object
+  responsibles: BackendUser[]; // Assuming backend sends this
+  todos: BackendTodo[]; // Assuming backend sends this
 }
 
 // --- CATEGORY ---
@@ -153,14 +154,14 @@ export interface Assignee {
 export interface BackendUserCreatePayload {
   name: string;
   username: string;
-  password?: string; // Password for creation
+  password?: string; 
   is_admin?: boolean;
 }
 
 export interface BackendUserUpdatePayload {
   name?: string;
   username?: string;
-  password?: string; // Optional: for changing password during update
+  password?: string; 
   is_admin?: boolean;
 }
 
@@ -168,14 +169,13 @@ export interface BackendUser {
   id: number;
   name: string;
   username: string;
-  is_admin: boolean; // Backend provides this
-  // hashed_password is not exposed
+  is_admin: boolean; 
 }
 
 // --- CHANGE PASSWORD ---
 export interface ChangePasswordRequest {
     old_password: string;
-    new_password: str;
+    new_password: string; // Corrected from str to string
 }
 
 
@@ -186,7 +186,7 @@ export interface UINotification {
   description: string;
   timestamp: number;
   read: boolean;
-  activityId?: number;
+  activityId?: number | string; // Allow string for pomodoro IDs
   instanceDate?: number;
 }
 
@@ -211,7 +211,7 @@ export type HistoryLogActionKey =
   | 'historyLogDeleteCategory'
   | 'historyLogSwitchToPersonalMode'
   | 'historyLogSwitchToWorkMode'
-  | 'historyLogPasswordChangeAttempt' // Changed from logPasswordChange
+  | 'historyLogPasswordChangeAttempt'
   | 'historyLogAddAssignee'
   | 'historyLogUpdateAssignee'
   | 'historyLogDeleteAssignee';
@@ -233,7 +233,7 @@ export interface BackendHistoryCreatePayload {
 
 export interface BackendHistory {
   id: number;
-  timestamp: string; // ISO datetime string
+  timestamp: string; 
   action: string;
   user_id: number;
   user?: BackendUser;
@@ -244,3 +244,9 @@ export type PomodoroPhase = 'work' | 'shortBreak' | 'longBreak' | 'off';
 
 // --- TRANSLATIONS ---
 export type { Translations } from '@/lib/translations';
+
+// --- AppContextType additions ---
+export interface AppContextType {
+  // ... existing properties
+  fetchAndSetSpecificActivityDetails: (activityId: number) => Promise<Activity | null>;
+}

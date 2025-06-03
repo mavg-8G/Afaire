@@ -37,7 +37,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 
 const todoSchema = z.object({
-  id: z.union([z.number(), z.string()]).optional(), // Allow string for temp UUIDs
+  id: z.union([z.number(), z.string()]).optional(), 
   text: z.string().min(1, "Todo text cannot be empty."),
   completed: z.boolean().optional(),
 });
@@ -53,6 +53,7 @@ const recurrenceSchema = z.object({
 export default function ActivityEditorPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const appStore = useAppStore(); // Get the whole store
   const {
     addActivity,
     updateActivity,
@@ -61,11 +62,12 @@ export default function ActivityEditorPage() {
     deleteTodoFromActivity,
     appMode,
     assignees,
-    getRawActivities,
+    getRawActivities, // Still useful for initial check or if detail fetch fails
     getCategoryById,
     isLoading: isAppStoreLoading,
-    categories
-  } = useAppStore();
+    categories,
+    fetchAndSetSpecificActivityDetails, // Get the new function
+  } = appStore;
   const { toast } = useToast();
   const { t, locale } = useTranslations();
 
@@ -74,6 +76,8 @@ export default function ActivityEditorPage() {
   const [isSubmittingForm, setIsSubmittingForm] = useState(false);
   const [activityToEdit, setActivityToEdit] = useState<Activity | undefined>(undefined);
   const [isLoadingActivity, setIsLoadingActivity] = useState(true);
+  const [hasFetchedDetailsForId, setHasFetchedDetailsForId] = useState<number | null>(null);
+
 
   const activityIdParam = searchParams.get('id');
   const activityId = activityIdParam ? parseInt(activityIdParam, 10) : undefined;
@@ -117,59 +121,80 @@ export default function ActivityEditorPage() {
     }
   });
 
+  // Effect to load activity details
   useEffect(() => {
-    setIsLoadingActivity(true);
-    const currentActivities = getRawActivities();
-    if (activityId !== undefined && !isNaN(activityId)) {
-      const foundActivity = currentActivities.find(a => a.id === activityId);
-      if (foundActivity) {
-        setActivityToEdit(foundActivity);
-        
-        const todosForForm = (Array.isArray(foundActivity.todos) ? foundActivity.todos : []).map(tItem => {
-          if (typeof tItem !== 'object' || tItem === null) {
-            return { id: `malformed_${uuidv4()}`, text: 'Invalid todo data', completed: false };
-          }
-          return {
-            id: tItem.id, 
-            text: String(tItem.text || ''), 
-            completed: !!tItem.completed 
-          };
-        });
+    const loadActivity = async () => {
+        setIsLoadingActivity(true);
+        if (activityId !== undefined && !isNaN(activityId)) {
+            let activityData: Activity | null | undefined = undefined;
+            if (hasFetchedDetailsForId !== activityId) {
+                activityData = await fetchAndSetSpecificActivityDetails(activityId);
+                setHasFetchedDetailsForId(activityId); // Mark as fetched for this ID
+                if (!activityData) { // Fetch failed or activity not found by fetch
+                    toast({ variant: "destructive", title: "Error", description: "Failed to fetch activity details." });
+                    router.replace('/');
+                    setIsLoadingActivity(false);
+                    return;
+                }
+                // If fetchAndSetSpecificActivityDetails updates AppProvider state,
+                // getRawActivities() on next render should provide the updated activity.
+                // For now, use the directly fetched activityData to populate the form immediately.
+            }
+            
+            // If activityData was fetched, use it. Otherwise, try to find in current raw activities.
+            const currentActivityToProcess = activityData || getRawActivities().find(a => a.id === activityId);
 
-        form.reset({
-          title: foundActivity.title,
-          categoryId: foundActivity.categoryId,
-          activityDate: new Date(foundActivity.createdAt), // Use createdAt for the date picker
-          time: foundActivity.time || "",
-          todos: todosForForm,
-          notes: foundActivity.notes || "",
-          recurrence: {
-            type: foundActivity.recurrence?.type || 'none',
-            endDate: foundActivity.recurrence?.endDate ? new Date(foundActivity.recurrence.endDate) : null,
-            daysOfWeek: foundActivity.recurrence?.daysOfWeek || [],
-            dayOfMonth: foundActivity.recurrence?.dayOfMonth || new Date(foundActivity.createdAt).getDate(),
-          },
-          responsiblePersonIds: foundActivity.responsiblePersonIds?.map(id => Number(id)) || [],
-        });
-      } else {
-        toast({ variant: "destructive", title: "Error", description: "Activity not found." });
-        router.replace('/');
-      }
-    } else {
-        const defaultCategory = categories.length > 0 ? categories[0] : undefined;
-        form.reset({
-            title: "",
-            categoryId: defaultCategory ? defaultCategory.id : undefined,
-            activityDate: defaultInitialDate,
-            time: "",
-            todos: [],
-            notes: "",
-            recurrence: { type: 'none', endDate: null, daysOfWeek: [], dayOfMonth: defaultInitialDate.getDate() },
-            responsiblePersonIds: [],
-        });
-    }
-    setIsLoadingActivity(false);
-  }, [activityId, getRawActivities, form, defaultInitialDate, router, toast, categories]);
+            if (currentActivityToProcess) {
+                setActivityToEdit(currentActivityToProcess);
+                const todosForForm = (Array.isArray(currentActivityToProcess.todos) ? currentActivityToProcess.todos : []).map(tItem => {
+                    if (typeof tItem !== 'object' || tItem === null) {
+                        return { id: `malformed_${uuidv4()}`, text: 'Invalid todo data', completed: false };
+                    }
+                    return {
+                        id: tItem.id,
+                        text: String(tItem.text || ''),
+                        completed: !!tItem.completed
+                    };
+                });
+
+                form.reset({
+                    title: currentActivityToProcess.title,
+                    categoryId: currentActivityToProcess.categoryId,
+                    activityDate: new Date(currentActivityToProcess.createdAt),
+                    time: currentActivityToProcess.time || "",
+                    todos: todosForForm,
+                    notes: currentActivityToProcess.notes || "",
+                    recurrence: {
+                        type: currentActivityToProcess.recurrence?.type || 'none',
+                        endDate: currentActivityToProcess.recurrence?.endDate ? new Date(currentActivityToProcess.recurrence.endDate) : null,
+                        daysOfWeek: currentActivityToProcess.recurrence?.daysOfWeek || [],
+                        dayOfMonth: currentActivityToProcess.recurrence?.dayOfMonth || new Date(currentActivityToProcess.createdAt).getDate(),
+                    },
+                    responsiblePersonIds: currentActivityToProcess.responsiblePersonIds?.map(id => Number(id)) || [],
+                });
+            } else {
+                toast({ variant: "destructive", title: "Error", description: "Activity not found." });
+                router.replace('/');
+            }
+        } else { // New activity
+            const defaultCategory = categories.length > 0 ? categories[0] : undefined;
+            form.reset({
+                title: "",
+                categoryId: defaultCategory ? defaultCategory.id : undefined,
+                activityDate: defaultInitialDate,
+                time: "",
+                todos: [],
+                notes: "",
+                recurrence: { type: 'none', endDate: null, daysOfWeek: [], dayOfMonth: defaultInitialDate.getDate() },
+                responsiblePersonIds: [],
+            });
+            setHasFetchedDetailsForId(null); // Reset fetch flag for new activity
+        }
+        setIsLoadingActivity(false);
+    };
+
+    loadActivity();
+  }, [activityId, fetchAndSetSpecificActivityDetails, getRawActivities, form, defaultInitialDate, router, toast, categories, hasFetchedDetailsForId]);
 
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "todos" });
@@ -194,49 +219,46 @@ export default function ActivityEditorPage() {
         recurrence: recurrenceRule,
         responsiblePersonIds: (appMode === 'personal') ? data.responsiblePersonIds?.map(id => Number(id)) : [],
         appMode: appMode,
-        createdAt: data.activityDate.getTime(), // This is for the core activity start_date
+        createdAt: data.activityDate.getTime(), 
       };
 
       if (activityToEdit && activityToEdit.id !== undefined) {
         const currentActivityId = activityToEdit.id;
         const formTodos = data.todos || [];
+        // Use activityToEdit.todos as the source of truth for original todos
+        // This state (activityToEdit) should have been updated by fetchAndSetSpecificActivityDetails if needed
         const originalTodos = activityToEdit.todos || [];
 
-        // 1. Handle New Todos
-        const newTodosToAdd = formTodos.filter(ft => ft.id === undefined || ft.id === null || (typeof ft.id === 'string' && ft.id.startsWith('malformed_')));
+        const newTodosToAdd = formTodos.filter(ft => ft.id === undefined || ft.id === null || (typeof ft.id === 'string' && (ft.id.startsWith('malformed_') || !Number.isFinite(parseInt(String(ft.id), 10))  ) ));
         for (const newTodo of newTodosToAdd) {
             if (newTodo.text.trim() !== "" && newTodo.text !== 'Invalid todo data') {
-                await addTodoToActivity(currentActivityId, newTodo.text, newTodo.completed);
+                await addTodoToActivity(currentActivityId, newTodo.text, !!newTodo.completed);
             }
         }
 
-        // 2. Handle Deleted Todos
         const formTodoIds = new Set(formTodos.map(ft => ft.id).filter(id => typeof id === 'number'));
         const todosToDelete = originalTodos.filter(ot => typeof ot.id === 'number' && !formTodoIds.has(ot.id));
         for (const deletedTodo of todosToDelete) {
             await deleteTodoFromActivity(currentActivityId, deletedTodo.id as number);
         }
 
-        // 3. Handle Updated Todos (text or completion change)
         const potentiallyUpdatedTodos = formTodos.filter(ft => typeof ft.id === 'number');
         for (const formTodo of potentiallyUpdatedTodos) {
             const originalTodo = originalTodos.find(ot => ot.id === formTodo.id);
             if (originalTodo && (originalTodo.text !== formTodo.text || originalTodo.completed !== formTodo.completed)) {
-                await updateTodoInActivity(currentActivityId, formTodo.id as number, { text: formTodo.text, completed: formTodo.completed });
+                await updateTodoInActivity(currentActivityId, formTodo.id as number, { text: formTodo.text, completed: !!formTodo.completed });
             }
         }
         
-        // 4. Update Core Activity Fields (excluding todos from this payload)
-        const { todos, ...updatePayloadForCore } = activityPayloadBase; // Destructure to remove todos
+        const { todos, ...updatePayloadForCore } = activityPayloadBase; 
         await updateActivity(currentActivityId, updatePayloadForCore as Partial<Omit<Activity, 'id' | 'todos'>>, activityToEdit);
         
         toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
 
       } else {
-        // For new activities, backend handles todo creation from this text list
         const addPayload = {
             ...activityPayloadBase,
-            todos: data.todos?.map(t => ({ text: t.text, completed: !!t.completed })), // Send full todo structure
+            todos: data.todos?.map(t => ({ text: t.text, completed: !!t.completed })),
         };
         await addActivity(
           addPayload as Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId'| 'appMode'| 'masterActivityId' | 'isRecurringInstance' | 'originalInstanceDate'> & { todos?: Omit<Todo, 'id'>[], time?: string, notes?: string, recurrence?: RecurrenceRule | null, responsiblePersonIds?: number[], categoryId: number, appMode: AppMode },
@@ -247,7 +269,9 @@ export default function ActivityEditorPage() {
       router.replace('/');
     } catch (error) {
       console.error("Failed to save activity:", error);
-      setIsSubmittingForm(false); 
+      toast({ variant: "destructive", title: "Error", description: `Failed to save activity: ${error instanceof Error ? error.message : String(error)}`});
+    } finally {
+        setIsSubmittingForm(false); 
     }
   };
 
@@ -516,3 +540,4 @@ const WEEK_DAYS = [
   { id: 3, labelKey: 'dayWed' }, { id: 4, labelKey: 'dayThu' }, { id: 5, labelKey: 'dayFri' },
   { id: 6, labelKey: 'daySat' },
 ] as const;
+

@@ -5,7 +5,7 @@ import React, { createContext, useState, useCallback, useEffect, useMemo, useRef
 import type {
   Activity, Todo, Category, AppMode, RecurrenceRule, UINotification, HistoryLogEntry, HistoryLogActionKey, Translations, Assignee, PomodoroPhase,
   BackendCategoryCreatePayload, BackendCategory, BackendUser, BackendUserCreatePayload, BackendUserUpdatePayload, BackendActivityCreatePayload, BackendActivityUpdatePayload, BackendActivity, BackendTodoCreate, BackendHistory, RecurrenceType, BackendCategoryMode, BackendRepeatMode, BackendTodo,
-  Token, DecodedToken, BackendHistoryCreatePayload, BackendCategoryUpdatePayload
+  Token, DecodedToken, BackendHistoryCreatePayload, BackendCategoryUpdatePayload, AppContextType as AppContextTypeImport // Import existing type
 } from '@/lib/types';
 import { DEFAULT_JWT_SECRET_KEY, POMODORO_WORK_DURATION_SECONDS, POMODORO_SHORT_BREAK_DURATION_SECONDS, POMODORO_LONG_BREAK_DURATION_SECONDS } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
@@ -32,78 +32,12 @@ import { useTheme } from 'next-themes';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://afaire.is-cool.dev/api';
 const JWT_SECRET_KEY_FOR_DECODING = process.env.NEXT_PUBLIC_JWT_SECRET_KEY || DEFAULT_JWT_SECRET_KEY;
 
-export interface AppContextType {
-  activities: Activity[];
-  getRawActivities: () => Activity[];
-  categories: Category[];
-  assignees: Assignee[];
-  appMode: AppMode;
-  setAppMode: (mode: AppMode) => void;
-  addActivity: (
-    activityData: Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId'| 'appMode'| 'masterActivityId' | 'isRecurringInstance' | 'originalInstanceDate'> & {
-      todos?: Omit<Todo, 'id'>[];
-      time?: string;
-      notes?: string;
-      recurrence?: RecurrenceRule | null;
-      responsiblePersonIds?: number[];
-      categoryId: number;
-      appMode: AppMode;
-    },
-    customCreatedAt?: number
-  ) => Promise<void>;
-  updateActivity: (activityId: number, updates: Partial<Omit<Activity, 'id' | 'todos'>>, originalActivity?: Activity) => Promise<void>;
-  deleteActivity: (activityId: number) => Promise<void>;
-  toggleOccurrenceCompletion: (masterActivityId: number, occurrenceDateTimestamp: number, completed: boolean) => void;
-  addTodoToActivity: (activityId: number, todoText: string, completed?: boolean) => Promise<Todo | null>;
-  updateTodoInActivity: (activityId: number, todoId: number, updates: Partial<Todo>) => Promise<void>;
-  deleteTodoFromActivity: (activityId: number, todoId: number) => Promise<void>;
-  getCategoryById: (categoryId: number) => Category | undefined;
-  addCategory: (name: string, iconName: string, mode: AppMode | 'all') => Promise<void>;
-  updateCategory: (categoryId: number, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => Promise<void>;
-  deleteCategory: (categoryId: number) => Promise<void>;
-  addAssignee: (name: string, username: string, password?: string, isAdmin?: boolean) => Promise<void>;
-  updateAssignee: (assigneeId: number, updates: Partial<Pick<Assignee, 'name' | 'username' | 'isAdmin'>>, newPassword?: string) => Promise<void>;
-  deleteAssignee: (assigneeId: number) => Promise<void>;
-  getAssigneeById: (assigneeId: number) => Assignee | undefined;
-  isLoading: boolean;
-  error: string | null;
 
-  isAuthenticated: boolean;
-  login: (username: string, password: string) => Promise<boolean>;
-  logout: () => void;
-  changePassword: (oldPassword: string, newPassword: string) => Promise<boolean>;
-  getCurrentUserId: () => number | null;
+// Combine with imported AppContextType
+export type AppContextType = AppContextTypeImport & {
+  fetchAndSetSpecificActivityDetails: (activityId: number) => Promise<Activity | null>;
+};
 
-
-  uiNotifications: UINotification[];
-  addUINotification: (data: Omit<UINotification, 'id' | 'timestamp' | 'read'>) => void;
-  markUINotificationAsRead: (notificationId: string) => void;
-  markAllUINotificationsAsRead: () => void;
-  clearAllUINotifications: () => void;
-
-  historyLog: HistoryLogEntry[];
-  addHistoryLogEntry: (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope?: HistoryLogEntry['scope']) => Promise<void>;
-
-  systemNotificationPermission: NotificationPermission | null;
-  requestSystemNotificationPermission: () => Promise<void>;
-
-  pomodoroPhase: PomodoroPhase;
-  pomodoroTimeRemaining: number;
-  pomodoroIsRunning: boolean;
-  pomodoroCyclesCompleted: number;
-  startPomodoroWork: () => void;
-  startPomodoroShortBreak: () => void;
-  startPomodoroLongBreak: () => void;
-  pausePomodoro: () => void;
-  resumePomodoro: () => void;
-  resetPomodoro: () => void;
-  isPomodoroReady: boolean;
-
-  isAppLocked: boolean;
-  appPinState: string | null;
-  unlockApp: (pinAttempt: string) => boolean;
-  setAppPin: (pin: string | null) => void;
-}
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -306,7 +240,7 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
       recurrence: {type: 'none'}
     };
   }
-
+  
   const activityIdForLog = typeof backendActivity.id === 'number' ? backendActivity.id : 'ID_MISSING_OR_INVALID_IN_BACKEND_RESPONSE';
   const startDateFromBackend = backendActivity.start_date;
   let createdAtTimestamp: number;
@@ -329,7 +263,6 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
     daysOfWeekArray = backendActivity.days_of_week.split(',').map(dayStr => parseInt(dayStr.trim(), 10)).filter(num => !isNaN(num) && num >= 0 && num <=6);
   }
 
-
   const recurrenceRule: RecurrenceRule = {
     type: backendActivity.repeat_mode as RecurrenceType, 
     endDate: backendActivity.end_date ? parseISO(backendActivity.end_date).getTime() : null,
@@ -337,6 +270,7 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
     dayOfMonth: backendActivity.day_of_month ?? undefined,
   };
   
+ console.log(`[AppProvider] backendToFrontendActivity for ID ${backendActivity?.id}: received backendActivity.todos:`, JSON.stringify(backendActivity?.todos));
  const todos: Todo[] = [];
   if (Array.isArray(backendActivity.todos)) {
     backendActivity.todos.forEach((bt: BackendTodo, index: number) => {
@@ -353,7 +287,7 @@ const backendToFrontendActivity = (backendActivity: BackendActivity | null | und
           completed: bt?.complete || false, 
         });
       });
-  } else if (backendActivity.todos !== undefined) { 
+  } else if (backendActivity.todos !== undefined && backendActivity.todos !== null) { 
      console.warn(`[AppProvider] Warning: backendActivity.todos is not an array for activity ID ${activityIdForLog}. Defaulting to empty array. Received:`, backendActivity.todos);
   }
   
@@ -416,7 +350,6 @@ const frontendToBackendActivityPayload = (
     payload.responsible_ids = [];
   }
 
-
   if (!isUpdate && activity.todos && activity.todos.length > 0) {
     (payload as BackendActivityCreatePayload).todos = activity.todos.map(t => ({ text: t.text, complete: t.completed }));
   } else if (!isUpdate) {
@@ -461,7 +394,6 @@ const createApiErrorToast = (
     operationType: 'loading' | 'adding' | 'updating' | 'deleting' | 'authenticating' | 'logging',
     translationFn: (key: keyof Translations, params?: any) => string,
     endpoint?: string,
-    logoutFnIfUnauthorized?: () => void 
   ) => {
     const error = err as Error & { cause?: unknown, name?: string, response?: Response };
     let consoleMessage = `[AppProvider] Failed ${operationType} for endpoint: ${endpoint || 'N/A'}.
@@ -480,12 +412,6 @@ Error Message: ${error.message || 'No message'}.`;
     }
     console.error(consoleMessage);
     
-    if (logoutFnIfUnauthorized && error.message && (error.message.toLowerCase().includes('unauthorized') || error.message.includes('401')) && operationType !== 'authenticating') {
-       logoutFnIfUnauthorized();
-       return; 
-    }
-
-
     let descriptionKey: keyof Translations = 'toastDefaultErrorDescription';
     let descriptionParams: any = {};
     let customDescription: string | null = null;
@@ -548,6 +474,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const isAuthenticated = !!jwtToken;
 
+  const addHistoryLogEntryRef = useRef<((actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope?: HistoryLogEntry['scope']) => Promise<void>) | null>(null);
+
+
   // --- ORDERED useCallback DEFINITIONS ---
 
   const getCurrentUserId = useCallback((): number | null => {
@@ -574,7 +503,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
     }
   }, []);
-
+  
   const postToServiceWorker = useCallback((message: any) => {
     if (typeof window !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage({...message, payload: { ...message.payload, locale } });
@@ -595,10 +524,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     postToServiceWorker({ type: 'RESET_TIMER' });
   }, [postToServiceWorker]);
 
+
   const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}, tokenToUse?: string | null): Promise<Response> => {
     const currentToken = tokenToUse || jwtToken;
 
-    if (!currentToken && !url.endsWith('/token')) {
+    if (!currentToken && !url.endsWith('/token') && !url.includes(`${API_BASE_URL}/token`)) { // Check both relative and absolute /token
       throw new Error("No JWT token available for authenticated request.");
     }
 
@@ -615,13 +545,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, { ...options, headers });
 
-    if (response.status === 401 && !url.endsWith('/token')) {
+    if (response.status === 401 && !url.endsWith('/token') && !url.includes(`${API_BASE_URL}/token`)) {
         throw new Error(`Unauthorized: ${response.statusText}`); 
     }
     return response;
-  }, [jwtToken, API_BASE_URL]);
-
-  const addHistoryLogEntryRef = useRef<((actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope?: HistoryLogEntry['scope']) => Promise<void>) | null>(null);
+  }, [jwtToken, API_BASE_URL]); 
 
   const addHistoryLogEntry = useCallback(async (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined>, scope: HistoryLogEntry['scope'] = 'account') => {
     const currentUserId = getCurrentUserId();
@@ -650,16 +578,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const newBackendHistoryEntry: BackendHistory = await response.json();
         setHistoryLog(prevLog => [backendToFrontendHistory(newBackendHistoryEntry), ...prevLog.slice(0, 99)]); 
     } catch (err) { 
-        // In addHistoryLogEntry, we avoid calling logout directly to prevent cycles if it was part of logout's dep array.
-        // The caller of functions that use addHistoryLogEntry (like logout itself) should handle auth errors.
         createApiErrorToast(err, toast, "historyLoadErrorTitle", "logging", t, `${API_BASE_URL}/history`);
         console.error(`[AppProvider] Failed logging history for action ${actionKey}:`, (err as Error).message);
     }
-  }, [fetchWithAuth, getCurrentUserId, t, toast]); 
+  }, [fetchWithAuth, getCurrentUserId, t, toast, API_BASE_URL]); 
   
-  useEffect(() => {
-      addHistoryLogEntryRef.current = addHistoryLogEntry;
-  }, [addHistoryLogEntry]);
+  useEffect(() => { addHistoryLogEntryRef.current = addHistoryLogEntry;}, [addHistoryLogEntry]);
 
   const logout = useCallback(() => {
     if (addHistoryLogEntryRef.current) {
@@ -677,7 +601,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     postToServiceWorker({ type: 'RESET_TIMER' });
     if (logoutChannel) logoutChannel.postMessage('logout_event_v2');
-  }, [decodeAndSetToken, postToServiceWorker, addHistoryLogEntryRef]); // addHistoryLogEntryRef is correct here
+  }, [decodeAndSetToken, postToServiceWorker]); 
   
   // --- AppProvider state and other functions ---
 
@@ -709,7 +633,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         try {
             setIsActivitiesLoading(true);
             const actResponse = await fetchWithAuth(`${API_BASE_URL}/activities`, {}, currentTokenForInitialLoad); 
-            if (!actResponse.ok) throw new Error(`Activities fetch failed: ${actResponse.statusText}`);
+            if (!actResponse.ok) { if (actResponse.status === 401) { logout(); } throw new Error(`Activities fetch failed: ${actResponse.statusText}`); }
             const backendActivities: BackendActivity[] = await actResponse.json();
             const newPersonal: Activity[] = [], newWork: Activity[] = [];
             backendActivities.forEach(beAct => {
@@ -719,44 +643,48 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             });
             setPersonalActivities(newPersonal); setWorkActivities(newWork);
         } catch (err) { 
-            if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
-            createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`); 
+            if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {
+                 createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`); 
+            }
         }
         finally { setIsActivitiesLoading(false); }
 
         try {
             setIsCategoriesLoading(true);
             const catResponse = await fetchWithAuth(`${API_BASE_URL}/categories`, {}, currentTokenForInitialLoad);
-            if (!catResponse.ok) throw new Error(`Categories fetch failed: ${catResponse.statusText}`);
+            if (!catResponse.ok) { if (catResponse.status === 401) { logout(); } throw new Error(`Categories fetch failed: ${catResponse.statusText}`); }
             const backendCategories: BackendCategory[] = await catResponse.json();
             setAllCategories(backendCategories.map(cat => backendToFrontendCategory(cat)));
         } catch (err) { 
-            if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
-            createApiErrorToast(err, toast, "toastCategoryLoadErrorTitle", "loading", t, `${API_BASE_URL}/categories`); 
+             if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {
+                createApiErrorToast(err, toast, "toastCategoryLoadErrorTitle", "loading", t, `${API_BASE_URL}/categories`); 
+             }
         }
         finally { setIsCategoriesLoading(false); }
 
         try {
             setIsAssigneesLoading(true);
             const userResponse = await fetchWithAuth(`${API_BASE_URL}/users`, {}, currentTokenForInitialLoad);
-            if (!userResponse.ok) throw new Error(`Users fetch failed: ${userResponse.statusText}`);
+            if (!userResponse.ok) { if (userResponse.status === 401) { logout(); } throw new Error(`Users fetch failed: ${userResponse.statusText}`); }
             const backendUsers: BackendUser[] = await userResponse.json();
             setAllAssignees(backendUsers.map(user => backendToFrontendAssignee(user)));
         } catch (err) { 
-             if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
-            createApiErrorToast(err, toast, "toastAssigneeLoadErrorTitle", "loading", t, `${API_BASE_URL}/users`); 
+             if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {
+                createApiErrorToast(err, toast, "toastAssigneeLoadErrorTitle", "loading", t, `${API_BASE_URL}/users`); 
+             }
         }
         finally { setIsAssigneesLoading(false); }
 
         try {
             setIsHistoryLoading(true);
             const histResponse = await fetchWithAuth(`${API_BASE_URL}/history`, {}, currentTokenForInitialLoad);
-            if (!histResponse.ok) throw new Error(`History fetch failed: ${histResponse.statusText}`);
+            if (!histResponse.ok) { if (histResponse.status === 401) { logout(); } throw new Error(`History fetch failed: ${histResponse.statusText}`); }
             const backendHistoryItems: BackendHistory[] = await histResponse.json();
             setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
         } catch (err) { 
-            if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
-            createApiErrorToast(err, toast, "historyLoadErrorTitle", "loading", t, `${API_BASE_URL}/history`); 
+            if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {
+                createApiErrorToast(err, toast, "historyLoadErrorTitle", "loading", t, `${API_BASE_URL}/history`); 
+            }
         }
         finally { setIsHistoryLoading(false); }
       } else {
@@ -766,7 +694,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     
     loadClientSideDataAndFetchInitial();
-  }, [decodeAndSetToken, t, toast, fetchWithAuth, logout]); // logout is a dependency here for the catch blocks
+  }, [decodeAndSetToken, t, toast, fetchWithAuth, logout, API_BASE_URL]); 
 
 
  useEffect(() => {
@@ -1077,7 +1005,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const setAppMode = useCallback((mode: AppMode) => {
     if (mode !== appModeState) {
-      addHistoryLogEntryRef.current?.('historyLogSwitchToPersonalMode', undefined, 'account');
+      addHistoryLogEntryRef.current?.(mode === 'personal' ? 'historyLogSwitchToPersonalMode' : 'historyLogSwitchToWorkMode', undefined, 'account');
     }
     setAppModeState(mode);
   }, [appModeState]); 
@@ -1101,7 +1029,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         throw new Error(formatBackendError(errorData, `Login failed: HTTP ${response.status}`));
       }
       const tokenData: Token = await response.json();
-      newAccessToken = tokenData.access_token;
+      newAccessToken = tokenData.access_token; // Store token before await
       await decodeAndSetToken(newAccessToken); 
       
       addHistoryLogEntryRef.current?.('historyLogLogin', undefined, 'account');
@@ -1115,7 +1043,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           try {
               setIsActivitiesLoading(true);
               const actResponse = await fetchWithAuth(`${API_BASE_URL}/activities`, {}, newAccessToken);
-              if (!actResponse.ok) throw new Error(`Activities fetch failed: ${actResponse.statusText}`);
+              if (!actResponse.ok) { if (actResponse.status === 401) { logout(); } throw new Error(`Activities fetch failed: ${actResponse.statusText}`); }
               const backendActivities: BackendActivity[] = await actResponse.json();
               const newPersonal: Activity[] = [], newWork: Activity[] = [];
               backendActivities.forEach(beAct => {
@@ -1125,44 +1053,48 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               });
               setPersonalActivities(newPersonal); setWorkActivities(newWork);
           } catch (err) { 
-            if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
-            createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`); 
+             if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {
+                createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`); 
+             }
           }
           finally { setIsActivitiesLoading(false); }
 
           try {
               setIsCategoriesLoading(true);
               const catResponse = await fetchWithAuth(`${API_BASE_URL}/categories`, {}, newAccessToken);
-              if (!catResponse.ok) throw new Error(`Categories fetch failed: ${catResponse.statusText}`);
+              if (!catResponse.ok) { if (catResponse.status === 401) { logout(); } throw new Error(`Categories fetch failed: ${catResponse.statusText}`); }
               const backendCategories: BackendCategory[] = await catResponse.json();
               setAllCategories(backendCategories.map(cat => backendToFrontendCategory(cat)));
           } catch (err) { 
-            if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
-            createApiErrorToast(err, toast, "toastCategoryLoadErrorTitle", "loading", t, `${API_BASE_URL}/categories`); 
+             if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {
+                createApiErrorToast(err, toast, "toastCategoryLoadErrorTitle", "loading", t, `${API_BASE_URL}/categories`); 
+             }
           }
           finally { setIsCategoriesLoading(false); }
 
           try {
               setIsAssigneesLoading(true);
               const userResponse = await fetchWithAuth(`${API_BASE_URL}/users`, {}, newAccessToken);
-              if (!userResponse.ok) throw new Error(`Users fetch failed: ${userResponse.statusText}`);
+              if (!userResponse.ok) { if (userResponse.status === 401) { logout(); } throw new Error(`Users fetch failed: ${userResponse.statusText}`); }
               const backendUsers: BackendUser[] = await userResponse.json();
               setAllAssignees(backendUsers.map(user => backendToFrontendAssignee(user)));
           } catch (err) { 
-            if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
-            createApiErrorToast(err, toast, "toastAssigneeLoadErrorTitle", "loading", t, `${API_BASE_URL}/users`); 
+             if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {
+                createApiErrorToast(err, toast, "toastAssigneeLoadErrorTitle", "loading", t, `${API_BASE_URL}/users`); 
+             }
           }
           finally { setIsAssigneesLoading(false); }
 
           try {
               setIsHistoryLoading(true);
               const histResponse = await fetchWithAuth(`${API_BASE_URL}/history`, {}, newAccessToken);
-              if (!histResponse.ok) throw new Error(`History fetch failed: ${histResponse.statusText}`);
+              if (!histResponse.ok) { if (histResponse.status === 401) { logout(); } throw new Error(`History fetch failed: ${histResponse.statusText}`); }
               const backendHistoryItems: BackendHistory[] = await histResponse.json();
               setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
           } catch (err) { 
-            if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
-            createApiErrorToast(err, toast, "historyLoadErrorTitle", "loading", t, `${API_BASE_URL}/history`); 
+            if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {
+                createApiErrorToast(err, toast, "historyLoadErrorTitle", "loading", t, `${API_BASE_URL}/history`); 
+            }
           }
           finally { setIsHistoryLoading(false); }
       }
@@ -1189,13 +1121,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+             if (response.status === 401) { logout(); }
             throw new Error(formatBackendError(errorData, `Password change failed: HTTP ${response.status}`));
         }
         addHistoryLogEntryRef.current?.('historyLogPasswordChangeAttempt', undefined, 'account'); 
         toast({ title: t('passwordUpdateSuccessTitle'), description: t('passwordUpdateSuccessDescription') });
         return true;
     } catch (err) {
-        createApiErrorToast(err, toast, "changePasswordModalTitle", "updating", t, `${API_BASE_URL}/users/${currentUserId}/change-password`, logout);
+        if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {
+            createApiErrorToast(err, toast, "changePasswordModalTitle", "updating", t, `${API_BASE_URL}/users/${currentUserId}/change-password`);
+        }
         setError((err as Error).message);
         return false;
     }
@@ -1207,12 +1142,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const payload: BackendCategoryCreatePayload = { name, icon_name: iconName, mode: frontendToBackendCategoryMode(mode) };
     try {
       const response = await fetchWithAuth(`${API_BASE_URL}/categories`, { method: 'POST', body: JSON.stringify(payload) });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add category: HTTP ${response.status}`));}
+      if (!response.ok) { if (response.status === 401) { logout(); } const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add category: HTTP ${response.status}`));}
       const newBackendCategory: BackendCategory = await response.json();
       setAllCategories(prev => [...prev, backendToFrontendCategory(newBackendCategory)]);
       toast({ title: t('toastCategoryAddedTitle'), description: t('toastCategoryAddedDescription', { categoryName: name }) });
       addHistoryLogEntryRef.current?.(mode === 'personal' ? 'historyLogAddCategoryPersonal' : mode === 'work' ? 'historyLogAddCategoryWork' : 'historyLogAddCategoryAll', { name }, 'category');
-    } catch (err) { createApiErrorToast(err, toast, "toastCategoryAddedTitle", "adding", t, `${API_BASE_URL}/categories`, logout); setError((err as Error).message); throw err; }
+    } catch (err) { if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) { createApiErrorToast(err, toast, "toastCategoryAddedTitle", "adding", t, `${API_BASE_URL}/categories`);} setError((err as Error).message); throw err; }
   }, [fetchWithAuth, toast, t, logout, API_BASE_URL]);
 
   const updateCategory = useCallback(async (categoryId: number, updates: Partial<Omit<Category, 'id' | 'icon'>>, oldCategoryData?: Category) => {
@@ -1224,7 +1159,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     try {
       const response = await fetchWithAuth(`${API_BASE_URL}/categories/${categoryId}`, { method: 'PUT', body: JSON.stringify(payload) });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to update category: HTTP ${response.status}`));}
+      if (!response.ok) { if (response.status === 401) { logout(); } const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to update category: HTTP ${response.status}`));}
       const updatedBackendCategory: BackendCategory = await response.json();
       const updatedFrontendCategory = backendToFrontendCategory(updatedBackendCategory);
       setAllCategories(prev => prev.map(cat => (cat.id === categoryId ? updatedFrontendCategory : cat)));
@@ -1233,7 +1168,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (updatedFrontendCategory.mode === 'personal') actionKey = 'historyLogUpdateCategoryPersonal';
       else if (updatedFrontendCategory.mode === 'work') actionKey = 'historyLogUpdateCategoryWork';
       addHistoryLogEntryRef.current?.(actionKey, { name: updatedFrontendCategory.name, oldName: oldCategoryData?.name !== updatedFrontendCategory.name ? oldCategoryData?.name : undefined , oldMode: oldCategoryData?.mode !== updatedFrontendCategory.mode ? oldCategoryData?.mode : undefined }, 'category');
-    } catch (err) { createApiErrorToast(err, toast, "toastCategoryUpdatedTitle", "updating", t, `${API_BASE_URL}/categories/${categoryId}`, logout); setError((err as Error).message); throw err; }
+    } catch (err) { if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {createApiErrorToast(err, toast, "toastCategoryUpdatedTitle", "updating", t, `${API_BASE_URL}/categories/${categoryId}`);} setError((err as Error).message); throw err; }
   }, [fetchWithAuth, toast, t, logout, API_BASE_URL]);
 
   const deleteCategory = useCallback(async (categoryId: number) => {
@@ -1242,14 +1177,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!categoryToDelete) return; 
     try {
       const response = await fetchWithAuth(`${API_BASE_URL}/categories/${categoryId}`, { method: 'DELETE' });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete category: HTTP ${response.status}`));}
+      if (!response.ok) { if (response.status === 401) { logout(); } const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete category: HTTP ${response.status}`));}
       setAllCategories(prev => prev.filter(cat => cat.id !== categoryId));
       const updateActivitiesCategory = (acts: Activity[]) => acts.map(act => act.categoryId === categoryId ? { ...act, categoryId: 0 } : act); 
       setPersonalActivities(prev => updateActivitiesCategory(prev));
       setWorkActivities(prev => updateActivitiesCategory(prev));
       toast({ title: t('toastCategoryDeletedTitle'), description: t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name }) });
       addHistoryLogEntryRef.current?.('historyLogDeleteCategory', { name: categoryToDelete.name, mode: categoryToDelete.mode as string }, 'category');
-    } catch (err) { createApiErrorToast(err, toast, "toastCategoryDeletedTitle", "deleting", t, `${API_BASE_URL}/categories/${categoryId}`, logout); setError((err as Error).message); throw err; }
+    } catch (err) { if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) { createApiErrorToast(err, toast, "toastCategoryDeletedTitle", "deleting", t, `${API_BASE_URL}/categories/${categoryId}`);} setError((err as Error).message); throw err; }
   }, [fetchWithAuth, allCategories, toast, t, logout, API_BASE_URL]);
 
   const addAssignee = useCallback(async (name: string, username: string, password?: string, isAdmin?: boolean) => {
@@ -1262,12 +1197,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     try {
       const response = await fetchWithAuth(`${API_BASE_URL}/users`, { method: 'POST', body: JSON.stringify(payload) });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add assignee: HTTP ${response.status}`));}
+      if (!response.ok) { if (response.status === 401) { logout(); } const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add assignee: HTTP ${response.status}`));}
       const newBackendUser: BackendUser = await response.json();
       setAllAssignees(prev => [...prev, backendToFrontendAssignee(newBackendUser)]);
       toast({ title: t('toastAssigneeAddedTitle'), description: t('toastAssigneeAddedDescription', { assigneeName: name }) });
       addHistoryLogEntryRef.current?.('historyLogAddAssignee', { name, isAdmin: newBackendUser.is_admin ? 1 : 0 }, 'assignee');
-    } catch (err) { createApiErrorToast(err, toast, "toastAssigneeAddedTitle", "adding", t, `${API_BASE_URL}/users`, logout); setError((err as Error).message); throw err; }
+    } catch (err) { if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {createApiErrorToast(err, toast, "toastAssigneeAddedTitle", "adding", t, `${API_BASE_URL}/users`);} setError((err as Error).message); throw err; }
   }, [fetchWithAuth, toast, t, logout, API_BASE_URL]);
 
   const updateAssignee = useCallback(async (assigneeId: number, updates: Partial<Pick<Assignee, 'name' | 'username' | 'isAdmin'>>, newPassword?: string) => {
@@ -1286,7 +1221,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
          body: JSON.stringify(payload) 
       });
 
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to update assignee: HTTP ${response.status}`));}
+      if (!response.ok) { if (response.status === 401) { logout(); } const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to update assignee: HTTP ${response.status}`));}
       const updatedBackendUser: BackendUser = await response.json();
       const frontendAssignee = backendToFrontendAssignee(updatedBackendUser);
       
@@ -1307,7 +1242,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     } catch (err) {
         if (!(err instanceof Error && err.message.includes(t('usernameTakenErrorDescription', {username: updates.username || ''})))) {
-            createApiErrorToast(err, toast, "toastAssigneeUpdatedTitle", "updating", t, `${API_BASE_URL}/users/${assigneeId}`, logout);
+           if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {
+            createApiErrorToast(err, toast, "toastAssigneeUpdatedTitle", "updating", t, `${API_BASE_URL}/users/${assigneeId}`);
+           }
         }
         setError((err as Error).message); throw err;
     }
@@ -1319,7 +1256,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!assigneeToDelete) return; 
     try {
       const response = await fetchWithAuth(`${API_BASE_URL}/users/${assigneeId}`, { method: 'DELETE' });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete assignee: HTTP ${response.status}`));}
+      if (!response.ok) { if (response.status === 401) { logout(); } const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete assignee: HTTP ${response.status}`));}
       setAllAssignees(prev => prev.filter(asg => asg.id !== assigneeId));
       const updateActivities = (acts: Activity[]) =>
         acts.map(act => ({
@@ -1331,7 +1268,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       
       toast({ title: t('toastAssigneeDeletedTitle'), description: t('toastAssigneeDeletedDescription', { assigneeName: assigneeToDelete.name }) });
       addHistoryLogEntryRef.current?.('historyLogDeleteAssignee', { name: assigneeToDelete.name }, 'assignee');
-    } catch (err) { createApiErrorToast(err, toast, "toastAssigneeDeletedTitle", "deleting", t, `${API_BASE_URL}/users/${assigneeId}`, logout); setError((err as Error).message); throw err; }
+    } catch (err) { if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) { createApiErrorToast(err, toast, "toastAssigneeDeletedTitle", "deleting", t, `${API_BASE_URL}/users/${assigneeId}`);} setError((err as Error).message); throw err; }
   }, [fetchWithAuth, assignees, toast, t, logout, API_BASE_URL]);
 
 
@@ -1361,7 +1298,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     try {
       const response = await fetchWithAuth(`${API_BASE_URL}/activities`, { method: 'POST', body: JSON.stringify(payload) });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add activity: HTTP ${response.status}`));}
+      if (!response.ok) { if (response.status === 401) { logout(); } const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add activity: HTTP ${response.status}`));}
       
       const newBackendActivity: BackendActivity | null | undefined = await response.json().catch(() => null);
       const newFrontendActivity = backendToFrontendActivity(newBackendActivity, appModeState); 
@@ -1372,8 +1309,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setWorkActivities(prev => [...prev, newFrontendActivity]);
       }
       toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
-      addHistoryLogEntryRef.current?.(appModeState === 'personal' ? 'historyLogAddActivityPersonal' : 'historyLogAddActivityWork', { title: newFrontendActivity.title }, appModeState);
-    } catch (err) { createApiErrorToast(err, toast, "toastActivityAddedTitle", "adding", t, `${API_BASE_URL}/activities`, logout); setError((err as Error).message); throw err; }
+      addHistoryLogEntryRef.current?.(newFrontendActivity.appMode === 'personal' ? 'historyLogAddActivityPersonal' : 'historyLogAddActivityWork', { title: newFrontendActivity.title }, newFrontendActivity.appMode);
+    } catch (err) { if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) { createApiErrorToast(err, toast, "toastActivityAddedTitle", "adding", t, `${API_BASE_URL}/activities`);} setError((err as Error).message); throw err; }
   }, [fetchWithAuth, appModeState, toast, t, logout, API_BASE_URL]);
 
  const updateActivity = useCallback(async (activityId: number, updates: Partial<Omit<Activity, 'id' | 'todos'>>, originalActivity?: Activity) => {
@@ -1391,10 +1328,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const effectiveAppMode = updates.appMode || activityToUpdate.appMode;
     const payload = frontendToBackendActivityPayload({ ...activityToUpdate, ...updates, appMode: effectiveAppMode }, true) as BackendActivityUpdatePayload;
 
-
     try {
       const response = await fetchWithAuth(`${API_BASE_URL}/activities/${activityId}`, { method: 'PUT', body: JSON.stringify(payload) });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to update activity: HTTP ${response.status}`));}
+      if (!response.ok) { if (response.status === 401) { logout(); } const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to update activity: HTTP ${response.status}`));}
       const updatedBackendActivity: BackendActivity = await response.json();
       
       let processedActivityFromBackend = backendToFrontendActivity(updatedBackendActivity, appModeState);
@@ -1402,7 +1338,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const finalFrontendActivity = {
         ...activityToUpdate, 
         ...processedActivityFromBackend, 
-        todos: activityToUpdate.todos || [],
+        todos: activityToUpdate.todos || [], // Preserve client-side todos list
         completedOccurrences: updates.completedOccurrences || activityToUpdate.completedOccurrences || {},
         completed: updates.completed !== undefined ? updates.completed : activityToUpdate.completed,
         completedAt: updates.completedAt !== undefined ? updates.completedAt : activityToUpdate.completedAt,
@@ -1420,7 +1356,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
       addHistoryLogEntryRef.current?.(finalFrontendActivity.appMode === 'personal' ? 'historyLogUpdateActivityPersonal' : 'historyLogUpdateActivityWork', { title: finalFrontendActivity.title }, finalFrontendActivity.appMode);
-    } catch (err) { createApiErrorToast(err, toast, "toastActivityUpdatedTitle", "updating", t, `${API_BASE_URL}/activities/${activityId}`, logout); setError((err as Error).message); throw err; }
+    } catch (err) { if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {createApiErrorToast(err, toast, "toastActivityUpdatedTitle", "updating", t, `${API_BASE_URL}/activities/${activityId}`);} setError((err as Error).message); throw err; }
   }, [fetchWithAuth, appModeState, personalActivities, workActivities, toast, t, logout, API_BASE_URL]);
 
   const deleteActivity = useCallback(async (activityId: number) => {
@@ -1444,11 +1380,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     try {
       const response = await fetchWithAuth(`${API_BASE_URL}/activities/${activityId}`, { method: 'DELETE' });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete activity: HTTP ${response.status}`));}
+      if (!response.ok) { if (response.status === 401) { logout(); } const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete activity: HTTP ${response.status}`));}
       setter(prev => prev.filter(act => act.id !== activityId));
       toast({ title: t('toastActivityDeletedTitle'), description: t('toastActivityDeletedDescription', { activityTitle: activityToDelete.title }) });
       addHistoryLogEntryRef.current?.(modeForLog === 'personal' ? 'historyLogDeleteActivityPersonal' : 'historyLogDeleteActivityWork', { title: activityToDelete.title }, modeForLog);
-    } catch (err) { createApiErrorToast(err, toast, "toastActivityDeletedTitle", "deleting", t, `${API_BASE_URL}/activities/${activityId}`, logout); setError((err as Error).message); throw err; }
+    } catch (err) { if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {createApiErrorToast(err, toast, "toastActivityDeletedTitle", "deleting", t, `${API_BASE_URL}/activities/${activityId}`);} setError((err as Error).message); throw err; }
   }, [fetchWithAuth, personalActivities, workActivities, toast, t, logout, API_BASE_URL]);
 
 
@@ -1457,7 +1393,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const payload: BackendTodoCreate = { text: todoText, complete: completed };
     try {
       const response = await fetchWithAuth(`${API_BASE_URL}/activities/${activityId}/todos`, { method: 'POST', body: JSON.stringify(payload) });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add todo: HTTP ${response.status}`));}
+      if (!response.ok) { if (response.status === 401) { logout(); } const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add todo: HTTP ${response.status}`));}
       const newBackendTodo: BackendTodo = await response.json();
       const newFrontendTodo: Todo = {
         id: newBackendTodo.id, 
@@ -1478,7 +1414,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       toast({ title: t('toastTodoAddedTitle'), description: t('toastTodoAddedDescription', { todoText }) });
       return newFrontendTodo;
     } catch (err) { 
-        createApiErrorToast(err, toast, "toastTodoAddedTitle", "adding", t, `${API_BASE_URL}/activities/${activityId}/todos`, logout); 
+        if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {
+            createApiErrorToast(err, toast, "toastTodoAddedTitle", "adding", t, `${API_BASE_URL}/activities/${activityId}/todos`);
+        }
         setError((err as Error).message); 
         return null; 
     }
@@ -1498,6 +1436,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             body: JSON.stringify(payload)
         });
         if (!response.ok) {
+            if (response.status === 401) { logout(); }
             const errorData = await response.json().catch(() => ({ detail: response.statusText }));
             throw new Error(formatBackendError(errorData, `Failed to update todo: HTTP ${response.status}`));
         }
@@ -1524,7 +1463,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateInList(personalActivities, setPersonalActivities);
         updateInList(workActivities, setWorkActivities);
     } catch (err) {
-        createApiErrorToast(err, toast, "toastTodoUpdatedTitle", "updating", t, `${API_BASE_URL}/todos/${todoId}`, logout);
+        if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {
+            createApiErrorToast(err, toast, "toastTodoUpdatedTitle", "updating", t, `${API_BASE_URL}/todos/${todoId}`);
+        }
         setError((err as Error).message);
         throw err;
     }
@@ -1538,7 +1479,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     try {
       const response = await fetchWithAuth(`${API_BASE_URL}/todos/${todoId}`, { method: 'DELETE' });
-      if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete todo: HTTP ${response.status}`));}
+      if (!response.ok) { if (response.status === 401) { logout(); } const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete todo: HTTP ${response.status}`));}
       
       const updateInList = (list: Activity[], setter: React.Dispatch<React.SetStateAction<Activity[]>>) => {
           const activityIndex = list.findIndex(act => act.id === activityId);
@@ -1552,7 +1493,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       updateInList(workActivities, setWorkActivities);
 
       toast({ title: t('toastTodoDeletedTitle'), description: t('toastTodoDeletedDescription', { todoText: todoToDelete?.text || "Todo" }) });
-    } catch (err) { createApiErrorToast(err, toast, "toastTodoDeletedTitle", "deleting", t, `${API_BASE_URL}/todos/${todoId}`, logout); setError((err as Error).message); throw err; }
+    } catch (err) { if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) { createApiErrorToast(err, toast, "toastTodoDeletedTitle", "deleting", t, `${API_BASE_URL}/todos/${todoId}`);} setError((err as Error).message); throw err; }
   }, [fetchWithAuth, personalActivities, workActivities, toast, t, logout, API_BASE_URL]); 
 
   const toggleOccurrenceCompletion = useCallback((masterActivityId: number, occurrenceDateTimestamp: number, completedState: boolean) => {
@@ -1587,6 +1528,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
     addHistoryLogEntryRef.current?.(modeForLog === 'personal' ? 'historyLogToggleActivityCompletionPersonal' : 'historyLogToggleActivityCompletionWork', { title: activityTitleForLog, completed: completedState ? 1 : 0 }, modeForLog);
   }, [personalActivities, workActivities]); 
+
+  const fetchAndSetSpecificActivityDetails = useCallback(async (activityId: number): Promise<Activity | null> => {
+    try {
+        const response = await fetchWithAuth(`${API_BASE_URL}/activities/${activityId}`);
+        if (!response.ok) {
+            if (response.status === 401) { logout(); }
+            const errorData = await response.json().catch(() => ({ detail: `HTTP ${response.status}: ${response.statusText}` }));
+            throw new Error(formatBackendError(errorData, `Failed to fetch activity details for ID ${activityId}.`));
+        }
+        const backendActivity: BackendActivity = await response.json();
+        const frontendActivity = backendToFrontendActivity(backendActivity, appModeState); // Use current appModeState
+
+        const setter = frontendActivity.appMode === 'personal' ? setPersonalActivities : setWorkActivities;
+        
+        setter(prevActivities => {
+            const existingActivity = prevActivities.find(act => act.id === activityId);
+            if (existingActivity) {
+                // Merge: keep client-side specific states like completedOccurrences if backend doesn't provide them
+                const updatedActivity = {
+                    ...existingActivity, // Keep existing client-side state
+                    ...frontendActivity, // Overwrite with fresh data from backend
+                    todos: frontendActivity.todos || existingActivity.todos || [], // Prioritize fresh todos
+                };
+                return prevActivities.map(act => act.id === activityId ? updatedActivity : act);
+            }
+            // If activity wasn't in the list (shouldn't happen if list is comprehensive)
+            return [...prevActivities, frontendActivity]; 
+        });
+        return frontendActivity;
+    } catch (err) {
+         if (!(err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401')))) {
+            createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities/${activityId}`);
+         }
+        return null;
+    }
+  }, [fetchWithAuth, appModeState, API_BASE_URL, t, toast, logout, personalActivities, workActivities]);
 
 
   const getCategoryById = useCallback((categoryId: number) => allCategories.find(cat => cat.id === categoryId), [allCategories]);
@@ -1623,13 +1600,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     pomodoroPhase, pomodoroTimeRemaining, pomodoroIsRunning, pomodoroCyclesCompleted,
     startPomodoroWork, startPomodoroShortBreak, startPomodoroLongBreak, pausePomodoro, resumePomodoro, resetPomodoro, isPomodoroReady,
     isAppLocked, appPinState, unlockApp, setAppPin,
+    fetchAndSetSpecificActivityDetails, // Add new function to context
   }), [
     getRawActivities, filteredCategories, assigneesForContext, appModeState, setAppMode, addActivity, updateActivity, deleteActivity, toggleOccurrenceCompletion,
     addTodoToActivity, updateTodoInActivity, deleteTodoFromActivity, getCategoryById, addCategory, updateCategory, deleteCategory, addAssignee, updateAssignee, deleteAssignee,
     getAssigneeById, combinedIsLoading, error, isAuthenticated, login, logout, changePassword, getCurrentUserId, uiNotifications, stableAddUINotification, markUINotificationAsRead,
     markAllUINotificationsAsRead, clearAllUINotifications, historyLog, addHistoryLogEntry, systemNotificationPermission, requestSystemNotificationPermission, pomodoroPhase,
     pomodoroTimeRemaining, pomodoroIsRunning, pomodoroCyclesCompleted, startPomodoroWork, startPomodoroShortBreak, startPomodoroLongBreak, pausePomodoro, resumePomodoro,
-    resetPomodoro, isPomodoroReady, isAppLocked, appPinState, unlockApp, setAppPin
+    resetPomodoro, isPomodoroReady, isAppLocked, appPinState, unlockApp, setAppPin, fetchAndSetSpecificActivityDetails // Add to dependency array
   ]);
 
 
@@ -1639,3 +1617,4 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+
