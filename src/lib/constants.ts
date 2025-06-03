@@ -18,6 +18,9 @@ export const APP_NAME = 'À faire';
 // Set to null to disable PIN lock feature
 export const HARDCODED_APP_PIN: string | null = "1234";
     
+// Default API Base URL. Can be overridden by NEXT_PUBLIC_API_BASE_URL environment variable.
+export const DEFAULT_API_BASE_URL = "https://afaire.is-cool.dev/api";
+
 // Default JWT secret key if not set in .env. IMPORTANT: Change this for production.
 export const DEFAULT_JWT_SECRET_KEY = "your-secret-key-change-in-production";
 
@@ -25,4 +28,3 @@ export const DEFAULT_JWT_SECRET_KEY = "your-secret-key-change-in-production";
 export const POMODORO_WORK_DURATION_SECONDS = 25 * 60;
 export const POMODORO_SHORT_BREAK_DURATION_SECONDS = 5 * 60;
 export const POMODORO_LONG_BREAK_DURATION_SECONDS = 15 * 60;
-
