@@ -17,7 +17,7 @@ import { useRouter } from 'next/navigation'; // Import useRouter for navigation
 interface ActivityListItemProps {
   activity: Activity; // This can be a master activity or a generated instance
   category: Category | undefined;
-  onEdit: () => void; // Kept for potential direct modal use in other contexts if needed, but navigation will be used here
+  onEdit: () => void;
   onDelete: () => void;
   showDate?: boolean;
   instanceDate?: Date; // The specific date of this occurrence if it's a recurring instance
@@ -36,46 +36,33 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
     ? !!activity.completedOccurrences?.[occurrenceDateKey]
     : !!activity.completed;
 
-  // For recurring instances, todos are fresh copies, so their completion is per instance
-  // However, the activity.todos on a recurring instance (which is a shallow copy of master todos)
-  // does not reflect instance-specific completion.
-  // For now, we'll show master todo counts for recurring, and live counts for non-recurring.
-  // A more advanced implementation would involve managing todo completion per instance.
-  const completedTodos = !activity.isRecurringInstance ? activity.todos.filter(t => t.completed).length : 0; // Simplified for now
-  const totalTodos = activity.todos.length;
+  const todosForThisInstance = activity.todos || [];
+  const totalTodos = todosForThisInstance.length;
+  const completedTodos = todosForThisInstance.filter(t => t.completed).length;
 
   const handleActivityCompletedChange = (completedValue: boolean) => {
     if (activity.isRecurringInstance && activity.masterActivityId && activity.originalInstanceDate) {
-      // For recurring instance, toggle its specific completion
       toggleOccurrenceCompletion(activity.masterActivityId, activity.originalInstanceDate, completedValue);
     } else if (!activity.isRecurringInstance) {
-      // For non-recurring (master) activity
       let updatedTodos = activity.todos;
       if (completedValue && activity.todos.length > 0) {
-        // If master is marked complete, mark all its todos complete
         updatedTodos = activity.todos.map(todo => ({ ...todo, completed: true }));
       }
-      // For non-recurring, set completedAt timestamp
       const completedAt = completedValue ? Date.now() : null;
       updateActivity(activity.id, { completed: completedValue, todos: updatedTodos as Todo[], completedAt });
     }
   };
 
   const handleEditClick = () => {
-    // Determine the ID to use for the edit route
-    // If it's an instance, we edit the master activity definition
     const editId = activity.masterActivityId || activity.id;
     let url = `/activity-editor?id=${editId}`;
     if (activity.isRecurringInstance && activity.originalInstanceDate) {
-      // Optionally pass instanceDate if the form needs to be aware of the specific instance context
-      // For now, editing an instance still edits the master series.
       url += `&instanceDate=${activity.originalInstanceDate}`;
     }
     router.push(url);
   };
 
   const handleAddToCalendar = () => {
-    // Use effectiveDate for the ICS file, which is instanceDate or activity.createdAt
     const icsContent = generateICSContent(activity, effectiveDate);
     const filename = `${(activity.title || 'activity').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.ics`;
     downloadFile(filename, icsContent);
@@ -126,7 +113,6 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
                       {activity.time}
                     </div>
                   )}
-                  {/* Show recurrence info only for the master activity card, not for each instance */}
                   {activity.recurrence && activity.recurrence.type !== 'none' && !activity.isRecurringInstance && (
                      <div className={cn(
                       "flex items-center text-xs text-muted-foreground",
@@ -156,7 +142,7 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
           </Button>
         </div>
       </CardHeader>
-      {(category || (totalTodos > 0 && !activity.isRecurringInstance)) && ( // Show todos count only for non-recurring or master
+      {(category || totalTodos > 0) && (
         <CardContent className="px-3 pt-1 pb-2 pl-9">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
             {category && (
@@ -165,20 +151,20 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
                 {category.name}
               </Badge>
             )}
-            {totalTodos > 0 && !activity.isRecurringInstance && (
+            {totalTodos > 0 && (
               <p className={cn("text-xs", isCompletedForThisOccurrence ? "text-muted-foreground" : "text-muted-foreground")}>
                 {t('todosCompleted', { completed: completedTodos, total: totalTodos })}
               </p>
             )}
           </div>
-          {totalTodos === 0 && !activity.isRecurringInstance && !category && !activity.time && !showDate && (
-            <p className={cn("text-xs mt-1", isCompletedForThisOccurrence ? "text-muted-foreground/80" : "text-muted-foreground")}>
-              {t('noDetailsAvailable')}
-            </p>
-          )}
-          {totalTodos === 0 && !activity.isRecurringInstance && (category || activity.time || showDate) && (
+          {totalTodos === 0 && (category || activity.time || showDate) && (
             <p className={cn("text-xs mt-1", isCompletedForThisOccurrence ? "text-muted-foreground/80" : "text-muted-foreground")}>
               {t('noTodosForThisActivity')}
+            </p>
+          )}
+          {totalTodos === 0 && !category && !activity.time && !showDate && (
+            <p className={cn("text-xs mt-1", isCompletedForThisOccurrence ? "text-muted-foreground/80" : "text-muted-foreground")}>
+              {t('noDetailsAvailable')}
             </p>
           )}
         </CardContent>
@@ -186,4 +172,4 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
     </Card>
   );
 }
-
+    
