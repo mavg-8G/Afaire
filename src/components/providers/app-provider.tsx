@@ -32,7 +32,8 @@ import { useTranslations } from '@/contexts/language-context';
 import { enUS, es, fr } from 'date-fns/locale';
 import { useTheme } from 'next-themes';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || DEFAULT_API_BASE_URL;
+const envApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+const API_BASE_URL = (envApiBaseUrl && envApiBaseUrl.trim() !== '') ? envApiBaseUrl : DEFAULT_API_BASE_URL;
 const JWT_SECRET_KEY_FOR_DECODING = process.env.NEXT_PUBLIC_JWT_SECRET_KEY || DEFAULT_JWT_SECRET_KEY;
 
 
@@ -362,7 +363,7 @@ const frontendToBackendActivityPayload = (
   }
 
   if (!isUpdate && activity.todos && activity.todos.length > 0) {
-    (payload as BackendActivityCreatePayload).todos = activity.todos.map(t => ({ text: t.text, complete: t.completed }));
+    (payload as BackendActivityCreatePayload).todos = activity.todos.map(t => ({ text: t.text, complete: !!t.completed }));
   } else if (!isUpdate) {
     (payload as BackendActivityCreatePayload).todos = [];
   }
@@ -487,6 +488,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const addHistoryLogEntryRef = useRef<((actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined | null>, scope?: HistoryLogEntry['scope']) => Promise<void>) | null>(null);
 
+  // Order of useCallback definitions is critical to avoid "Cannot access before initialization" errors
   const getCurrentUserId = useCallback((): number | null => {
     return decodedJwt?.userId ? decodedJwt.userId : (decodedJwt?.sub ? parseInt(decodedJwt.sub, 10) : null);
   }, [decodedJwt]);
@@ -522,7 +524,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
     }
   }, [JWT_SECRET_KEY_FOR_DECODING, toast]);
-
+  
   const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}, tokenToUse?: string | null): Promise<Response> => {
     const currentToken = tokenToUse || jwtToken;
 
@@ -580,6 +582,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.error(`[AppProvider] Failed logging history for action ${actionKey}:`, (err as Error).message);
     }
   }, [fetchWithAuth, getCurrentUserId, t, toast, API_BASE_URL]);
+  
+  // This ref needs to be updated whenever addHistoryLogEntry changes
+  useEffect(() => { addHistoryLogEntryRef.current = addHistoryLogEntry;}, [addHistoryLogEntry]);
 
   const postToServiceWorker = useCallback((message: any) => {
     if (typeof window !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller) {
@@ -616,8 +621,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     postToServiceWorker({ type: 'RESET_TIMER' });
     if (logoutChannel) logoutChannel.postMessage('logout_event_v2');
   }, [decodeAndSetToken, postToServiceWorker]); 
-
-  useEffect(() => { addHistoryLogEntryRef.current = addHistoryLogEntry;}, [addHistoryLogEntry]);
   
   useEffect(() => {
     const loadClientSideDataAndFetchInitial = async () => {
@@ -634,9 +637,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       let currentTokenForInitialLoad: string | null = null;
       
       if (storedTokenString) {
-          const partialTokenData: Partial<Token> = { access_token: storedTokenString };
-          await decodeAndSetToken(partialTokenData as Token);
-          currentTokenForInitialLoad = jwtToken; 
+          const tempTokenData: Token = { 
+              access_token: storedTokenString, 
+              token_type: 'bearer', // Default/assumed
+              user_id: 0, username: '', is_admin: false // Placeholders, will be overwritten by decodeAndSetToken if token is valid
+          };
+          await decodeAndSetToken(tempTokenData); // This will try to verify and populate decodedJwt
+          currentTokenForInitialLoad = storedTokenString; // Use the raw stored token for initial fetches
       }
 
       const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
@@ -649,10 +656,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (currentTokenForInitialLoad) setIsAppLocked(true);
       }
 
-      if (currentTokenForInitialLoad) {
+      if (currentTokenForInitialLoad) { // Check the raw token again, as decodeAndSetToken might nullify jwtToken on expiry
         try {
             const actResponse = await fetchWithAuth(`${API_BASE_URL}/activities`, {}, currentTokenForInitialLoad);
-            if (!actResponse.ok) throw new Error(`Activities fetch failed: ${actResponse.statusText}`);
+            if (!actResponse.ok) throw new Error(`Activities fetch failed: HTTP ${actResponse.status} ${actResponse.statusText}`);
             const backendActivitiesList: BackendActivityListItem[] = await actResponse.json();
             const newPersonal: Activity[] = [], newWork: Activity[] = [];
 
@@ -666,7 +673,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     recurrence: {
                         type: beListItem.repeat_mode as RecurrenceType,
                         endDate: beListItem.end_date ? parseISO(beListItem.end_date.toString()).getTime() : null, 
-                        daysOfWeek: beListItem.days_of_week ? beListItem.days_of_week.split(',').map(Number) : undefined,
+                        daysOfWeek: beListItem.days_of_week ? beListItem.days_of_week.split(',').map(d => parseInt(d.trim(), 10)).filter(num => !isNaN(num)) : undefined,
                         dayOfMonth: beListItem.day_of_month ?? undefined,
                     },
                     completedOccurrences: {}, responsiblePersonIds: beListItem.responsible_ids,
@@ -682,7 +689,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         try {
             const catResponse = await fetchWithAuth(`${API_BASE_URL}/categories`, {}, currentTokenForInitialLoad);
-            if (!catResponse.ok) throw new Error(`Categories fetch failed: ${catResponse.statusText}`);
+            if (!catResponse.ok) throw new Error(`Categories fetch failed: HTTP ${catResponse.status} ${catResponse.statusText}`);
             const backendCategories: BackendCategory[] = await catResponse.json();
             setAllCategories(backendCategories.map(cat => backendToFrontendCategory(cat)));
         } catch (err) {
@@ -692,7 +699,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         try {
             const userResponse = await fetchWithAuth(`${API_BASE_URL}/users`, {}, currentTokenForInitialLoad);
-            if (!userResponse.ok) throw new Error(`Users fetch failed: ${userResponse.statusText}`);
+            if (!userResponse.ok) throw new Error(`Users fetch failed: HTTP ${userResponse.status} ${userResponse.statusText}`);
             const backendUsers: BackendUser[] = await userResponse.json();
             setAllAssignees(backendUsers.map(user => backendToFrontendAssignee(user)));
         } catch (err) {
@@ -702,7 +709,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         try {
             const histResponse = await fetchWithAuth(`${API_BASE_URL}/history`, {}, currentTokenForInitialLoad);
-            if (!histResponse.ok) throw new Error(`History fetch failed: ${histResponse.statusText}`);
+            if (!histResponse.ok) throw new Error(`History fetch failed: HTTP ${histResponse.status} ${histResponse.statusText}`);
             const backendHistoryItems: BackendHistory[] = await histResponse.json();
             setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
         } catch (err) {
@@ -716,7 +723,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     loadClientSideDataAndFetchInitial();
-  }, [decodeAndSetToken, t, toast, fetchWithAuth, logout, API_BASE_URL, appModeState, jwtToken]); 
+  }, [decodeAndSetToken, t, toast, fetchWithAuth, logout, API_BASE_URL, appModeState]); 
 
 
  useEffect(() => {
@@ -1065,7 +1072,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           try {
               setIsActivitiesLoading(true);
               const actResponse = await fetchWithAuth(`${API_BASE_URL}/activities`, {}, newAccessToken);
-              if (!actResponse.ok) throw new Error(`Activities fetch failed: ${actResponse.statusText}`);
+              if (!actResponse.ok) throw new Error(`Activities fetch failed: HTTP ${actResponse.status} ${actResponse.statusText}`);
               const backendActivitiesList: BackendActivityListItem[] = await actResponse.json();
               const newPersonal: Activity[] = [], newWork: Activity[] = [];
               backendActivitiesList.forEach(beListItem => {
@@ -1077,7 +1084,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     recurrence: {
                         type: beListItem.repeat_mode as RecurrenceType,
                         endDate: beListItem.end_date ? parseISO(beListItem.end_date.toString()).getTime() : null,
-                        daysOfWeek: beListItem.days_of_week ? beListItem.days_of_week.split(',').map(Number) : undefined,
+                        daysOfWeek: beListItem.days_of_week ? beListItem.days_of_week.split(',').map(d => parseInt(d.trim(),10)).filter(num => !isNaN(num)) : undefined,
                         dayOfMonth: beListItem.day_of_month ?? undefined,
                     },
                     completedOccurrences: {}, responsiblePersonIds: beListItem.responsible_ids,
@@ -1095,7 +1102,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           try {
               setIsCategoriesLoading(true);
               const catResponse = await fetchWithAuth(`${API_BASE_URL}/categories`, {}, newAccessToken);
-              if (!catResponse.ok) throw new Error(`Categories fetch failed: ${catResponse.statusText}`);
+              if (!catResponse.ok) throw new Error(`Categories fetch failed: HTTP ${catResponse.status} ${catResponse.statusText}`);
               const backendCategories: BackendCategory[] = await catResponse.json();
               setAllCategories(backendCategories.map(cat => backendToFrontendCategory(cat)));
           } catch (err) {
@@ -1107,7 +1114,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           try {
               setIsAssigneesLoading(true);
               const userResponse = await fetchWithAuth(`${API_BASE_URL}/users`, {}, newAccessToken);
-              if (!userResponse.ok) throw new Error(`Users fetch failed: ${userResponse.statusText}`);
+              if (!userResponse.ok) throw new Error(`Users fetch failed: HTTP ${userResponse.status} ${userResponse.statusText}`);
               const backendUsers: BackendUser[] = await userResponse.json();
               setAllAssignees(backendUsers.map(user => backendToFrontendAssignee(user)));
           } catch (err) {
@@ -1119,7 +1126,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           try {
               setIsHistoryLoading(true);
               const histResponse = await fetchWithAuth(`${API_BASE_URL}/history`, {}, newAccessToken);
-              if (!histResponse.ok) throw new Error(`History fetch failed: ${histResponse.statusText}`);
+              if (!histResponse.ok) throw new Error(`History fetch failed: HTTP ${histResponse.status} ${histResponse.statusText}`);
               const backendHistoryItems: BackendHistory[] = await histResponse.json();
               setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
           } catch (err) {
@@ -1431,7 +1438,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         time: activityToDelete.time,
         mode: activityToDelete.appMode
       }, modeForLog);
-    } catch (err) { if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); } else {createApiErrorToast(err, toast, "toastActivityDeletedTitle", "deleting", t, `${API_BASE_URL}/activities/${activityId}`);} setError((err as Error).message); throw err; }
+    } catch (err) { if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); } else { createApiErrorToast(err, toast, "toastActivityDeletedTitle", "deleting", t, `${API_BASE_URL}/activities/${activityId}`);} setError((err as Error).message); throw err; }
   }, [API_BASE_URL, fetchWithAuth, personalActivities, workActivities, toast, t, logout, allCategories, dateFnsLocale]);
 
 
