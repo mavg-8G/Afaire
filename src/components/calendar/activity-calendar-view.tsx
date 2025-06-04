@@ -356,14 +356,18 @@ export default function ActivityCalendarView() {
     }
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (activityToDelete) {
-      deleteActivity(activityToDelete.id); // This deletes the master, thus the series
-      toast({
-        title: t('toastActivityDeletedTitle'),
-        description: t('toastActivityDeletedDescription', { activityTitle: activityToDelete.title })
-      });
-      setActivityToDelete(null);
+      try {
+        await deleteActivity(activityToDelete.id);
+        // Success toast is handled by AppProvider's deleteActivity
+      } catch (error) {
+        // Error toast is handled by AppProvider's deleteActivity
+        // Log error for debugging if needed, but AppProvider already does
+        console.error("Failed to delete activity from ActivityCalendarView:", error);
+      } finally {
+        setActivityToDelete(null); // Close the dialog
+      }
     }
   };
 
@@ -560,4 +564,6 @@ export default function ActivityCalendarView() {
     </div>
   );
 }
+    
+
     
