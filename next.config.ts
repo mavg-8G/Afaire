@@ -21,10 +21,7 @@ const nextConfig: NextConfig = {
     ],
   },
   experimental: {
-    allowedDevOrigins: [
-      // The origin from the error log, assuming HTTPS and port 6000
-      'https://6000-firebase-studio-1747625597829.cluster-uf6urqn4lned4spwk4xorq6bpo.cloudworkstations.dev',
-    ],
+    // allowedDevOrigins was removed as it's not recognized in Next.js 15.3.3
   },
 };
 
