@@ -229,7 +229,7 @@ const backendToFrontendActivity = (
   backendActivityInput: BackendActivity | BackendActivityListItem | null | undefined,
   currentAppMode: AppMode
 ): Activity => {
-   const backendActivity = backendActivityInput as (BackendActivity & BackendActivityListItem);
+  const backendActivity = backendActivityInput as (BackendActivity & BackendActivityListItem);
 
   if (!backendActivity || typeof backendActivity !== 'object' || Object.keys(backendActivity).length === 0) {
     const fallbackId = Date.now() + Math.random();
@@ -277,8 +277,9 @@ const backendToFrontendActivity = (
   };
 
   let todosFromBackend: Todo[] = [];
-  if (Array.isArray(backendActivity.todos)) {
-    backendActivity.todos.forEach((bt: BackendTodo, index: number) => {
+  // Check if it's the rich BackendActivity (which has nested todos)
+  if ('todos' in backendActivity && Array.isArray(backendActivity.todos)) {
+    (backendActivity.todos as BackendTodo[]).forEach((bt: BackendTodo, index: number) => {
         const todoId = typeof bt?.id === 'number' ? bt.id : Date.now() + Math.random() + index;
         if (typeof bt?.id !== 'number') {
             console.warn(`[AppProvider] Warning: Todo at index ${index} for activity ID ${activityIdForLog} is missing a valid 'id' from backend. Using temporary ID ${todoId}. Backend todo:`, bt);
@@ -289,21 +290,22 @@ const backendToFrontendActivity = (
           completed: bt?.complete || false,
         });
       });
-  } else if (backendActivity.todos !== undefined && backendActivity.todos !== null) {
+  } else if ('todos' in backendActivity && backendActivity.todos !== undefined && backendActivity.todos !== null) {
      console.warn(`[AppProvider] Warning: backendActivity.todos is not an array for activity ID ${activityIdForLog}. Defaulting to empty array. Received:`, backendActivity.todos);
   }
+  // If it's BackendActivityListItem, todos are fetched separately
 
   let responsiblePersonIdsProcessed: number[] = [];
-  if (Array.isArray(backendActivity.responsibles)) { // From rich BackendActivity
-    responsiblePersonIdsProcessed = backendActivity.responsibles.map(r => r.id);
-  } else if (Array.isArray(backendActivity.responsible_ids)) { // From BackendActivityListItem / ActivityResponse
+  if ('responsibles' in backendActivity && Array.isArray(backendActivity.responsibles)) { // From rich BackendActivity
+    responsiblePersonIdsProcessed = (backendActivity.responsibles as BackendUser[]).map(r => r.id);
+  } else if ('responsible_ids' in backendActivity && Array.isArray(backendActivity.responsible_ids)) { // From BackendActivityListItem / ActivityResponse
     responsiblePersonIdsProcessed = backendActivity.responsible_ids;
   }
 
   let categoryIdToUse = 0;
-  if (backendActivity.category && typeof backendActivity.category.id === 'number') { // From rich BackendActivity
-      categoryIdToUse = backendActivity.category.id;
-  } else if (typeof backendActivity.category_id === 'number') { // From BackendActivityListItem / ActivityResponse or fallback
+  if ('category' in backendActivity && backendActivity.category && typeof (backendActivity.category as BackendCategory).id === 'number') { // From rich BackendActivity
+      categoryIdToUse = (backendActivity.category as BackendCategory).id;
+  } else if ('category_id' in backendActivity && typeof backendActivity.category_id === 'number') { // From BackendActivityListItem / ActivityResponse or fallback
       categoryIdToUse = backendActivity.category_id;
   } else {
       console.warn(`[AppProvider] Warning: Could not determine categoryId for activity ID ${activityIdForLog}. Defaulting to 0. Received category_id: ${backendActivity.category_id}, Received category object:`, backendActivity.category);
@@ -315,17 +317,39 @@ const backendToFrontendActivity = (
   }
 
   const completedOccurrencesMap: Record<string, boolean> = {};
-  if (Array.isArray(backendActivity.occurrences)) {
-    backendActivity.occurrences.forEach(occ => {
+  // Check if it's the rich BackendActivity (which might have initial occurrences)
+  if ('occurrences' in backendActivity && Array.isArray(backendActivity.occurrences)) {
+    (backendActivity.occurrences as BackendActivityOccurrence[]).forEach(occ => {
         try {
             const dateKey = formatISO(parseISO(occ.date), { representation: 'date' });
             completedOccurrencesMap[dateKey] = occ.complete;
         } catch (e) {
-            console.warn(`[AppProvider] Failed to parse occurrence date for activity ${activityIdForLog}: ${occ.date}`, e);
+            console.warn(`[AppProvider] Failed to parse occurrence date from rich activity ${activityIdForLog}: ${occ.date}`, e);
         }
     });
   }
+  // If it's BackendActivityListItem, occurrences are fetched separately and merged later
 
+  let finalCompletedStatus: boolean | undefined = undefined;
+  let finalCompletedAt: number | null | undefined = undefined;
+
+  if (recurrenceRule.type === 'none' && backendActivity.start_date) {
+    const mainOccurrenceDateKey = formatISO(parseISO(backendActivity.start_date), { representation: 'date' });
+    if (completedOccurrencesMap.hasOwnProperty(mainOccurrenceDateKey)) {
+      finalCompletedStatus = completedOccurrencesMap[mainOccurrenceDateKey];
+      if (finalCompletedStatus) {
+        try {
+          // Use the start_date of the activity as the completion date for non-recurring.
+          // A more precise 'completed_at' timestamp for the occurrence would be ideal if available from backend.
+          finalCompletedAt = parseISO(backendActivity.start_date).getTime();
+        } catch {
+          finalCompletedAt = Date.now(); // Fallback
+        }
+      } else {
+        finalCompletedAt = null;
+      }
+    }
+  }
 
   return {
     id: idToUse,
@@ -336,11 +360,14 @@ const backendToFrontendActivity = (
     time: backendActivity?.time || "00:00",
     notes: backendActivity?.notes ?? undefined,
     recurrence: recurrenceRule.type === 'none' ? { type: 'none' } : recurrenceRule,
-    completedOccurrences: completedOccurrencesMap,
+    completed: finalCompletedStatus,
+    completedAt: finalCompletedAt,
+    completedOccurrences: completedOccurrencesMap, // This will be initially populated if backendActivity is rich
     responsiblePersonIds: responsiblePersonIdsProcessed,
-    appMode: (backendActivity?.mode === 'both' ? currentAppMode : (backendActivity?.mode || currentAppMode)) as AppMode,
+    appMode: ('mode' in backendActivity && backendActivity.mode === 'both' ? currentAppMode : (backendActivity?.mode || currentAppMode)) as AppMode,
   };
 };
+
 
 const frontendToBackendActivityPayload = (
   activity: Omit<Activity, 'id' | 'completedOccurrences' | 'isRecurringInstance' | 'originalInstanceDate' | 'masterActivityId'> & { todos?: BackendTodoCreate[] },
@@ -348,8 +375,7 @@ const frontendToBackendActivityPayload = (
 ): Partial<BackendActivityCreatePayload | BackendActivityUpdatePayload> => {
   const payload: Partial<BackendActivityCreatePayload & BackendActivityUpdatePayload> = {
     title: activity.title,
-    // Ensure date is sent as YYYY-MM-DDTHH:MM:SS for backend datetime fields
-    start_date: new Date(activity.createdAt).toISOString(),
+    start_date: new Date(activity.createdAt).toISOString(), // Ensure full ISO string
     time: activity.time || "00:00",
     category_id: activity.categoryId,
     notes: activity.notes,
@@ -386,11 +412,11 @@ const frontendToBackendActivityPayload = (
 const backendToFrontendHistory = (backendHistory: BackendHistory): HistoryLogEntry => ({
   id: backendHistory.id,
   timestamp: parseISO(backendHistory.timestamp).getTime(),
-  actionKey: backendHistory.action as HistoryLogActionKey, // This might need more robust mapping if actions change
+  actionKey: backendHistory.action as HistoryLogActionKey, 
   backendAction: backendHistory.action,
   backendUserId: backendHistory.user_id,
-  scope: 'account', // Default, can be refined if backend provides more scope info
-  details: { rawBackendAction: backendHistory.action } // Store raw action for debugging/future use
+  scope: 'account', 
+  details: { rawBackendAction: backendHistory.action } 
 });
 
 const formatBackendError = (errorData: any, defaultMessage: string): string => {
@@ -492,6 +518,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [pomodoroCyclesCompleted, setPomodoroCyclesCompleted] = useState(0);
   const [isPomodoroReady, setIsPomodoroReady] = useState(false);
   const prevPomodoroPhaseRef = useRef<PomodoroPhase>(pomodoroPhase);
+  
   const postToServiceWorkerRef = useRef<(message: any) => void>(() => {});
 
 
@@ -501,7 +528,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const isAuthenticated = !!jwtToken;
 
   const addHistoryLogEntryRef = useRef<((actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined | null>, scope?: HistoryLogEntry['scope']) => Promise<void>) | null>(null);
-
 
   const getCurrentUserId = useCallback((): number | null => {
     return decodedJwt?.userId ? decodedJwt.userId : (decodedJwt?.sub ? parseInt(decodedJwt.sub, 10) : null);
@@ -519,12 +545,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const { payload } = await jose.jwtVerify(tokenData.access_token, secret, { algorithms: ['HS256'] });
 
       setJwtToken(tokenData.access_token);
-      setDecodedJwt({
+      setDecodedJwt({ // Ensure all fields from Token interface are mapped
         sub: payload.sub!,
         exp: payload.exp!,
-        userId: tokenData.user_id, // Store directly from tokenData
-        username: tokenData.username, // Store directly
-        isAdmin: tokenData.is_admin, // Store directly
+        userId: tokenData.user_id,
+        username: tokenData.username,
+        isAdmin: tokenData.is_admin,
       });
       if (typeof window !== 'undefined') localStorage.setItem(LOCAL_STORAGE_KEY_JWT, tokenData.access_token);
     } catch (err) {
@@ -539,19 +565,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [JWT_SECRET_KEY_FOR_DECODING, toast]);
 
-  useEffect(() => {
-    const postToServiceWorkerLogic = (message: any) => {
+
+  const postToServiceWorkerLogic = useCallback((message: any) => {
       if (typeof window !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({...message, payload: { ...message.payload, locale } });
       } else if (typeof window !== 'undefined'){
         if (message.type !== 'GET_INITIAL_STATE' && !isPomodoroReady) {
-          toast({ variant: 'destructive', title: t('pomodoroErrorTitle') as string, description: t('pomodoroSWNotReady') as string });
+           toast({ variant: 'destructive', title: t('pomodoroErrorTitle') as string, description: t('pomodoroSWNotReady') as string });
         }
       }
-    };
-    postToServiceWorkerRef.current = postToServiceWorkerLogic;
   }, [locale, t, toast, isPomodoroReady]);
 
+  useEffect(() => {
+    postToServiceWorkerRef.current = postToServiceWorkerLogic;
+  }, [postToServiceWorkerLogic]);
 
   const startPomodoroWork = useCallback(() => postToServiceWorkerRef.current({ type: 'START_WORK', payload: { cyclesCompleted: pomodoroCyclesCompleted } }), [pomodoroCyclesCompleted]);
   const startPomodoroShortBreak = useCallback(() => postToServiceWorkerRef.current({ type: 'START_SHORT_BREAK' }), []);
@@ -559,7 +586,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const pausePomodoro = useCallback(() => postToServiceWorkerRef.current({ type: 'PAUSE_TIMER' }), []);
   const resumePomodoro = useCallback(() => postToServiceWorkerRef.current({ type: 'RESUME_TIMER' }), []);
   const resetPomodoro = useCallback(() => {
-    setIsPomodoroReady(false);
+    setIsPomodoroReady(false); // Reset readiness flag
     postToServiceWorkerRef.current({ type: 'RESET_TIMER' });
   }, []);
 
@@ -620,8 +647,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         createApiErrorToast(err, toast, "historyLoadErrorTitle", "logging", t, `${API_BASE_URL}/history`);
         console.error(`[AppProvider] Failed logging history for action ${actionKey}:`, (err as Error).message);
     }
-  }, [fetchWithAuth, getCurrentUserId, t, toast]);
-
+  }, [fetchWithAuth, getCurrentUserId, t, toast, API_BASE_URL]);
+  
   useEffect(() => { addHistoryLogEntryRef.current = addHistoryLogEntry;}, [addHistoryLogEntry]);
 
   const logout = useCallback(() => {
@@ -640,6 +667,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (logoutChannel) logoutChannel.postMessage('logout_event_v2');
   }, [decodeAndSetToken]);
 
+
   useEffect(() => {
     const loadClientSideDataAndFetchInitial = async () => {
       setIsLoadingState(true);
@@ -655,13 +683,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       let currentTokenForInitialLoad: string | null = null;
 
       if (storedTokenString) {
-          const tempTokenData: Token = { // Create a dummy Token object to pass to decodeAndSetToken
+          const tempTokenData: Token = { 
               access_token: storedTokenString,
               token_type: 'bearer',
-              user_id: 0, username: '', is_admin: false // These values will be overridden by decodeAndSetToken
+              user_id: 0, username: '', is_admin: false 
           };
           await decodeAndSetToken(tempTokenData);
-          currentTokenForInitialLoad = storedTokenString; // Use the original token for API calls
+          currentTokenForInitialLoad = storedTokenString; 
       }
 
       const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
@@ -676,12 +704,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       if (currentTokenForInitialLoad) {
         try {
-            const [actResponse, catResponse, userResponse, histResponse, occurrencesResponse] = await Promise.all([
+            const [actResponse, catResponse, userResponse, histResponse, allOccurrencesResponse] = await Promise.all([
                 fetchWithAuth(`${API_BASE_URL}/activities`, {}, currentTokenForInitialLoad),
                 fetchWithAuth(`${API_BASE_URL}/categories`, {}, currentTokenForInitialLoad),
                 fetchWithAuth(`${API_BASE_URL}/users`, {}, currentTokenForInitialLoad),
                 fetchWithAuth(`${API_BASE_URL}/history`, {}, currentTokenForInitialLoad),
-                fetchWithAuth(`${API_BASE_URL}/activity-occurrences`, {}, currentTokenForInitialLoad)
+                fetchWithAuth(`${API_BASE_URL}/activity-occurrences`, {}, currentTokenForInitialLoad) 
             ]);
 
             if (!actResponse.ok) throw new Error(`Activities fetch failed: HTTP ${actResponse.status} ${actResponse.statusText}`);
@@ -702,19 +730,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
             setIsHistoryLoading(false);
 
-            let allOccurrences: BackendActivityOccurrence[] = [];
-            if (occurrencesResponse.ok) {
-                allOccurrences = await occurrencesResponse.json();
+            let allBackendOccurrences: BackendActivityOccurrence[] = [];
+            if (allOccurrencesResponse.ok) {
+                allBackendOccurrences = await allOccurrencesResponse.json();
             } else {
-                console.warn(`[AppProvider] Failed to fetch all occurrences: HTTP ${occurrencesResponse.status}`);
+                console.warn(`[AppProvider] Failed to fetch all occurrences: HTTP ${allOccurrencesResponse.status}`);
             }
 
             const newPersonal: Activity[] = [], newWork: Activity[] = [];
             backendActivitiesList.forEach(beListItem => {
                 if (!beListItem) return;
                 let feAct = backendToFrontendActivity(beListItem, appModeState);
-                // Populate completedOccurrences from allOccurrences
-                const activityOccurrences = allOccurrences.filter(occ => occ.activity_id === feAct.id);
+                
+                const activityOccurrences = allBackendOccurrences.filter(occ => occ.activity_id === feAct.id);
                 const occurrencesMap: Record<string, boolean> = {};
                 activityOccurrences.forEach(occ => {
                      try {
@@ -726,6 +754,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 });
                 feAct.completedOccurrences = occurrencesMap;
 
+                // Re-derive top-level completion for non-recurring based on newly mapped occurrences
+                if (feAct.recurrence?.type === 'none' && feAct.createdAt) {
+                    const mainOccurrenceDateKey = formatISO(new Date(feAct.createdAt), { representation: 'date' });
+                    if (occurrencesMap.hasOwnProperty(mainOccurrenceDateKey)) {
+                        feAct.completed = occurrencesMap[mainOccurrenceDateKey];
+                        feAct.completedAt = feAct.completed ? new Date(feAct.createdAt).getTime() : null;
+                    }
+                }
+
                 if (feAct.appMode === 'personal') newPersonal.push(feAct); else newWork.push(feAct);
             });
             setPersonalActivities(newPersonal); setWorkActivities(newWork);
@@ -735,7 +772,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             else { createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`);}
         } finally {
             setIsActivitiesLoading(false);
-            setIsCategoriesLoading(isCategoriesLoading && !allCategories.length); // only true if still loading and no cats
+            setIsCategoriesLoading(isCategoriesLoading && !allCategories.length); 
             setIsAssigneesLoading(isAssigneesLoading && !assignees.length);
             setIsHistoryLoading(isHistoryLoading && !historyLog.length);
         }
@@ -747,7 +784,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     loadClientSideDataAndFetchInitial();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [decodeAndSetToken, t, toast, fetchWithAuth, API_BASE_URL, appModeState]);
+  }, [decodeAndSetToken, t, toast, fetchWithAuth, API_BASE_URL]);
 
 
  useEffect(() => {
@@ -1099,7 +1136,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               setIsAssigneesLoading(true);
               setIsHistoryLoading(true);
 
-              const [actResponse, catResponse, userResponse, histResponse, occurrencesResponse] = await Promise.all([
+              const [actResponse, catResponse, userResponse, histResponse, allOccurrencesResponse] = await Promise.all([
                   fetchWithAuth(`${API_BASE_URL}/activities`, {}, newAccessToken),
                   fetchWithAuth(`${API_BASE_URL}/categories`, {}, newAccessToken),
                   fetchWithAuth(`${API_BASE_URL}/users`, {}, newAccessToken),
@@ -1125,18 +1162,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
               setIsHistoryLoading(false);
 
-              let allOccurrences: BackendActivityOccurrence[] = [];
-              if (occurrencesResponse.ok) {
-                  allOccurrences = await occurrencesResponse.json();
+              let allBackendOccurrences: BackendActivityOccurrence[] = [];
+              if (allOccurrencesResponse.ok) {
+                  allBackendOccurrences = await allOccurrencesResponse.json();
               } else {
-                  console.warn(`[AppProvider] Failed to fetch all occurrences after login: HTTP ${occurrencesResponse.status}`);
+                  console.warn(`[AppProvider] Failed to fetch all occurrences after login: HTTP ${allOccurrencesResponse.status}`);
               }
 
               const newPersonal: Activity[] = [], newWork: Activity[] = [];
               backendActivitiesList.forEach(beListItem => {
                   if (!beListItem) return;
                   let feAct = backendToFrontendActivity(beListItem, appModeState);
-                  const activityOccurrences = allOccurrences.filter(occ => occ.activity_id === feAct.id);
+                  const activityOccurrences = allBackendOccurrences.filter(occ => occ.activity_id === feAct.id);
                   const occurrencesMap: Record<string, boolean> = {};
                   activityOccurrences.forEach(occ => {
                      try {
@@ -1147,6 +1184,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     }
                   });
                   feAct.completedOccurrences = occurrencesMap;
+                  if (feAct.recurrence?.type === 'none' && feAct.createdAt) {
+                    const mainOccurrenceDateKey = formatISO(new Date(feAct.createdAt), { representation: 'date' });
+                    if (occurrencesMap.hasOwnProperty(mainOccurrenceDateKey)) {
+                        feAct.completed = occurrencesMap[mainOccurrenceDateKey];
+                        feAct.completedAt = feAct.completed ? new Date(feAct.createdAt).getTime() : null;
+                    }
+                  }
                   if (feAct.appMode === 'personal') newPersonal.push(feAct); else newWork.push(feAct);
               });
               setPersonalActivities(newPersonal); setWorkActivities(newWork);
@@ -1336,17 +1380,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     ) => {
     setError(null);
     const frontendActivityShell: Activity = {
-      id: 0,
+      id: 0, // Placeholder, will be set by backend
       title: activityData.title,
       categoryId: activityData.categoryId,
-      todos: (activityData.todos || []).map(t => ({ id: 0, text: t.text, completed: !!t.completed })),
+      todos: (activityData.todos || []).map(t => ({ id: 0, text: t.text, completed: !!t.completed })), // Placeholder IDs
       createdAt: customCreatedAt !== undefined ? customCreatedAt : Date.now(),
       time: activityData.time,
       notes: activityData.notes,
       recurrence: activityData.recurrence,
       responsiblePersonIds: activityData.responsiblePersonIds,
       appMode: activityData.appMode,
-      completedOccurrences: {},
+      completedOccurrences: {}, // Initialize as empty
     };
 
     const payload = frontendToBackendActivityPayload(frontendActivityShell) as BackendActivityCreatePayload;
@@ -1357,6 +1401,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const response = await fetchWithAuth(`${API_BASE_URL}/activities`, { method: 'POST', body: JSON.stringify(payload) });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to add activity: HTTP ${response.status}`));}
 
+      // The backend response for POST /activities is the rich ORM model (BackendActivity)
       const newBackendActivity: BackendActivity = await response.json();
       const newFrontendActivity = backendToFrontendActivity(newBackendActivity, appModeState);
 
@@ -1396,17 +1441,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const response = await fetchWithAuth(`${API_BASE_URL}/activities/${activityId}`, { method: 'PUT', body: JSON.stringify(payload) });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to update activity: HTTP ${response.status}`));}
-      const updatedBackendActivity: BackendActivity = await response.json(); // This is the rich ORM model
+      
+      // The backend response for PUT /activities/{id} is the rich ORM model (BackendActivity)
+      const updatedBackendActivity: BackendActivity = await response.json();
       let processedActivityFromBackend = backendToFrontendActivity(updatedBackendActivity, appModeState);
 
+      // Merge existing client-side todos and occurrences if not fully provided or overridden by backend.
+      // backendToFrontendActivity will populate todos and occurrences if they are in updatedBackendActivity.
+      // If they aren't, we need to preserve what's in activityToUpdate.
       const finalFrontendActivity = {
-        ...activityToUpdate,
-        ...processedActivityFromBackend,
-        // Preserve client-side todos and occurrences if backend doesn't overwrite them fully from this specific response
+        ...activityToUpdate, // Start with existing client state
+        ...processedActivityFromBackend, // Override with what backend confirms (id, title, dates, etc.)
+        // Specifically preserve/merge todos and occurrences if backend response for PUT isn't exhaustive
         todos: processedActivityFromBackend.todos.length > 0 ? processedActivityFromBackend.todos : activityToUpdate.todos,
-        completedOccurrences: Object.keys(processedActivityFromBackend.completedOccurrences).length > 0 ? processedActivityFromBackend.completedOccurrences : (updates.completedOccurrences || activityToUpdate.completedOccurrences || {}),
-        completed: updates.completed !== undefined ? updates.completed : activityToUpdate.completed,
-        completedAt: updates.completedAt !== undefined ? updates.completedAt : activityToUpdate.completedAt,
+        completedOccurrences: Object.keys(processedActivityFromBackend.completedOccurrences).length > 0 
+                                ? processedActivityFromBackend.completedOccurrences 
+                                : (updates.completedOccurrences || activityToUpdate.completedOccurrences || {}),
+        // Top-level completion status needs to be consistent with derived status
+        completed: processedActivityFromBackend.completed, // This is now derived in backendToFrontendActivity
+        completedAt: processedActivityFromBackend.completedAt, // Also derived
       };
 
 
@@ -1588,7 +1641,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const occurrenceDateKey = formatISO(new Date(occurrenceDateTimestamp), { representation: 'date' });
     const occurrenceDateTimeISO = new Date(occurrenceDateTimestamp).toISOString();
 
-    // Optimistic UI update
     setter(prevActivities =>
       prevActivities.map(act =>
         act.id === masterActivityId
@@ -1598,18 +1650,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
 
     try {
-        // Check if occurrence exists
         const occurrencesResponse = await fetchWithAuth(`${API_BASE_URL}/activities/${masterActivityId}/occurrences`);
         if (!occurrencesResponse.ok) throw new Error(`Failed to fetch occurrences for activity ${masterActivityId}`);
         const existingOccurrences: BackendActivityOccurrence[] = await occurrencesResponse.json();
 
         const targetDate = new Date(occurrenceDateTimestamp);
-        const existingOccurrence = existingOccurrences.find(occ =>
-            isSameDay(parseISO(occ.date), targetDate)
-        );
+        const existingOccurrence = existingOccurrences.find(occ => {
+            try { return isSameDay(parseISO(occ.date), targetDate); }
+            catch { return false; }
+        });
 
         if (existingOccurrence) {
-            // Update existing occurrence
             const updatePayload: BackendActivityOccurrenceUpdate = { complete: completedState };
             const updateResponse = await fetchWithAuth(`${API_BASE_URL}/activity-occurrences/${existingOccurrence.id}`, {
                 method: 'PUT',
@@ -1620,7 +1671,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               throw new Error(formatBackendError(errorData, `Failed to update occurrence ${existingOccurrence.id}`));
             }
         } else {
-            // Create new occurrence
             const createPayload: BackendActivityOccurrenceCreate = {
                 activity_id: masterActivityId,
                 date: occurrenceDateTimeISO,
@@ -1646,7 +1696,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     } catch (err) {
         console.error("Error toggling occurrence completion:", err);
-        // Revert optimistic update on error
         setter(prevActivities =>
             prevActivities.map(act =>
                 act.id === masterActivityId
@@ -1665,16 +1714,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
  const fetchAndSetSpecificActivityDetails = useCallback(async (activityId: number): Promise<Activity | null> => {
     try {
-        // 1. Fetch main activity details (now returns ActivityResponse / BackendActivityListItem)
         const activityResponse = await fetchWithAuth(`${API_BASE_URL}/activities/${activityId}`);
         if (!activityResponse.ok) {
             const errorData = await activityResponse.json().catch(() => ({ detail: `HTTP ${activityResponse.status}: ${activityResponse.statusText}` }));
             throw new Error(formatBackendError(errorData, `Failed to fetch activity details for ID ${activityId}.`));
         }
+        // Backend now returns ActivityResponse (leaner) for GET /activities/{id}
         const backendActivityListItem: BackendActivityListItem = await activityResponse.json();
         let frontendActivityShell = backendToFrontendActivity(backendActivityListItem, appModeState);
 
-        // 2. Fetch todos for this activity
         const todosResponse = await fetchWithAuth(`${API_BASE_URL}/activities/${activityId}/todos`);
         let fetchedApiTodos: BackendTodo[] = [];
         if (todosResponse.ok) {
@@ -1688,7 +1736,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             completed: bt.complete,
         }));
 
-        // 3. Fetch occurrences for this activity
         const occurrencesResponse = await fetchWithAuth(`${API_BASE_URL}/activities/${activityId}/occurrences`);
         let activityOccurrences: BackendActivityOccurrence[] = [];
         if (occurrencesResponse.ok) {
@@ -1706,6 +1753,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
         });
         frontendActivityShell.completedOccurrences = occurrencesMap;
+
+        // Re-derive top-level completion for non-recurring based on newly fetched occurrences
+        if (frontendActivityShell.recurrence?.type === 'none' && frontendActivityShell.createdAt) {
+            const mainOccurrenceDateKey = formatISO(new Date(frontendActivityShell.createdAt), { representation: 'date' });
+            if (occurrencesMap.hasOwnProperty(mainOccurrenceDateKey)) {
+                frontendActivityShell.completed = occurrencesMap[mainOccurrenceDateKey];
+                frontendActivityShell.completedAt = frontendActivityShell.completed ? new Date(frontendActivityShell.createdAt).getTime() : null;
+            }
+        }
 
 
         const setter = frontendActivityShell.appMode === 'personal' ? setPersonalActivities : setWorkActivities;
@@ -1754,7 +1810,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     isLoading: combinedIsLoading, error,
     isAuthenticated, login, logout, changePassword, getCurrentUserId,
     uiNotifications, addUINotification: stableAddUINotification, markUINotificationAsRead, markAllUINotificationsAsRead, clearAllUINotifications,
-    historyLog, addHistoryLogEntry,
+    historyLog, addHistoryLogEntry: addHistoryLogEntryRef.current || (async () => {}), // Provide a stub if ref not set
     systemNotificationPermission, requestSystemNotificationPermission,
     pomodoroPhase, pomodoroTimeRemaining, pomodoroIsRunning, pomodoroCyclesCompleted,
     startPomodoroWork, startPomodoroShortBreak, startPomodoroLongBreak, pausePomodoro, resumePomodoro, resetPomodoro, isPomodoroReady,
@@ -1764,7 +1820,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     getRawActivities, filteredCategories, assigneesForContext, appModeState, setAppMode, addActivity, updateActivity, deleteActivity, toggleOccurrenceCompletion,
     addTodoToActivity, updateTodoInActivity, deleteTodoFromActivity, getCategoryById, addCategory, updateCategory, deleteCategory, addAssignee, updateAssignee, deleteAssignee,
     getAssigneeById, combinedIsLoading, error, isAuthenticated, login, logout, changePassword, getCurrentUserId, uiNotifications, stableAddUINotification, markUINotificationAsRead,
-    markAllUINotificationsAsRead, clearAllUINotifications, historyLog, addHistoryLogEntry, systemNotificationPermission, requestSystemNotificationPermission, pomodoroPhase,
+    markAllUINotificationsAsRead, clearAllUINotifications, historyLog, systemNotificationPermission, requestSystemNotificationPermission, pomodoroPhase,
     pomodoroTimeRemaining, pomodoroIsRunning, pomodoroCyclesCompleted, startPomodoroWork, startPomodoroShortBreak, startPomodoroLongBreak, pausePomodoro, resumePomodoro,
     resetPomodoro, isPomodoroReady, isAppLocked, appPinState, unlockApp, setAppPin, fetchAndSetSpecificActivityDetails
   ]);
@@ -1776,3 +1832,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+
+
+    
