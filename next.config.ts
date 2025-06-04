@@ -20,8 +20,9 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  allowedDevOrigins: ['https://6000-firebase-studio-1747625597829.cluster-uf6urqn4lned4spwk4xorq6bpo.cloudworkstations.dev'],
   experimental: {
-    // allowedDevOrigins was removed as it's not recognized in Next.js 15.3.3
+    // Add any other necessary experimental flags here if needed
   },
 };
 
