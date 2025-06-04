@@ -10,7 +10,7 @@ import type {
   Token, DecodedToken, BackendHistoryCreatePayload, BackendCategoryUpdatePayload, AppContextType as AppContextTypeImport,
   BackendActivityListItem
 } from '@/lib/types';
-import { DEFAULT_API_BASE_URL, DEFAULT_JWT_SECRET_KEY, POMODORO_WORK_DURATION_SECONDS, POMODORO_SHORT_BREAK_DURATION_SECONDS, POMODORO_LONG_BREAK_DURATION_SECONDS } from '@/lib/constants';
+import { DEFAULT_JWT_SECRET_KEY, POMODORO_WORK_DURATION_SECONDS, POMODORO_SHORT_BREAK_DURATION_SECONDS, POMODORO_LONG_BREAK_DURATION_SECONDS, DEFAULT_API_BASE_URL } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import * as jose from 'jose';
@@ -488,7 +488,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const addHistoryLogEntryRef = useRef<((actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined | null>, scope?: HistoryLogEntry['scope']) => Promise<void>) | null>(null);
 
-  // Order of useCallback definitions is critical to avoid "Cannot access before initialization" errors
+
   const getCurrentUserId = useCallback((): number | null => {
     return decodedJwt?.userId ? decodedJwt.userId : (decodedJwt?.sub ? parseInt(decodedJwt.sub, 10) : null);
   }, [decodedJwt]);
@@ -525,6 +525,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [JWT_SECRET_KEY_FOR_DECODING, toast]);
   
+  const postToServiceWorker = useCallback((message: any) => {
+    if (typeof window !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({...message, payload: { ...message.payload, locale } });
+    } else if (typeof window !== 'undefined'){
+      if (message.type !== 'GET_INITIAL_STATE' && !isPomodoroReady) {
+        toast({ variant: 'destructive', title: t('pomodoroErrorTitle') as string, description: t('pomodoroSWNotReady') as string });
+      }
+    }
+  }, [locale, t, toast, isPomodoroReady]);
+  
+  const startPomodoroWork = useCallback(() => postToServiceWorker({ type: 'START_WORK', payload: { cyclesCompleted: pomodoroCyclesCompleted } }), [postToServiceWorker, pomodoroCyclesCompleted]);
+  const startPomodoroShortBreak = useCallback(() => postToServiceWorker({ type: 'START_SHORT_BREAK' }), [postToServiceWorker]);
+  const startPomodoroLongBreak = useCallback(() => postToServiceWorker({ type: 'START_LONG_BREAK' }), [postToServiceWorker]);
+  const pausePomodoro = useCallback(() => postToServiceWorker({ type: 'PAUSE_TIMER' }), [postToServiceWorker]);
+  const resumePomodoro = useCallback(() => postToServiceWorker({ type: 'RESUME_TIMER' }), [postToServiceWorker]);
+  const resetPomodoro = useCallback(() => {
+    setIsPomodoroReady(false); // This should be handled carefully if SW isn't fully reset immediately.
+    postToServiceWorker({ type: 'RESET_TIMER' });
+  }, [postToServiceWorker]);
+
+
   const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}, tokenToUse?: string | null): Promise<Response> => {
     const currentToken = tokenToUse || jwtToken;
 
@@ -583,28 +604,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [fetchWithAuth, getCurrentUserId, t, toast, API_BASE_URL]);
   
-  // This ref needs to be updated whenever addHistoryLogEntry changes
   useEffect(() => { addHistoryLogEntryRef.current = addHistoryLogEntry;}, [addHistoryLogEntry]);
-
-  const postToServiceWorker = useCallback((message: any) => {
-    if (typeof window !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({...message, payload: { ...message.payload, locale } });
-    } else if (typeof window !== 'undefined'){
-      if (message.type !== 'GET_INITIAL_STATE' && !isPomodoroReady) {
-        toast({ variant: 'destructive', title: t('pomodoroErrorTitle') as string, description: t('pomodoroSWNotReady') as string });
-      }
-    }
-  }, [locale, t, toast, isPomodoroReady]);
-  
-  const startPomodoroWork = useCallback(() => postToServiceWorker({ type: 'START_WORK', payload: { cyclesCompleted: pomodoroCyclesCompleted } }), [postToServiceWorker, pomodoroCyclesCompleted]);
-  const startPomodoroShortBreak = useCallback(() => postToServiceWorker({ type: 'START_SHORT_BREAK' }), [postToServiceWorker]);
-  const startPomodoroLongBreak = useCallback(() => postToServiceWorker({ type: 'START_LONG_BREAK' }), [postToServiceWorker]);
-  const pausePomodoro = useCallback(() => postToServiceWorker({ type: 'PAUSE_TIMER' }), [postToServiceWorker]);
-  const resumePomodoro = useCallback(() => postToServiceWorker({ type: 'RESUME_TIMER' }), [postToServiceWorker]);
-  const resetPomodoro = useCallback(() => {
-    setIsPomodoroReady(false);
-    postToServiceWorker({ type: 'RESET_TIMER' });
-  }, [postToServiceWorker]);
 
   const logout = useCallback(() => {
     addHistoryLogEntryRef.current?.('historyLogLogout', undefined, 'account');
@@ -620,7 +620,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     postToServiceWorker({ type: 'RESET_TIMER' });
     if (logoutChannel) logoutChannel.postMessage('logout_event_v2');
-  }, [decodeAndSetToken, postToServiceWorker]); 
+  }, [decodeAndSetToken, postToServiceWorker /* addHistoryLogEntryRef is used via .current */]); 
   
   useEffect(() => {
     const loadClientSideDataAndFetchInitial = async () => {
@@ -639,11 +639,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (storedTokenString) {
           const tempTokenData: Token = { 
               access_token: storedTokenString, 
-              token_type: 'bearer', // Default/assumed
-              user_id: 0, username: '', is_admin: false // Placeholders, will be overwritten by decodeAndSetToken if token is valid
+              token_type: 'bearer',
+              user_id: 0, username: '', is_admin: false 
           };
-          await decodeAndSetToken(tempTokenData); // This will try to verify and populate decodedJwt
-          currentTokenForInitialLoad = storedTokenString; // Use the raw stored token for initial fetches
+          await decodeAndSetToken(tempTokenData);
+          currentTokenForInitialLoad = storedTokenString;
       }
 
       const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
@@ -656,7 +656,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (currentTokenForInitialLoad) setIsAppLocked(true);
       }
 
-      if (currentTokenForInitialLoad) { // Check the raw token again, as decodeAndSetToken might nullify jwtToken on expiry
+      if (currentTokenForInitialLoad) { 
         try {
             const actResponse = await fetchWithAuth(`${API_BASE_URL}/activities`, {}, currentTokenForInitialLoad);
             if (!actResponse.ok) throw new Error(`Activities fetch failed: HTTP ${actResponse.status} ${actResponse.statusText}`);
@@ -723,7 +723,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     loadClientSideDataAndFetchInitial();
-  }, [decodeAndSetToken, t, toast, fetchWithAuth, logout, API_BASE_URL, appModeState]); 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [decodeAndSetToken, t, toast, fetchWithAuth, API_BASE_URL, appModeState]); 
 
 
  useEffect(() => {
@@ -1141,7 +1142,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setError((err as Error).message);
       return false;
     }
-  }, [API_BASE_URL, decodeAndSetToken, t, toast, stableAddUINotification, showSystemNotification, fetchWithAuth, logout, appModeState]);
+  }, [API_BASE_URL, decodeAndSetToken, t, toast, stableAddUINotification, showSystemNotification, fetchWithAuth, appModeState, logout]);
 
   const changePassword = useCallback(async (oldPassword: string, newPassword: string): Promise<boolean> => {
     const currentUserId = getCurrentUserId();
