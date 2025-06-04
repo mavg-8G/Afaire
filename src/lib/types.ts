@@ -54,6 +54,27 @@ export interface RecurrenceRule {
   dayOfMonth?: number;
 }
 
+// --- ACTIVITY OCCURRENCE ---
+export interface BackendActivityOccurrence {
+  id: number;
+  activity_id: number;
+  date: string; // ISO datetime string from backend
+  complete: boolean;
+  activity_title?: string; // Optional, as per ActivityOccurrenceResponse
+}
+
+export interface BackendActivityOccurrenceCreate {
+  activity_id: number;
+  date: string; // ISO datetime string to send to backend
+  complete?: boolean;
+}
+
+export interface BackendActivityOccurrenceUpdate {
+  date?: string; // ISO datetime string
+  complete?: boolean;
+}
+
+
 // --- ACTIVITY ---
 export interface Activity {
   id: number;
@@ -62,11 +83,11 @@ export interface Activity {
   todos: Todo[];
   createdAt: number; // Start date timestamp
   time?: string;
-  completed?: boolean;
+  completed?: boolean; // Overall completion status for non-recurring, or if all todos are done.
   completedAt?: number | null;
   notes?: string;
   recurrence?: RecurrenceRule | null;
-  completedOccurrences?: Record<string, boolean>;
+  completedOccurrences: Record<string, boolean>; // Key: YYYY-MM-DD date string, Value: completion status
   isRecurringInstance?: boolean;
   originalInstanceDate?: number;
   masterActivityId?: number;
@@ -75,6 +96,7 @@ export interface Activity {
 }
 
 // Represents the data structure from GET /activities (list view)
+// Aligned with backend's ActivityResponse
 export interface BackendActivityListItem {
   id: number;
   title: string;
@@ -88,27 +110,32 @@ export interface BackendActivityListItem {
   notes?: string | null;
   mode: BackendCategoryMode;
   responsible_ids: number[];
-  // No 'category' object, no 'todos' list here
 }
 
-// Represents the richer data structure from GET /activities/{id}, POST /activities, PUT /activities/{id}
-// (direct ORM object serialization)
+// Represents the richer data structure from GET /activities/{id} (now ActivityResponse),
+// and POST /activities, PUT /activities/{id} (still ORM model)
 export interface BackendActivity {
   id: number;
   title: string;
   start_date: string; // ISO string
   time: string;
-  category_id: number; // Still present, but also nested category object
+  category_id: number;
   repeat_mode: BackendRepeatMode;
   end_date?: string | null; // ISO string
   days_of_week?: string | null; // Comma-separated string "0,1,2"
   day_of_month?: number | null;
   notes?: string | null;
   mode: BackendCategoryMode;
-  category: BackendCategory; // Nested category object
-  responsibles: BackendUser[]; // List of responsible user objects
-  todos: BackendTodo[]; // List of todo objects
-  // occurrences might be here if eager-loaded, but frontend manages completedOccurrences separately
+
+  // These fields are present in the rich ORM model (e.g., POST/PUT response)
+  // but might be absent or different in ActivityResponse (e.g., GET /activities/{id})
+  category?: BackendCategory;
+  responsibles?: BackendUser[];
+  todos?: BackendTodo[];
+  occurrences?: BackendActivityOccurrence[]; // Added for initial occurrences
+
+  // These fields are specifically from ActivityResponse (for GET /activities/{id})
+  responsible_ids?: number[];
 }
 
 
@@ -227,8 +254,7 @@ export type HistoryLogActionKey =
   | 'historyLogAddCategory'
   | 'historyLogUpdateCategory'
   | 'historyLogDeleteCategory'
-  | 'historyLogSwitchToPersonalMode'
-  | 'historyLogSwitchToWorkMode'
+  | 'historyLogSwitchMode' // Consolidated switch mode
   | 'historyLogPasswordChangeAttempt'
   | 'historyLogAddAssignee'
   | 'historyLogUpdateAssignee'
@@ -278,7 +304,7 @@ export interface AppContextType {
   ) => Promise<void>;
   updateActivity: (activityId: number, updates: Partial<Omit<Activity, 'id' | 'todos'>>, originalActivity?: Activity) => Promise<void>;
   deleteActivity: (activityId: number) => Promise<void>;
-  toggleOccurrenceCompletion: (masterActivityId: number, occurrenceDateTimestamp: number, completedState: boolean) => void;
+  toggleOccurrenceCompletion: (masterActivityId: number, occurrenceDateTimestamp: number, completedState: boolean) => Promise<void>;
   addTodoToActivity: (activityId: number, todoText: string, completed?: boolean) => Promise<Todo | null>;
   updateTodoInActivity: (activityId: number, todoId: number, updates: Partial<Todo>) => Promise<void>;
   deleteTodoFromActivity: (activityId: number, todoId: number) => Promise<void>;
