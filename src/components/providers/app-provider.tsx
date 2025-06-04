@@ -268,7 +268,7 @@ const backendToFrontendActivity = (
 
   const recurrenceRule: RecurrenceRule = {
     type: backendActivity.repeat_mode as RecurrenceType,
-    endDate: backendActivity.end_date ? parseISO(backendActivity.end_date.toString()).getTime() : null, // Ensure end_date is string
+    endDate: backendActivity.end_date ? parseISO(backendActivity.end_date.toString()).getTime() : null, 
     daysOfWeek: daysOfWeekArray.length > 0 ? daysOfWeekArray : undefined,
     dayOfMonth: backendActivity.day_of_month ?? undefined,
   };
@@ -487,8 +487,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const addHistoryLogEntryRef = useRef<((actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined | null>, scope?: HistoryLogEntry['scope']) => Promise<void>) | null>(null);
 
-
-  // --- ORDERED useCallback DEFINITIONS ---
   const getCurrentUserId = useCallback((): number | null => {
     return decodedJwt?.userId ? decodedJwt.userId : (decodedJwt?.sub ? parseInt(decodedJwt.sub, 10) : null);
   }, [decodedJwt]);
@@ -516,32 +514,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (err) {
       const error = err as Error;
       console.error("[AppProvider] Failed to verify/decode JWT:", error.message, error.name, error.stack);
+      if (error.name === 'JWTExpired') {
+        toast({ variant: "destructive", title: "Session Expired", description: "Your session has expired. Please log in again."});
+      }
       setJwtToken(null);
       setDecodedJwt(null);
       if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
     }
-  }, [JWT_SECRET_KEY_FOR_DECODING]);
-
-  const postToServiceWorker = useCallback((message: any) => {
-    if (typeof window !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({...message, payload: { ...message.payload, locale } });
-    } else if (typeof window !== 'undefined'){
-      if (message.type !== 'GET_INITIAL_STATE' && !isPomodoroReady) {
-        toast({ variant: 'destructive', title: t('pomodoroErrorTitle') as string, description: t('pomodoroSWNotReady') as string });
-      }
-    }
-  }, [locale, t, toast, isPomodoroReady]);
-  
-  const startPomodoroWork = useCallback(() => postToServiceWorker({ type: 'START_WORK', payload: { cyclesCompleted: pomodoroCyclesCompleted } }), [postToServiceWorker, pomodoroCyclesCompleted]);
-  const startPomodoroShortBreak = useCallback(() => postToServiceWorker({ type: 'START_SHORT_BREAK' }), [postToServiceWorker]);
-  const startPomodoroLongBreak = useCallback(() => postToServiceWorker({ type: 'START_LONG_BREAK' }), [postToServiceWorker]);
-  const pausePomodoro = useCallback(() => postToServiceWorker({ type: 'PAUSE_TIMER' }), [postToServiceWorker]);
-  const resumePomodoro = useCallback(() => postToServiceWorker({ type: 'RESUME_TIMER' }), [postToServiceWorker]);
-  const resetPomodoro = useCallback(() => {
-    setIsPomodoroReady(false);
-    postToServiceWorker({ type: 'RESET_TIMER' });
-  }, [postToServiceWorker]);
-
+  }, [JWT_SECRET_KEY_FOR_DECODING, toast]);
 
   const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}, tokenToUse?: string | null): Promise<Response> => {
     const currentToken = tokenToUse || jwtToken;
@@ -564,7 +544,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, { ...options, headers });
 
     if (response.status === 401 && !url.endsWith('/token') && !url.includes(`${API_BASE_URL}/token`)) {
-        throw new Error(`Unauthorized: ${response.statusText}`); // No direct logout call here
+        throw new Error(`Unauthorized: ${response.statusText}`); 
     }
     return response;
   }, [jwtToken, API_BASE_URL]);
@@ -601,7 +581,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [fetchWithAuth, getCurrentUserId, t, toast, API_BASE_URL]);
 
-  useEffect(() => { addHistoryLogEntryRef.current = addHistoryLogEntry;}, [addHistoryLogEntry]);
+  const postToServiceWorker = useCallback((message: any) => {
+    if (typeof window !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({...message, payload: { ...message.payload, locale } });
+    } else if (typeof window !== 'undefined'){
+      if (message.type !== 'GET_INITIAL_STATE' && !isPomodoroReady) {
+        toast({ variant: 'destructive', title: t('pomodoroErrorTitle') as string, description: t('pomodoroSWNotReady') as string });
+      }
+    }
+  }, [locale, t, toast, isPomodoroReady]);
+  
+  const startPomodoroWork = useCallback(() => postToServiceWorker({ type: 'START_WORK', payload: { cyclesCompleted: pomodoroCyclesCompleted } }), [postToServiceWorker, pomodoroCyclesCompleted]);
+  const startPomodoroShortBreak = useCallback(() => postToServiceWorker({ type: 'START_SHORT_BREAK' }), [postToServiceWorker]);
+  const startPomodoroLongBreak = useCallback(() => postToServiceWorker({ type: 'START_LONG_BREAK' }), [postToServiceWorker]);
+  const pausePomodoro = useCallback(() => postToServiceWorker({ type: 'PAUSE_TIMER' }), [postToServiceWorker]);
+  const resumePomodoro = useCallback(() => postToServiceWorker({ type: 'RESUME_TIMER' }), [postToServiceWorker]);
+  const resetPomodoro = useCallback(() => {
+    setIsPomodoroReady(false);
+    postToServiceWorker({ type: 'RESET_TIMER' });
+  }, [postToServiceWorker]);
 
   const logout = useCallback(() => {
     addHistoryLogEntryRef.current?.('historyLogLogout', undefined, 'account');
@@ -617,11 +615,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     postToServiceWorker({ type: 'RESET_TIMER' });
     if (logoutChannel) logoutChannel.postMessage('logout_event_v2');
-  }, [decodeAndSetToken, postToServiceWorker]); // Removed addHistoryLogEntryRef from here
+  }, [decodeAndSetToken, postToServiceWorker]); 
 
-
-  // --- AppProvider state and other functions ---
-
+  useEffect(() => { addHistoryLogEntryRef.current = addHistoryLogEntry;}, [addHistoryLogEntry]);
+  
   useEffect(() => {
     const loadClientSideDataAndFetchInitial = async () => {
       setIsLoadingState(true);
@@ -638,9 +635,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       
       if (storedTokenString) {
           const partialTokenData: Partial<Token> = { access_token: storedTokenString };
-          // decodeAndSetToken might set jwtToken to null if expired
           await decodeAndSetToken(partialTokenData as Token);
-          // Read jwtToken *after* decodeAndSetToken has potentially modified it
           currentTokenForInitialLoad = jwtToken; 
       }
 
@@ -665,12 +660,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 if (!beListItem) return;
                 const feAct: Activity = {
                     id: beListItem.id, title: beListItem.title, categoryId: beListItem.category_id, todos: [],
-                    createdAt: parseISO(beListItem.start_date.toString()).getTime(), // Ensure start_date is string
+                    createdAt: parseISO(beListItem.start_date.toString()).getTime(), 
                     time: beListItem.time,
                     notes: beListItem.notes ?? undefined,
                     recurrence: {
                         type: beListItem.repeat_mode as RecurrenceType,
-                        endDate: beListItem.end_date ? parseISO(beListItem.end_date.toString()).getTime() : null, // Ensure end_date is string
+                        endDate: beListItem.end_date ? parseISO(beListItem.end_date.toString()).getTime() : null, 
                         daysOfWeek: beListItem.days_of_week ? beListItem.days_of_week.split(',').map(Number) : undefined,
                         dayOfMonth: beListItem.day_of_month ?? undefined,
                     },
@@ -714,14 +709,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
             else { createApiErrorToast(err, toast, "historyLoadErrorTitle", "loading", t, `${API_BASE_URL}/history`);}
         } finally { setIsHistoryLoading(false); }
-      } else { // No token or token was invalid/expired
+      } else { 
         setIsActivitiesLoading(false); setIsCategoriesLoading(false); setIsAssigneesLoading(false); setIsHistoryLoading(false);
       }
-      setIsLoadingState(false); // Ensure this is always called
+      setIsLoadingState(false); 
     };
 
     loadClientSideDataAndFetchInitial();
-  }, [decodeAndSetToken, t, toast, fetchWithAuth, logout, API_BASE_URL, appModeState, jwtToken]); // Added jwtToken
+  }, [decodeAndSetToken, t, toast, fetchWithAuth, logout, API_BASE_URL, appModeState, jwtToken]); 
 
 
  useEffect(() => {
@@ -1158,7 +1153,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const errorData = await response.json().catch(() => ({ detail: response.statusText }));
             throw new Error(formatBackendError(errorData, `Password change failed: HTTP ${response.status}`));
         }
-        addHistoryLogEntryRef.current?.('historyLogPasswordChange', { userId: currentUserId }, 'account');
+        addHistoryLogEntryRef.current?.('historyLogPasswordChangeAttempt', { userId: currentUserId }, 'account');
         toast({ title: t('passwordUpdateSuccessTitle'), description: t('passwordUpdateSuccessDescription') });
         return true;
     } catch (err) {
@@ -1179,7 +1174,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const newBackendCategory: BackendCategory = await response.json();
       setAllCategories(prev => [...prev, backendToFrontendCategory(newBackendCategory)]);
       toast({ title: t('toastCategoryAddedTitle'), description: t('toastCategoryAddedDescription', { categoryName: name }) });
-      addHistoryLogEntryRef.current?.('historyLogAddCategory', { name, iconName, mode }, 'category');
+      addHistoryLogEntryRef.current?.('historyLogAddCategory', { name, iconName, mode, categoryId: newBackendCategory.id }, 'category');
     } catch (err) { if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); } else {createApiErrorToast(err, toast, "toastCategoryAddedTitle", "adding", t, `${API_BASE_URL}/categories`);} setError((err as Error).message); throw err; }
   }, [API_BASE_URL, fetchWithAuth, toast, t, logout]);
 
@@ -1218,7 +1213,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setPersonalActivities(prev => updateActivitiesCategory(prev));
       setWorkActivities(prev => updateActivitiesCategory(prev));
       toast({ title: t('toastCategoryDeletedTitle'), description: t('toastCategoryDeletedDescription', { categoryName: categoryToDelete.name }) });
-      addHistoryLogEntryRef.current?.('historyLogDeleteCategory', { categoryId: categoryId, name: categoryToDelete.name }, 'category');
+      addHistoryLogEntryRef.current?.('historyLogDeleteCategory', { categoryId: categoryId, name: categoryToDelete.name, iconName: categoryToDelete.iconName, mode: categoryToDelete.mode }, 'category');
     } catch (err) { if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); } else { createApiErrorToast(err, toast, "toastCategoryDeletedTitle", "deleting", t, `${API_BASE_URL}/categories/${categoryId}`);} setError((err as Error).message); throw err; }
   }, [API_BASE_URL, fetchWithAuth, allCategories, toast, t, logout]);
 
@@ -1264,9 +1259,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       toast({ title: t('toastAssigneeUpdatedTitle'), description: t('toastAssigneeUpdatedDescription', { assigneeName: updatedBackendUser.name }) });
 
       addHistoryLogEntryRef.current?.('historyLogUpdateAssignee', {
-        assigneeId: assigneeId, newName: updatedBackendUser.name, oldName: currentAssignee?.name,
-        newUsername: updatedBackendUser.username, oldUsername: currentAssignee?.username,
-        newIsAdmin: updatedBackendUser.is_admin, oldIsAdmin: currentAssignee?.isAdmin
+        assigneeId: assigneeId, name: updatedBackendUser.name, oldName: currentAssignee?.name,
+        username: updatedBackendUser.username, oldUsername: currentAssignee?.username,
+        isAdmin: updatedBackendUser.is_admin, oldIsAdmin: currentAssignee?.isAdmin
       }, 'assignee');
 
     } catch (err) {
@@ -1307,10 +1302,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     ) => {
     setError(null);
     const frontendActivityShell: Activity = {
-      id: 0, // Placeholder, will be overwritten by backend response
+      id: 0, 
       title: activityData.title,
       categoryId: activityData.categoryId,
-      todos: (activityData.todos || []).map(t => ({ id: 0, text: t.text, completed: !!t.completed })), // Placeholder IDs
+      todos: (activityData.todos || []).map(t => ({ id: 0, text: t.text, completed: !!t.completed })), 
       createdAt: customCreatedAt !== undefined ? customCreatedAt : Date.now(),
       time: activityData.time,
       notes: activityData.notes,
@@ -1343,7 +1338,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         title: newFrontendActivity.title,
         categoryName: category?.name,
         date: formatDateFns(new Date(newFrontendActivity.createdAt), 'PP', {locale: dateFnsLocale}),
-        time: newFrontendActivity.time
+        time: newFrontendActivity.time,
+        mode: newFrontendActivity.appMode
       }, newFrontendActivity.appMode);
     } catch (err) { if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); } else { createApiErrorToast(err, toast, "toastActivityAddedTitle", "adding", t, `${API_BASE_URL}/activities`);} setError((err as Error).message); throw err; }
   }, [API_BASE_URL, fetchWithAuth, appModeState, toast, t, logout, allCategories, dateFnsLocale]);
@@ -1372,7 +1368,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const finalFrontendActivity = {
         ...activityToUpdate, 
         ...processedActivityFromBackend, 
-        todos: activityToUpdate.todos || [], // Preserve existing todos as PUT /activities/{id} might not return them directly
+        todos: activityToUpdate.todos || [], 
         completedOccurrences: updates.completedOccurrences || activityToUpdate.completedOccurrences || {},
         completed: updates.completed !== undefined ? updates.completed : activityToUpdate.completed,
         completedAt: updates.completedAt !== undefined ? updates.completedAt : activityToUpdate.completedAt,
@@ -1396,7 +1392,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         categoryName: category?.name, oldCategoryName: originalActivity ? allCategories.find(c => c.id === originalActivity.categoryId)?.name : undefined,
         date: formatDateFns(new Date(finalFrontendActivity.createdAt), 'PP', {locale: dateFnsLocale}),
         oldDate: originalActivity ? formatDateFns(new Date(originalActivity.createdAt), 'PP', {locale: dateFnsLocale}) : undefined,
-        time: finalFrontendActivity.time, oldTime: originalActivity?.time
+        time: finalFrontendActivity.time, oldTime: originalActivity?.time,
+        mode: finalFrontendActivity.appMode
       }, finalFrontendActivity.appMode);
     } catch (err) { if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); } else {createApiErrorToast(err, toast, "toastActivityUpdatedTitle", "updating", t, `${API_BASE_URL}/activities/${activityId}`);} setError((err as Error).message); throw err; }
   }, [API_BASE_URL, fetchWithAuth, appModeState, personalActivities, workActivities, toast, t, logout, allCategories, dateFnsLocale]);
@@ -1431,7 +1428,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         activityId: activityId, title: activityToDelete.title,
         categoryName: category?.name,
         date: formatDateFns(new Date(activityToDelete.createdAt), 'PP', {locale: dateFnsLocale}),
-        time: activityToDelete.time
+        time: activityToDelete.time,
+        mode: activityToDelete.appMode
       }, modeForLog);
     } catch (err) { if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); } else {createApiErrorToast(err, toast, "toastActivityDeletedTitle", "deleting", t, `${API_BASE_URL}/activities/${activityId}`);} setError((err as Error).message); throw err; }
   }, [API_BASE_URL, fetchWithAuth, personalActivities, workActivities, toast, t, logout, allCategories, dateFnsLocale]);
@@ -1577,7 +1575,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       title: activityTitleForLog,
       completed: completedState,
       date: formatDateFns(new Date(occurrenceDateTimestamp), 'PP', {locale: dateFnsLocale}),
-      time: masterActivity?.time
+      time: masterActivity?.time,
+      mode: masterActivity?.appMode
     }, modeForLog);
   }, [personalActivities, workActivities, dateFnsLocale]);
 
@@ -1617,12 +1616,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             if (existingActivity) {
                 const updatedActivity = {
                     ...existingActivity,
-                    ...frontendActivityShell,
-                    completedOccurrences: existingActivity.completedOccurrences || {},
+                    ...frontendActivityShell, 
+                    completedOccurrences: existingActivity.completedOccurrences || {}, 
                 };
                 return prevActivities.map(act => act.id === activityId ? updatedActivity : act);
             }
-            return [...prevActivities, frontendActivityShell];
+            return [...prevActivities, frontendActivityShell]; 
         });
         return frontendActivityShell;
     } catch (err) {
