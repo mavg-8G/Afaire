@@ -17,14 +17,14 @@ import { useRouter } from 'next/navigation'; // Import useRouter for navigation
 interface ActivityListItemProps {
   activity: Activity; // This can be a master activity or a generated instance
   category: Category | undefined;
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit: () => void; // Kept for master activity edit action
+  onDelete: () => void; // Kept for master activity delete action
   showDate?: boolean;
   instanceDate?: Date; // The specific date of this occurrence if it's a recurring instance
 }
 
 export default function ActivityListItem({ activity, category, onEdit, onDelete, showDate, instanceDate }: ActivityListItemProps) {
-  const { updateActivity, toggleOccurrenceCompletion, getRawActivities } = useAppStore();
+  const { toggleOccurrenceCompletion } = useAppStore(); // Use toggleOccurrenceCompletion
   const { t, locale } = useTranslations();
   const router = useRouter();
   const dateLocale = locale === 'es' ? es : locale === 'fr' ? fr : enUS;
@@ -32,34 +32,29 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
   const effectiveDate = instanceDate || new Date(activity.createdAt);
   const occurrenceDateKey = formatISO(effectiveDate, { representation: 'date' });
 
-  const isCompletedForThisOccurrence = activity.isRecurringInstance
-    ? !!activity.completedOccurrences?.[occurrenceDateKey]
-    : !!activity.completed;
+  // Always derive completion status from the completedOccurrences map for the specific date
+  const isCompletedForThisOccurrence = !!activity.completedOccurrences?.[occurrenceDateKey];
 
   const todosForThisInstance = activity.todos || [];
   const totalTodos = todosForThisInstance.length;
   const completedTodos = todosForThisInstance.filter(t => t.completed).length;
 
   const handleActivityCompletedChange = (completedValue: boolean) => {
-    if (activity.isRecurringInstance && activity.masterActivityId && activity.originalInstanceDate) {
-      toggleOccurrenceCompletion(activity.masterActivityId, activity.originalInstanceDate, completedValue);
-    } else if (!activity.isRecurringInstance) {
-      let updatedTodos = activity.todos;
-      if (completedValue && activity.todos.length > 0) {
-        updatedTodos = activity.todos.map(todo => ({ ...todo, completed: true }));
-      }
-      const completedAt = completedValue ? Date.now() : null;
-      updateActivity(activity.id, { completed: completedValue, todos: updatedTodos as Todo[], completedAt });
-    }
+    const targetActivityId = activity.masterActivityId || activity.id;
+    // Use effectiveDate's timestamp (which is derived from instanceDate or activity.createdAt)
+    const targetOccurrenceDateTimestamp = effectiveDate.getTime(); 
+    
+    toggleOccurrenceCompletion(targetActivityId, targetOccurrenceDateTimestamp, Boolean(completedValue));
+
+    // Note: Logic for auto-completing todos when the parent activity/occurrence is marked complete
+    // is not handled here. That would require further calls to updateTodoInActivity for each todo,
+    // or a backend change to handle it atomically. This change focuses on making sure the
+    // ActivityOccurrence itself is correctly updated.
   };
 
   const handleEditClick = () => {
-    const editId = activity.masterActivityId || activity.id;
-    let url = `/activity-editor?id=${editId}`;
-    if (activity.isRecurringInstance && activity.originalInstanceDate) {
-      url += `&instanceDate=${activity.originalInstanceDate}`;
-    }
-    router.push(url);
+    // The onEdit prop passed from ActivityCalendarView already handles finding master activity ID
+    onEdit();
   };
 
   const handleAddToCalendar = () => {
@@ -78,7 +73,7 @@ export default function ActivityListItem({ activity, category, onEdit, onDelete,
           <Checkbox
             id={`activity-completed-${activity.id}-${occurrenceDateKey}`}
             checked={isCompletedForThisOccurrence}
-            onCheckedChange={(checked) => handleActivityCompletedChange(Boolean(checked))}
+            onCheckedChange={handleActivityCompletedChange} // Directly pass the boolean value
             aria-labelledby={`activity-title-${activity.id}-${occurrenceDateKey}`}
           />
           <div className="flex flex-col flex-grow min-w-0">
