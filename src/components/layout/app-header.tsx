@@ -237,12 +237,10 @@ export default function AppHeader() {
       <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between">
           {/* Left Group */}
-          <div className="flex items-center gap-2 ml-4">
+          <Link href="/" className="flex items-center gap-2 ml-4 text-xl font-bold tracking-tight text-foreground hover:no-underline sm:text-2xl" aria-label="Home">
             <LogoIcon className="h-7 w-7 text-primary" />
-            <Link href="/" className="text-xl font-bold tracking-tight text-foreground hover:no-underline sm:text-2xl">
-                {APP_NAME}
-            </Link>
-          </div>
+            <span>{APP_NAME}</span>
+          </Link>
 
           {/* Center Group: Desktop App Mode Toggle Switch */}
           {desktopAppModeToggleSwitch}
