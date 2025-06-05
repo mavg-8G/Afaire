@@ -1,16 +1,15 @@
 
 "use client";
 import React, { useState, useMemo, useEffect } from 'react';
-import { useRouter } from 'next/navigation'; // Import useRouter
+import { useRouter } from 'next/navigation';
 import { Calendar } from '@/components/ui/calendar';
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Activity, RecurrenceRule } from '@/lib/types';
 import {
   isSameDay, format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval,
   addDays, addWeeks, addMonths, getDay, getDate as getDayOfMonthFn, parseISO, formatISO,
-  isAfter, isBefore, isEqual, setDate as setDayOfMonth // Added setDate
+  isAfter, isBefore, isEqual, setDate as setDayOfMonth
 } from 'date-fns';
-// ActivityModal import removed
 import ActivityListItem from './activity-list-item';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,7 +35,6 @@ import { cn } from '@/lib/utils';
 
 type ViewMode = 'daily' | 'weekly' | 'monthly';
 
-// Helper functions moved outside the component
 const startOfDayUtil = (date: Date): Date => {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -96,15 +94,21 @@ function generateRecurringInstances(
 
   const seriesEndDate = recurrence.endDate ? new Date(recurrence.endDate) : null;
   let iterations = 0;
-  const maxIterations = 366 * 2;
+  const maxIterations = 366 * 2; // Limit iterations for safety
 
   while (iterations < maxIterations && isBefore(currentDate, addDays(viewEndDate,1))) {
     iterations++;
     if (seriesEndDate && isAfter(currentDate, seriesEndDate)) break;
     if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
+        // Efficiently jump based on recurrence type if before master activity start
         if (recurrence.type === 'daily') currentDate = addDays(currentDate, 1);
-        else if (recurrence.type === 'weekly') currentDate = addWeeks(currentDate, 1);
-        else if (recurrence.type === 'monthly') currentDate = addMonths(currentDate, 1);
+        else if (recurrence.type === 'weekly') {
+            // Jump to next day, validity check will handle daysOfWeek
+             currentDate = addDays(currentDate, 1);
+        } else if (recurrence.type === 'monthly') {
+            // Jump to next day, validity check will handle dayOfMonth
+            currentDate = addDays(currentDate, 1);
+        }
         else break;
         continue;
     }
@@ -130,12 +134,11 @@ function generateRecurringInstances(
       const occurrenceDateKey = formatISO(currentDate, { representation: 'date' });
       instances.push({
         ...masterActivity,
-        id: `${masterActivity.id}_${currentDate.getTime()}`, // Unique ID for instance
+        id: `${masterActivity.id}_${currentDate.getTime()}`,
         isRecurringInstance: true,
         originalInstanceDate: currentDate.getTime(),
         masterActivityId: masterActivity.id,
         completed: !!masterActivity.completedOccurrences?.[occurrenceDateKey],
-        // Create new todo instances for each recurring activity instance
         todos: masterActivity.todos.map(todo => ({...todo, id: uuidv4(), completed: false})),
       });
     }
@@ -143,13 +146,11 @@ function generateRecurringInstances(
     if (recurrence.type === 'daily') {
       currentDate = addDays(currentDate, 1);
     } else if (recurrence.type === 'weekly') {
-      // For weekly, we just advance by one day and rely on daysOfWeek check
       currentDate = addDays(currentDate, 1);
     } else if (recurrence.type === 'monthly') {
-      // For monthly, advance by one day, the check for dayOfMonth handles it
       currentDate = addDays(currentDate,1);
     } else {
-      break; // Should not happen
+      break;
     }
   }
   return instances;
@@ -160,16 +161,20 @@ export default function ActivityCalendarView() {
   const { getRawActivities, getCategoryById, deleteActivity } = useAppStore();
   const { toast } = useToast();
   const { t, locale } = useTranslations();
-  const router = useRouter(); // Initialize useRouter
+  const router = useRouter();
 
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [currentDisplayMonth, setCurrentDisplayMonth] = useState<Date | undefined>(undefined);
-  // ActivityModal related states removed
   const [activityToDelete, setActivityToDelete] = useState<Activity | null>(null);
   const [hasMounted, setHasMounted] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('daily');
-  // dateForModal removed
 
+  const [processedActivities, setProcessedActivities] = useState<Activity[]>([]);
+  const [allProcessedActivitiesCompleted, setAllProcessedActivitiesCompleted] = useState(false);
+  const [isLoadingActivities, setIsLoadingActivities] = useState(true);
+
+  const [processedDayEventCounts, setProcessedDayEventCounts] = useState<Map<string, number>>(new Map());
+  const [isLoadingEventCounts, setIsLoadingEventCounts] = useState(true);
 
   const dateLocale = useMemo(() => {
     if (locale === 'es') return es;
@@ -180,8 +185,6 @@ export default function ActivityCalendarView() {
   useEffect(() => {
     setHasMounted(true);
     const today = new Date();
-    // Set initial selectedDate and currentDisplayMonth only if they are not already set.
-    // This allows for potential future deep-linking or state persistence.
     if (!selectedDate) {
       setSelectedDate(today);
     }
@@ -189,11 +192,17 @@ export default function ActivityCalendarView() {
       setCurrentDisplayMonth(today);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount. No need for selectedDate/currentDisplayMonth in deps here.
+  }, []);
 
+  useEffect(() => {
+    if (!selectedDate || !hasMounted) {
+      setProcessedActivities([]);
+      setAllProcessedActivitiesCompleted(false);
+      setIsLoadingActivities(viewMode !== 'daily' || !!selectedDate); // Only true loading if a date or range is expected
+      return;
+    }
 
-  const { activitiesForView, allActivitiesInViewCompleted } = useMemo(() => {
-    if (!selectedDate || !hasMounted) return { activitiesForView: [], allActivitiesInViewCompleted: false };
+    setIsLoadingActivities(true);
     const rawActivities = getRawActivities();
     let viewStartDate: Date, viewEndDate: Date;
 
@@ -212,94 +221,71 @@ export default function ActivityCalendarView() {
     rawActivities.forEach(masterActivity => {
       if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
         allDisplayActivities.push(...generateRecurringInstances(masterActivity, viewStartDate, viewEndDate));
-      } else { // Non-recurring
+      } else {
         const activityDate = new Date(masterActivity.createdAt);
          if (isWithinInterval(activityDate, { start: viewStartDate, end: viewEndDate }) || isSameDay(activityDate, viewStartDate) || isSameDay(activityDate, viewEndDate) ) {
            allDisplayActivities.push({
             ...masterActivity,
-            isRecurringInstance: false, // Explicitly false
-            originalInstanceDate: masterActivity.createdAt, // Use createdAt as original instance
+            isRecurringInstance: false,
+            originalInstanceDate: masterActivity.createdAt,
             masterActivityId: masterActivity.id,
           });
         }
       }
     });
 
-    // For daily view, filter again to ensure only activities for the exact selectedDate are shown
-    // This is important because generateRecurringInstances might include instances from the start/end of the week/month range
     if (viewMode === 'daily') {
       allDisplayActivities = allDisplayActivities.filter(activity =>
         activity.originalInstanceDate && isSameDay(new Date(activity.originalInstanceDate), selectedDate)
       );
     }
     
-    // Sort logic
     const sortedActivities = allDisplayActivities.sort((a, b) => {
-        // Determine completion status for this specific instance
         const aIsCompleted = a.isRecurringInstance && a.originalInstanceDate
             ? !!a.completedOccurrences?.[formatISO(new Date(a.originalInstanceDate), { representation: 'date' })]
             : !!a.completed;
         const bIsCompleted = b.isRecurringInstance && b.originalInstanceDate
             ? !!b.completedOccurrences?.[formatISO(new Date(b.originalInstanceDate), { representation: 'date' })]
             : !!b.completed;
-
-        // 1. Sort by completion status (incomplete first)
-        if (aIsCompleted !== bIsCompleted) {
-            return aIsCompleted ? 1 : -1; // Completed items go to the bottom
-        }
-
-        // 2. Sort by time (activities with time first, then by time ascending)
+        if (aIsCompleted !== bIsCompleted) return aIsCompleted ? 1 : -1;
         const aTime = a.time ? parseInt(a.time.replace(':', ''), 10) : Infinity;
         const bTime = b.time ? parseInt(b.time.replace(':', ''), 10) : Infinity;
-        
-        if (a.time && !b.time) return -1; // a (with time) comes before b (without time)
-        if (!a.time && b.time) return 1;  // b (with time) comes before a (without time)
-        
-        if (a.time && b.time && aTime !== bTime) {
-            return aTime - bTime; // Sort by time ascending
-        }
-
-        // 3. Sort by original instance date (earlier dates first)
+        if (a.time && !b.time) return -1;
+        if (!a.time && b.time) return 1;
+        if (a.time && b.time && aTime !== bTime) return aTime - bTime;
         const aDate = a.originalInstanceDate ? new Date(a.originalInstanceDate).getTime() : new Date(a.createdAt).getTime();
         const bDate = b.originalInstanceDate ? new Date(b.originalInstanceDate).getTime() : new Date(b.createdAt).getTime();
-        if (aDate !== bDate) {
-            return aDate - bDate;
-        }
-        
-        // 4. Fallback sort by title (alphabetical) for stability if all else is equal
+        if (aDate !== bDate) return aDate - bDate;
         return a.title.localeCompare(b.title);
     });
 
     const allCompleted = sortedActivities.length > 0 && sortedActivities.every(act => {
-      // Check completion of the specific instance
       const isInstanceCompleted = act.isRecurringInstance && act.originalInstanceDate
         ? !!act.completedOccurrences?.[formatISO(new Date(act.originalInstanceDate), { representation: 'date' })]
         : !!act.completed;
-
       if (!isInstanceCompleted) return false;
-      // If it's a recurring instance, its todos are fresh copies, so they are not pre-completed
-      // unless specifically handled after generation (which is not the case here).
-      // For non-recurring, check its todos.
       if (!act.isRecurringInstance && act.todos && act.todos.length > 0) {
         return act.todos.every(todo => todo.completed);
       }
-      // If recurring, its "main" completion implies completion for the chart
-      // If non-recurring and no todos, its "main" completion is enough
       return true;
     });
 
-    return { activitiesForView: sortedActivities, allActivitiesInViewCompleted: allCompleted };
+    setProcessedActivities(sortedActivities);
+    setAllProcessedActivitiesCompleted(allCompleted);
+    setIsLoadingActivities(false);
   }, [getRawActivities, selectedDate, hasMounted, viewMode, dateLocale]);
 
-  const dayEventCounts = useMemo(() => {
-    if (!hasMounted || !currentDisplayMonth) return new Map<string, number>();
+  useEffect(() => {
+    if (!hasMounted || !currentDisplayMonth) {
+      setProcessedDayEventCounts(new Map());
+      setIsLoadingEventCounts(true);
+      return;
+    }
+    setIsLoadingEventCounts(true);
     const rawActivities = getRawActivities();
     const counts = new Map<string, number>();
-
-    // Define the range for which to generate instances for dots
-    // Typically, this covers the visible month plus potentially parts of prev/next month
-    const displayRangeStart = startOfMonth(addMonths(currentDisplayMonth, -1)); // Include previous month
-    const displayRangeEnd = endOfMonth(addMonths(currentDisplayMonth, 1));   // Include next month
+    const displayRangeStart = startOfMonth(addMonths(currentDisplayMonth, -1));
+    const displayRangeEnd = endOfMonth(addMonths(currentDisplayMonth, 1));
 
     rawActivities.forEach(activity => {
       if (activity.recurrence && activity.recurrence.type !== 'none') {
@@ -310,17 +296,18 @@ export default function ActivityCalendarView() {
             counts.set(dateKey, (counts.get(dateKey) || 0) + 1);
           }
         });
-      } else { // Non-recurring
+      } else {
         const activityDate = new Date(activity.createdAt);
-        // Check if the non-recurring activity falls within the wider display range for dots
         if (isWithinInterval(activityDate, {start: displayRangeStart, end: displayRangeEnd})) {
           const dateKey = formatISO(activityDate, { representation: 'date' });
           counts.set(dateKey, (counts.get(dateKey) || 0) + 1);
         }
       }
     });
-    return counts;
+    setProcessedDayEventCounts(counts);
+    setIsLoadingEventCounts(false);
   }, [getRawActivities, hasMounted, currentDisplayMonth]);
+
 
   const handleEditActivity = (activityInstanceOrMaster: Activity) => {
     const rawActivities = getRawActivities();
@@ -345,20 +332,17 @@ export default function ActivityCalendarView() {
     router.push(url);
   };
 
-
   const handleOpenDeleteConfirm = (activityInstanceOrMaster: Activity) => {
-    const rawActivities = getRawActivities(); // Fetch fresh list
-    // For deletion, we always target the master activity if it's a recurring series
+    const rawActivities = getRawActivities();
     const masterActivity = activityInstanceOrMaster.masterActivityId
       ? rawActivities.find(a => a.id === activityInstanceOrMaster.masterActivityId)
       : activityInstanceOrMaster;
 
     if (masterActivity) {
-      setActivityToDelete(masterActivity); // Set the master activity for deletion
+      setActivityToDelete(masterActivity);
     } else {
-      // This case should ideally not happen if data is consistent
       console.warn("Could not find master activity for deletion", activityInstanceOrMaster);
-      setActivityToDelete(activityInstanceOrMaster); // Fallback to deleting the instance if master not found
+      setActivityToDelete(activityInstanceOrMaster);
     }
   };
 
@@ -366,49 +350,36 @@ export default function ActivityCalendarView() {
     if (activityToDelete) {
       try {
         await deleteActivity(activityToDelete.id);
-        // Success toast is handled by AppProvider's deleteActivity
       } catch (error) {
-        // Error toast is handled by AppProvider's deleteActivity
-        // Log error for debugging if needed, but AppProvider already does
         console.error("Failed to delete activity from ActivityCalendarView:", error);
       } finally {
-        setActivityToDelete(null); // Close the dialog
+        setActivityToDelete(null);
       }
     }
   };
-
-  // handleCloseModal removed
 
   const handleDateSelect = (date: Date | undefined) => {
     setSelectedDate(date);
     if (date && currentDisplayMonth) {
       const newSelectedMonthStart = startOfMonth(date);
       const currentDisplayMonthStart = startOfMonth(currentDisplayMonth);
-      // Check if the month of the selected date is different from the current display month
       if (newSelectedMonthStart.getTime() !== currentDisplayMonthStart.getTime()) {
-          setCurrentDisplayMonth(date); // Update display month to the month of the selected date
+          setCurrentDisplayMonth(date);
       }
     } else if (date) {
-        // If currentDisplayMonth is undefined (e.g., on initial load after selection)
         setCurrentDisplayMonth(date);
     }
-    // dateForModal removed
   };
 
   const handleTodayButtonClick = () => {
     const today = new Date();
     setSelectedDate(today);
-    setCurrentDisplayMonth(today); // Ensure calendar view also jumps to current month
-    // dateForModal removed
+    setCurrentDisplayMonth(today);
   };
 
   const todayButtonFooter = (
     <div className="flex justify-center pt-2">
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleTodayButtonClick}
-      >
+      <Button variant="outline" size="sm" onClick={handleTodayButtonClick}>
         {t('todayButton')}
       </Button>
     </div>
@@ -435,26 +406,23 @@ export default function ActivityCalendarView() {
         return t('activitiesForMonth', { month: format(selectedDate, 'MMMM yyyy', { locale: dateLocale }) });
       }
     }
-    return t('selectDateToSeeActivities'); // Default fallback
+    return t('selectDateToSeeActivities');
   };
 
-
-  if (!hasMounted || !currentDisplayMonth) { // Changed condition: Skeleton only if not mounted or calendar month not ready
+  if (!hasMounted || !currentDisplayMonth) {
     return (
       <div className="container mx-auto py-6 flex flex-col lg:flex-row gap-6 items-start">
-        {/* Calendar Skeleton */}
         <Card className="lg:w-1/2 xl:w-2/3 shadow-lg w-full">
           <CardContent className="p-0 sm:p-1 flex justify-center">
             <Skeleton className="h-[300px] w-[350px] sm:w-[400px] sm:h-[350px] rounded-md" />
           </CardContent>
         </Card>
-        {/* Activity List Skeleton */}
         <Card className="lg:w-1/2 xl:w-1/3 shadow-lg w-full flex flex-col">
           <CardHeader>
             <CardTitle>
               <Skeleton className="h-6 w-3/4" />
             </CardTitle>
-             <div className="pt-2"> {/* Added padding for tabs skeleton */}
+             <div className="pt-2">
                 <Skeleton className="h-10 w-full" />
             </div>
           </CardHeader>
@@ -474,23 +442,29 @@ export default function ActivityCalendarView() {
       <div className="container mx-auto py-6 flex flex-col lg:flex-row gap-6 items-start">
         <Card className="lg:w-1/2 xl:w-2/3 shadow-lg w-full">
           <CardContent className="p-0 sm:p-1 flex justify-center">
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={handleDateSelect}
-              month={currentDisplayMonth} // Control the displayed month
-              onMonthChange={setCurrentDisplayMonth} // Allow user to change month
-              className="p-1 sm:p-3 rounded-md"
-              locale={dateLocale}
-              footer={todayButtonFooter}
-              dayEventCounts={dayEventCounts} // Pass event counts
-            />
+            {isLoadingEventCounts && !processedDayEventCounts.size ? (
+                <div className="h-[300px] w-[350px] sm:w-[400px] sm:h-[350px] flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+            ) : (
+                <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={handleDateSelect}
+                month={currentDisplayMonth}
+                onMonthChange={setCurrentDisplayMonth}
+                className="p-1 sm:p-3 rounded-md"
+                locale={dateLocale}
+                footer={todayButtonFooter}
+                dayEventCounts={processedDayEventCounts}
+                />
+            )}
           </CardContent>
         </Card>
 
         <Card className={cn(
           "lg:w-1/2 xl:w-1/3 shadow-lg w-full flex flex-col transition-colors duration-300",
-          selectedDate && allActivitiesInViewCompleted && activitiesForView.length > 0 && "bg-primary/10" // Highlight if all complete
+          selectedDate && allProcessedActivitiesCompleted && processedActivities.length > 0 && !isLoadingActivities && "bg-primary/10"
           )}>
           <CardHeader>
             <CardTitle>
@@ -507,12 +481,16 @@ export default function ActivityCalendarView() {
             </div>
           </CardHeader>
           <CardContent className="flex-grow">
-            {selectedDate && activitiesForView.length > 0 ? (
+            {isLoadingActivities ? (
+                <div className="flex items-center justify-center h-[calc(100vh-28rem)] sm:h-[calc(100vh-26rem)]">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+            ) : selectedDate && processedActivities.length > 0 ? (
               <ScrollArea className="h-[calc(100vh-24rem)] sm:h-[calc(100vh-22rem)] pr-1">
                 <div className="space-y-3">
-                  {activitiesForView.map(activity => (
+                  {processedActivities.map(activity => (
                     <ActivityListItem
-                      key={activity.id} // Use the generated unique ID for instances
+                      key={activity.id}
                       activity={activity}
                       category={getCategoryById(activity.categoryId)}
                       onEdit={() => handleEditActivity(activity)}
@@ -529,15 +507,13 @@ export default function ActivityCalendarView() {
               </p>
             )}
           </CardContent>
-          {selectedDate && allActivitiesInViewCompleted && activitiesForView.length > 0 && (
+          {selectedDate && allProcessedActivitiesCompleted && processedActivities.length > 0 && !isLoadingActivities && (
             <CardFooter className="text-sm text-primary flex items-center justify-center gap-1 py-3 border-t">
               <CheckCircle className="h-5 w-5" />
               <span>{t('allActivitiesCompleted')}</span>
             </CardFooter>
           )}
         </Card>
-
-        {/* ActivityModal removed */}
 
         {activityToDelete && (
           <AlertDialog open={!!activityToDelete} onOpenChange={() => setActivityToDelete(null)}>
@@ -564,9 +540,7 @@ export default function ActivityCalendarView() {
             "fixed bottom-14 right-6 z-50 shadow-lg",
             "bg-[hsl(var(--accent))]/15 text-accent-foreground backdrop-blur-md border border-border/50 hover:bg-[hsl(var(--accent))]/30",
             "flex items-center justify-center",
-            // Mobile: Round button
             "h-14 w-14 rounded-full p-0",
-            // Desktop (md and up): Squircle with text
             "md:h-12 md:w-auto md:rounded-2xl md:px-4 md:gap-2"
         )}
         aria-label={t('addActivity')}
@@ -577,6 +551,4 @@ export default function ActivityCalendarView() {
     </div>
   );
 }
-    
-
     
