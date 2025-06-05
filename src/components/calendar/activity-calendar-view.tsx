@@ -180,10 +180,16 @@ export default function ActivityCalendarView() {
   useEffect(() => {
     setHasMounted(true);
     const today = new Date();
-    setSelectedDate(today);
-    setCurrentDisplayMonth(today);
-    // setDateForModal(today) removed;
-  }, []);
+    // Set initial selectedDate and currentDisplayMonth only if they are not already set.
+    // This allows for potential future deep-linking or state persistence.
+    if (!selectedDate) {
+      setSelectedDate(today);
+    }
+    if (!currentDisplayMonth) {
+      setCurrentDisplayMonth(today);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount. No need for selectedDate/currentDisplayMonth in deps here.
 
 
   const { activitiesForView, allActivitiesInViewCompleted } = useMemo(() => {
@@ -409,24 +415,31 @@ export default function ActivityCalendarView() {
   );
 
   const getCardTitle = () => {
-    if (!selectedDate) return t('loadingDate');
-    if (viewMode === 'daily') {
-      return t('activitiesForDate', { date: format(selectedDate, 'PPP', { locale: dateLocale }) });
-    } else if (viewMode === 'weekly') {
-      const weekStart = startOfWeek(selectedDate, { locale: dateLocale });
-      const weekEnd = endOfWeek(selectedDate, { locale: dateLocale });
-      return t('activitiesForWeek', {
-        startDate: format(weekStart, 'MMM d', { locale: dateLocale }),
-        endDate: format(weekEnd, 'MMM d, yyyy', { locale: dateLocale })
-      });
-    } else if (viewMode === 'monthly') {
-      return t('activitiesForMonth', { month: format(selectedDate, 'MMMM yyyy', { locale: dateLocale }) });
+    if (!currentDisplayMonth && !selectedDate) {
+      return t('loadingDate');
     }
-    return t('loadingDate'); // Fallback
+    if (!selectedDate && currentDisplayMonth) {
+      return t('selectDateToSeeActivities');
+    }
+    if (selectedDate) {
+      if (viewMode === 'daily') {
+        return t('activitiesForDate', { date: format(selectedDate, 'PPP', { locale: dateLocale }) });
+      } else if (viewMode === 'weekly') {
+        const weekStart = startOfWeek(selectedDate, { locale: dateLocale });
+        const weekEnd = endOfWeek(selectedDate, { locale: dateLocale });
+        return t('activitiesForWeek', {
+          startDate: format(weekStart, 'MMM d', { locale: dateLocale }),
+          endDate: format(weekEnd, 'MMM d, yyyy', { locale: dateLocale })
+        });
+      } else if (viewMode === 'monthly') {
+        return t('activitiesForMonth', { month: format(selectedDate, 'MMMM yyyy', { locale: dateLocale }) });
+      }
+    }
+    return t('selectDateToSeeActivities'); // Default fallback
   };
 
 
-  if (!hasMounted || !selectedDate || !currentDisplayMonth) {
+  if (!hasMounted || !currentDisplayMonth) { // Changed condition: Skeleton only if not mounted or calendar month not ready
     return (
       <div className="container mx-auto py-6 flex flex-col lg:flex-row gap-6 items-start">
         {/* Calendar Skeleton */}
@@ -477,7 +490,7 @@ export default function ActivityCalendarView() {
 
         <Card className={cn(
           "lg:w-1/2 xl:w-1/3 shadow-lg w-full flex flex-col transition-colors duration-300",
-          allActivitiesInViewCompleted && activitiesForView.length > 0 && "bg-primary/10" // Highlight if all complete
+          selectedDate && allActivitiesInViewCompleted && activitiesForView.length > 0 && "bg-primary/10" // Highlight if all complete
           )}>
           <CardHeader>
             <CardTitle>
@@ -516,7 +529,7 @@ export default function ActivityCalendarView() {
               </p>
             )}
           </CardContent>
-          {allActivitiesInViewCompleted && activitiesForView.length > 0 && (
+          {selectedDate && allActivitiesInViewCompleted && activitiesForView.length > 0 && (
             <CardFooter className="text-sm text-primary flex items-center justify-center gap-1 py-3 border-t">
               <CheckCircle className="h-5 w-5" />
               <span>{t('allActivitiesCompleted')}</span>
