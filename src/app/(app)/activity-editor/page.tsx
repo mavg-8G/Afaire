@@ -510,7 +510,7 @@ export default function ActivityEditorPage() {
 
               <div>
                 <div className="flex justify-between items-center mb-2"><FormLabel>{t('todosLabel')}</FormLabel></div>
-                <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
                   {fields.map((item, index) => (
                     <div key={item.id} className="flex items-center space-x-2">
                       <FormField control={form.control} name={`todos.${index}.completed`} render={({ field: todoField }) => (
