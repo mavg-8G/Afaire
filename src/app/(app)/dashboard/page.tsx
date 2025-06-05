@@ -1,11 +1,10 @@
 
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { BarChart } from '@/components/ui/chart';
 import type { BarChartDataItem, BarProps as ChartBarProps } from '@/components/ui/chart';
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAppStore } from '@/hooks/use-app-store';
@@ -43,6 +42,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
+import dynamic from 'next/dynamic';
+
+const BarChart = dynamic(() => import('@/components/ui/chart').then(mod => mod.BarChart), {
+  loading: () => <Skeleton className="h-[350px] w-full" />,
+  ssr: false,
+});
+
 
 type ChartViewMode = 'weekly' | 'monthly';
 type ListViewTimeRange = 'last7days' | 'currentMonth';
