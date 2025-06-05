@@ -49,6 +49,11 @@ const recurrenceSchema = z.object({
   dayOfMonth: z.number().min(1).max(31).optional().nullable(),
 }).default({ type: 'none' });
 
+const normalizeToLocalMidnight = (date: Date): Date => {
+  const newDate = new Date(date);
+  newDate.setHours(0, 0, 0, 0);
+  return newDate;
+};
 
 export default function ActivityEditorPage() {
   const router = useRouter();
@@ -99,13 +104,18 @@ export default function ActivityEditorPage() {
   type ActivityFormData = z.infer<typeof activityFormSchema>;
 
   const defaultInitialDate = useMemo(() => {
+    let dateToNormalize: Date;
     if (initialDateParam) {
       const timestamp = parseInt(initialDateParam, 10);
       if (!isNaN(timestamp) && isValid(new Date(timestamp))) {
-        return new Date(timestamp);
+        dateToNormalize = new Date(timestamp);
+      } else {
+        dateToNormalize = new Date();
       }
+    } else {
+      dateToNormalize = new Date();
     }
-    return new Date();
+    return normalizeToLocalMidnight(dateToNormalize);
   }, [initialDateParam]);
 
   const form = useForm<ActivityFormData>({
@@ -129,19 +139,15 @@ export default function ActivityEditorPage() {
             let activityData: Activity | null | undefined = undefined;
             if (hasFetchedDetailsForId !== activityId) {
                 activityData = await fetchAndSetSpecificActivityDetails(activityId);
-                setHasFetchedDetailsForId(activityId); // Mark as fetched for this ID
-                if (!activityData) { // Fetch failed or activity not found by fetch
+                setHasFetchedDetailsForId(activityId); 
+                if (!activityData) { 
                     toast({ variant: "destructive", title: "Error", description: "Failed to fetch activity details." });
                     router.replace('/');
                     setIsLoadingActivity(false);
                     return;
                 }
-                // If fetchAndSetSpecificActivityDetails updates AppProvider state,
-                // getRawActivities() on next render should provide the updated activity.
-                // For now, use the directly fetched activityData to populate the form immediately.
             }
             
-            // If activityData was fetched, use it. Otherwise, try to find in current raw activities.
             const currentActivityToProcess = activityData || getRawActivities().find(a => a.id === activityId);
 
             if (currentActivityToProcess) {
@@ -157,18 +163,20 @@ export default function ActivityEditorPage() {
                     };
                 });
 
+                const activityCreatedAtDate = normalizeToLocalMidnight(new Date(currentActivityToProcess.createdAt));
+
                 form.reset({
                     title: currentActivityToProcess.title,
                     categoryId: currentActivityToProcess.categoryId,
-                    activityDate: new Date(currentActivityToProcess.createdAt),
+                    activityDate: activityCreatedAtDate,
                     time: currentActivityToProcess.time || "",
                     todos: todosForForm,
                     notes: currentActivityToProcess.notes || "",
                     recurrence: {
                         type: currentActivityToProcess.recurrence?.type || 'none',
-                        endDate: currentActivityToProcess.recurrence?.endDate ? new Date(currentActivityToProcess.recurrence.endDate) : null,
+                        endDate: currentActivityToProcess.recurrence?.endDate ? normalizeToLocalMidnight(new Date(currentActivityToProcess.recurrence.endDate)) : null,
                         daysOfWeek: currentActivityToProcess.recurrence?.daysOfWeek || [],
-                        dayOfMonth: currentActivityToProcess.recurrence?.dayOfMonth || new Date(currentActivityToProcess.createdAt).getDate(),
+                        dayOfMonth: currentActivityToProcess.recurrence?.dayOfMonth || activityCreatedAtDate.getDate(),
                     },
                     responsiblePersonIds: currentActivityToProcess.responsiblePersonIds?.map(id => Number(id)) || [],
                 });
@@ -176,19 +184,19 @@ export default function ActivityEditorPage() {
                 toast({ variant: "destructive", title: "Error", description: "Activity not found." });
                 router.replace('/');
             }
-        } else { // New activity
+        } else { 
             const defaultCategory = categories.length > 0 ? categories[0] : undefined;
             form.reset({
                 title: "",
                 categoryId: defaultCategory ? defaultCategory.id : undefined,
-                activityDate: defaultInitialDate,
+                activityDate: defaultInitialDate, // Already normalized
                 time: "",
                 todos: [],
                 notes: "",
                 recurrence: { type: 'none', endDate: null, daysOfWeek: [], dayOfMonth: defaultInitialDate.getDate() },
                 responsiblePersonIds: [],
             });
-            setHasFetchedDetailsForId(null); // Reset fetch flag for new activity
+            setHasFetchedDetailsForId(null); 
         }
         setIsLoadingActivity(false);
     };
@@ -206,7 +214,7 @@ export default function ActivityEditorPage() {
     try {
       const recurrenceRule: RecurrenceRule | null = data.recurrence.type === 'none' ? null : {
         type: data.recurrence.type,
-        endDate: data.recurrence.endDate ? data.recurrence.endDate.getTime() : null,
+        endDate: data.recurrence.endDate ? data.recurrence.endDate.getTime() : null, // getTime() from normalized date
         daysOfWeek: data.recurrence.type === 'weekly' ? data.recurrence.daysOfWeek || [] : undefined,
         dayOfMonth: data.recurrence.type === 'monthly' ? data.recurrence.dayOfMonth || undefined : undefined,
       };
@@ -219,14 +227,12 @@ export default function ActivityEditorPage() {
         recurrence: recurrenceRule,
         responsiblePersonIds: (appMode === 'personal') ? data.responsiblePersonIds?.map(id => Number(id)) : [],
         appMode: appMode,
-        createdAt: data.activityDate.getTime(), 
+        createdAt: data.activityDate.getTime(), // getTime() from normalized date
       };
 
       if (activityToEdit && activityToEdit.id !== undefined) {
         const currentActivityId = activityToEdit.id;
         const formTodos = data.todos || [];
-        // Use activityToEdit.todos as the source of truth for original todos
-        // This state (activityToEdit) should have been updated by fetchAndSetSpecificActivityDetails if needed
         const originalTodos = activityToEdit.todos || [];
 
         const newTodosToAdd = formTodos.filter(ft => ft.id === undefined || ft.id === null || (typeof ft.id === 'string' && (ft.id.startsWith('malformed_') || !Number.isFinite(parseInt(String(ft.id), 10))  ) ));
@@ -262,7 +268,7 @@ export default function ActivityEditorPage() {
         };
         await addActivity(
           addPayload as Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId'| 'appMode'| 'masterActivityId' | 'isRecurringInstance' | 'originalInstanceDate'> & { todos?: Omit<Todo, 'id'>[], time?: string, notes?: string, recurrence?: RecurrenceRule | null, responsiblePersonIds?: number[], categoryId: number, appMode: AppMode },
-          data.activityDate.getTime()
+          data.activityDate.getTime() // getTime() from normalized date
         );
         toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
       }
@@ -277,7 +283,7 @@ export default function ActivityEditorPage() {
 
   const dialogTitle = activityToEdit ? t('editActivityTitle') : t('addActivityTitle');
   const dialogDescriptionText = activityToEdit && activityToEdit.createdAt
-    ? t('editActivityDescription', { formattedInitialDate: format(new Date(activityToEdit.createdAt), "PPP", { locale: dateLocale }) })
+    ? t('editActivityDescription', { formattedInitialDate: format(normalizeToLocalMidnight(new Date(activityToEdit.createdAt)), "PPP", { locale: dateLocale }) })
     : t('addActivityDescription', { formattedInitialDate: format(defaultInitialDate, "PPP", { locale: dateLocale }) });
 
   const maxRecurrenceEndDate = activityStartDate ? addDays(addMonths(activityStartDate, 5), 1) : undefined;
@@ -337,9 +343,14 @@ export default function ActivityEditorPage() {
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0 max-h-[calc(100vh-12rem)] overflow-y-auto z-[70]" align="start">
                           <Calendar mode="single" selected={field.value} onSelect={(selectedDate) => {
-                              if (selectedDate) field.onChange(selectedDate);
-                              const currentEndDate = form.getValues("recurrence.endDate");
-                              if (selectedDate && currentEndDate && currentEndDate < selectedDate) form.setValue("recurrence.endDate", null);
+                              if (selectedDate) {
+                                const normalizedSelectedDate = normalizeToLocalMidnight(selectedDate);
+                                field.onChange(normalizedSelectedDate);
+                                const currentEndDate = form.getValues("recurrence.endDate");
+                                if (currentEndDate && currentEndDate < normalizedSelectedDate) {
+                                    form.setValue("recurrence.endDate", null);
+                                }
+                              }
                               setIsStartDatePopoverOpen(false);
                             }} disabled={(date) => date < new Date("1900-01-01")} locale={dateLocale} fixedWeeks />
                         </PopoverContent>
@@ -468,7 +479,10 @@ export default function ActivityEditorPage() {
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0 max-h-[calc(100vh-12rem)] overflow-y-auto z-[70]" align="start">
                           <Calendar mode="single" selected={field.value || undefined}
-                            onSelect={(date) => { field.onChange(date); setIsRecurrenceEndDatePopoverOpen(false);}}
+                            onSelect={(date) => { 
+                                if (date) field.onChange(normalizeToLocalMidnight(date)); 
+                                setIsRecurrenceEndDatePopoverOpen(false);
+                            }}
                             disabled={(date) => { const minDate = activityStartDate || new Date("1900-01-01"); if (date < minDate) return true; if (maxRecurrenceEndDate && date > maxRecurrenceEndDate) return true; return false;}}
                             locale={dateLocale} fixedWeeks />
                           {field.value && (
