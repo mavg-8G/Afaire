@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Layers, Languages, Sun, Moon, Laptop, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings, MoreVertical, BellRing, BellOff, BellPlus, Users, Timer } from 'lucide-react';
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { APP_NAME } from '@/lib/constants';
-import ChangePasswordModal from '@/components/forms/change-password-modal';
+// import ChangePasswordModal from '@/components/forms/change-password-modal'; // Original import
+import dynamic from 'next/dynamic'; // Import dynamic
 import { useTranslations } from '@/contexts/language-context';
 import { useTheme } from 'next-themes';
 import {
@@ -26,6 +27,12 @@ import { enUS, es, fr } from 'date-fns/locale';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import PomodoroTimerPopover from '@/components/pomodoro/pomodoro-timer-popover';
+
+// Dynamically import ChangePasswordModal
+const ChangePasswordModal = dynamic(() => import('@/components/forms/change-password-modal'), {
+  ssr: false, // No need to SSR a modal that's initially closed
+  loading: () => <p>Loading...</p> // Optional loading state
+});
 
 export default function AppHeader() {
   const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
@@ -336,7 +343,10 @@ export default function AppHeader() {
           </div>
         </div>
       </header>
-      <ChangePasswordModal isOpen={isChangePasswordModalOpen} onClose={() => setIsChangePasswordModalOpen(false)} />
+      {isChangePasswordModalOpen && (
+        <ChangePasswordModal isOpen={isChangePasswordModalOpen} onClose={() => setIsChangePasswordModalOpen(false)} />
+      )}
     </>
   );
 }
+
