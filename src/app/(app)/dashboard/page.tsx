@@ -51,7 +51,6 @@ type DashboardMainView = 'chart' | 'list' | 'productivity';
 
 
 // Helper to generate instances for dashboard calculations
-// Adapted from ActivityCalendarView
 function generateDashboardInstances(
   masterActivity: Activity,
   viewStartDate: Date,
@@ -74,13 +73,11 @@ function generateDashboardInstances(
   const recurrence = masterActivity.recurrence;
   let currentDate = new Date(masterActivity.createdAt);
 
-  // Adjust currentDate to be within or near the view window for optimization
    if (isBefore(currentDate, viewStartDate)) {
       if (recurrence.type === 'daily') {
           currentDate = viewStartDate;
       } else if (recurrence.type === 'weekly' && recurrence.daysOfWeek && recurrence.daysOfWeek.length > 0) {
           let tempDate = startOfWeek(viewStartDate, { weekStartsOn: 0 /* Sunday */ });
-           // Ensure tempDate starts from masterActivity.createdAt or later, and respects daysOfWeek
           while(isBefore(tempDate, new Date(masterActivity.createdAt)) || !recurrence.daysOfWeek.includes(getDayOfWeekFn(tempDate)) || isBefore(tempDate, viewStartDate) ) {
               tempDate = addDaysFns(tempDate, 1);
               if (isAfter(tempDate, viewEndDate) && isAfter(tempDate, new Date(masterActivity.createdAt))) break;
@@ -93,7 +90,7 @@ function generateDashboardInstances(
               tempMasterStartMonthDay = addMonths(tempMasterStartMonthDay, 1);
           }
           currentDate = setDayOfMonth(viewStartDate, recurrence.dayOfMonth);
-          if (isBefore(currentDate, viewStartDate)) currentDate = addMonths(currentDate,1); // Ensure it's in or after viewStart's month start
+          if (isBefore(currentDate, viewStartDate)) currentDate = addMonths(currentDate,1); 
           if (isBefore(currentDate, tempMasterStartMonthDay)) {
              currentDate = tempMasterStartMonthDay;
           }
@@ -103,14 +100,14 @@ function generateDashboardInstances(
 
   const seriesEndDate = recurrence.endDate ? new Date(recurrence.endDate) : null;
   let iterations = 0;
-  const maxIterations = 366 * 2; // Check for two years max
+  const maxIterations = 366 * 2; 
 
   while (iterations < maxIterations && !isAfter(currentDate, viewEndDate)) {
     iterations++;
     if (seriesEndDate && isAfter(currentDate, seriesEndDate)) break;
     if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
         if (recurrence.type === 'daily') currentDate = addDaysFns(currentDate, 1);
-        else if (recurrence.type === 'weekly') currentDate = addDaysFns(currentDate, 1); // Advance by day, check for week day
+        else if (recurrence.type === 'weekly') currentDate = addDaysFns(currentDate, 1); 
         else if (recurrence.type === 'monthly') {
            if (recurrence.dayOfMonth) {
                 let nextIterationDate;
@@ -155,27 +152,27 @@ function generateDashboardInstances(
         originalInstanceDate: currentDate.getTime(),
         masterActivityId: masterActivity.id,
         completed: !!masterActivity.completedOccurrences?.[occurrenceDateKey],
-        todos: masterActivity.todos.map(todo => ({...todo, id: uuidv4(), completed: false})), // Fresh todos for instance
+        todos: masterActivity.todos.map(todo => ({...todo, id: uuidv4(), completed: false})), 
       });
     }
 
     if (recurrence.type === 'daily') {
       currentDate = addDaysFns(currentDate, 1);
     } else if (recurrence.type === 'weekly') {
-      currentDate = addDaysFns(currentDate, 1); // Advance by day, dayOfWeek check will filter
+      currentDate = addDaysFns(currentDate, 1); 
     } else if (recurrence.type === 'monthly') {
         if (recurrence.dayOfMonth) {
             let nextIterationDate;
             const currentMonthTargetDay = setDayOfMonth(currentDate, recurrence.dayOfMonth);
-            if(isAfter(currentMonthTargetDay, currentDate) && getDayOfMonthFn(currentMonthTargetDay) === recurrence.dayOfMonth){ // If target day is later in current month
+            if(isAfter(currentMonthTargetDay, currentDate) && getDayOfMonthFn(currentMonthTargetDay) === recurrence.dayOfMonth){ 
                  nextIterationDate = currentMonthTargetDay;
-            } else { // Target day already passed in current month or is today, so go to next month's target day
+            } else { 
                  let nextMonthDate = addMonths(currentDate, 1);
                  nextIterationDate = setDayOfMonth(nextMonthDate, recurrence.dayOfMonth);
             }
             currentDate = nextIterationDate;
         } else {
-            currentDate = addDaysFns(currentDate, 1); // Fallback if dayOfMonth is not set
+            currentDate = addDaysFns(currentDate, 1); 
         }
     } else {
       break;
@@ -185,17 +182,22 @@ function generateDashboardInstances(
 }
 
 
-// Helper to check if a specific instance (represented by an Activity object with instance data) is complete
-const isInstanceCompletedForDashboard = (instance: Activity): boolean => {
-  if (!instance.originalInstanceDate) { // Should be a non-recurring master
-    if (instance.todos && instance.todos.length > 0) {
-      return instance.todos.every(todo => todo.completed);
-    }
+// Helper to check if a specific instance is complete
+const isInstanceCompletedForDashboard = (
+  instance: Activity,
+  rawMasterActivitiesList: Activity[] // Pass the list of master activities
+): boolean => {
+  if (!instance.originalInstanceDate) { // Non-recurring master activity
+    // Its 'completed' status is already derived from its main occurrence in AppProvider
     return !!instance.completed;
   }
 
-  const masterActivity = useAppStore.getState().getRawActivities().find(ma => ma.id === instance.masterActivityId);
-  if (!masterActivity) return false; // Should not happen
+  // For a recurring instance, find its master activity from the provided list
+  const masterActivity = rawMasterActivitiesList.find(ma => ma.id === instance.masterActivityId);
+  if (!masterActivity) {
+    console.warn(`Dashboard: Master activity with ID ${instance.masterActivityId} not found for instance.`);
+    return false; // Or handle as appropriate if master is missing
+  }
 
   const occurrenceDateKey = formatISO(new Date(instance.originalInstanceDate), { representation: 'date' });
   return !!masterActivity.completedOccurrences?.[occurrenceDateKey];
@@ -234,10 +236,9 @@ export default function DashboardPage() {
         rawMasterActivities.forEach(masterActivity => {
           const instances = generateDashboardInstances(masterActivity, dayStart, dayEnd);
           instances.forEach(instance => {
-            // Ensure instance is exactly for this day
             if (instance.originalInstanceDate && isSameDay(new Date(instance.originalInstanceDate), currentDateForChart)) {
               totalInstancesThisDay++;
-              if (isInstanceCompletedForDashboard(instance)) {
+              if (isInstanceCompletedForDashboard(instance, rawMasterActivities)) {
                 completedInstancesThisDay++;
               }
             }
@@ -271,9 +272,8 @@ export default function DashboardPage() {
         rawMasterActivities.forEach(masterActivity => {
           const instances = generateDashboardInstances(masterActivity, actualWeekStart, actualWeekEnd);
           instances.forEach(instance => {
-             // The instance is already guaranteed to be within this week by generateDashboardInstances
             totalInstancesThisWeek++;
-            if (isInstanceCompletedForDashboard(instance)) {
+            if (isInstanceCompletedForDashboard(instance, rawMasterActivities)) {
               completedInstancesThisWeek++;
             }
           });
@@ -308,7 +308,7 @@ export default function DashboardPage() {
     const rawMasterActivities = getRawActivities();
     const now = new Date();
     let rangeStartDate: Date;
-    let rangeEndDate: Date = endOfDay(now); // Ensure end of day for range
+    let rangeEndDate: Date = endOfDay(now); 
 
     if (listViewTimeRange === 'last7days') {
       rangeStartDate = startOfDay(subDays(now, 6));
@@ -346,7 +346,7 @@ export default function DashboardPage() {
       relevantInstances.push(...generateDashboardInstances(masterActivity, rangeStartDateFilter, rangeEndDateFilter));
     });
     
-    const completedInstancesInPeriod = relevantInstances.filter(instance => isInstanceCompletedForDashboard(instance));
+    const completedInstancesInPeriod = relevantInstances.filter(instance => isInstanceCompletedForDashboard(instance, rawMasterActivities));
     const totalActivitiesInPeriod = relevantInstances.length;
     const totalCompletedInPeriod = completedInstancesInPeriod.length;
 
@@ -379,7 +379,6 @@ export default function DashboardPage() {
       }
     });
     
-    // Populate total activities per day of week for context if needed, or just completed ones
     relevantInstances.forEach(instance => {
         if (instance.originalInstanceDate) {
             const instanceDate = new Date(instance.originalInstanceDate);
@@ -400,7 +399,7 @@ export default function DashboardPage() {
 
     const dayOfWeekCompletionsChartData: BarChartDataItem[] = Object.entries(dayOfWeekCounts).map(([name, counts]) => ({
       name,
-      count: counts.completed, // Charting completed counts
+      count: counts.completed, 
     }));
     
     let peakDays: string[] = [];
@@ -420,7 +419,7 @@ export default function DashboardPage() {
       overallCompletionRate,
       totalActivitiesInPeriod,
       totalCompletedInPeriod,
-      dayOfWeekCompletions: dayOfWeekCompletionsChartData, // Use the chart-ready data
+      dayOfWeekCompletions: dayOfWeekCompletionsChartData, 
       peakProductivityDays: peakDays,
     };
   }, [getRawActivities, productivityViewTimeRange, hasMounted, getCategoryById, t, dateLocale]);
@@ -428,18 +427,16 @@ export default function DashboardPage() {
   const streakData = useMemo(() => {
     if (!hasMounted) return { currentStreak: 0, longestStreak: 0 };
     const rawMasterActivities = getRawActivities();
-    const completionDates = new Set<string>(); // Store YYYY-MM-DD strings
+    const completionDates = new Set<string>(); 
 
     rawMasterActivities.forEach(masterActivity => {
       if (masterActivity.completedOccurrences) {
         Object.keys(masterActivity.completedOccurrences).forEach(dateKey => {
           if (masterActivity.completedOccurrences![dateKey]) {
-            // dateKey is already YYYY-MM-DD
             completionDates.add(dateKey);
           }
         });
       }
-      // For non-recurring, if 'completed' is true and 'completedAt' exists
       if ((!masterActivity.recurrence || masterActivity.recurrence.type === 'none') && masterActivity.completed && masterActivity.completedAt) {
          completionDates.add(formatISO(new Date(masterActivity.completedAt), { representation: 'date' }));
       }
@@ -456,24 +453,22 @@ export default function DashboardPage() {
     for (let i = 0; i < sortedCompletionDates.length; i++) {
       if (i === 0 || differenceInCalendarDays(sortedCompletionDates[i], sortedCompletionDates[i-1]) === 1) {
         tempStreak++;
-      } else if (differenceInCalendarDays(sortedCompletionDates[i], sortedCompletionDates[i-1]) > 1) { // More than 1 day gap
+      } else if (differenceInCalendarDays(sortedCompletionDates[i], sortedCompletionDates[i-1]) > 1) { 
         longestStreak = Math.max(longestStreak, tempStreak);
-        tempStreak = 1; // Start new streak
+        tempStreak = 1; 
       }
-      // If same day, tempStreak doesn't change, longestStreak also compared at end of loop
     }
     longestStreak = Math.max(longestStreak, tempStreak);
 
     const today = startOfDay(new Date());
     const yesterday = startOfDay(subDays(today,1));
     
-    // Calculate current streak ending today or yesterday
     let streakDayCandidate = today;
     if (completionDates.has(formatISO(today, {representation: 'date'}))) {
         streakDayCandidate = today;
     } else if (completionDates.has(formatISO(yesterday, {representation: 'date'}))) {
         streakDayCandidate = yesterday;
-    } else { // No completion today or yesterday, current streak is 0
+    } else { 
         return { currentStreak: 0, longestStreak };
     }
 
@@ -483,7 +478,6 @@ export default function DashboardPage() {
             currentTempStreak++;
             streakDayCandidate = subDays(streakDayCandidate, 1);
         } else if (isBefore(sortedCompletionDates[i], streakDayCandidate)) {
-            // Found a gap before reaching the start of sorted dates
             break;
         }
     }
@@ -587,9 +581,10 @@ export default function DashboardPage() {
                 <ScrollArea className="h-[400px] pr-4">
                   <div className="space-y-3">
                     {listedActivities.map(instance => {
-                      const masterActivity = getRawActivities().find(ma => ma.id === instance.masterActivityId) || instance;
+                      const rawMasterActivities = getRawActivities();
+                      const masterActivity = rawMasterActivities.find(ma => ma.id === instance.masterActivityId) || instance;
                       const category = getCategoryById(masterActivity.categoryId);
-                      const isCompleted = isInstanceCompletedForDashboard(instance);
+                      const isCompleted = isInstanceCompletedForDashboard(instance, rawMasterActivities);
                       const displayDate = instance.originalInstanceDate ? new Date(instance.originalInstanceDate) : new Date(masterActivity.createdAt);
                       
                       return (
@@ -614,7 +609,6 @@ export default function DashboardPage() {
                                   {category.name}
                                 </Badge>
                               )}
-                              {/* Todos are per-master, not per-instance in this simplified display */}
                               {masterActivity.todos && masterActivity.todos.length > 0 && (
                                 <p className="text-xs text-muted-foreground mt-1">
                                   {t('todosCompleted', { completed: masterActivity.todos.filter(t => t.completed).length, total: masterActivity.todos.length})}
