@@ -1045,6 +1045,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, [isPomodoroReady, toast, t]);
 
   useEffect(() => {
+    let handleControllerChange: (() => void) | null = null;
     const registerAndInitializeSW = async () => {
         try {
             if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
@@ -1068,7 +1069,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
         navigator.serviceWorker.addEventListener('message', handleSWMessage);
 
-        const handleControllerChange = () => {
+        handleControllerChange = () => {
             if (navigator.serviceWorker.controller) {
                 setTimeout(() => postToServiceWorkerRef.current({ type: 'GET_INITIAL_STATE' }), 200);
             } else {
@@ -1093,7 +1094,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return () => {
         if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
             navigator.serviceWorker.removeEventListener('message', handleSWMessage);
-            // Consider unregistering controllerchange listener if appropriate
+            if (handleControllerChange) {
+                navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+            }
         }
     };
   }, [handleSWMessage, t, toast]);
