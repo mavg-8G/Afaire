@@ -10,11 +10,13 @@ import { ThemeProvider } from '@/contexts/theme-provider';
 const geistSans = Geist({
   variable: '--font-geist-sans',
   subsets: ['latin'],
+  display: 'swap', // Optimize LCP
 });
 
 const geistMono = Geist_Mono({
   variable: '--font-geist-mono',
   subsets: ['latin'],
+  display: 'swap', // Optimize LCP
 });
 
 export const metadata: Metadata = {
