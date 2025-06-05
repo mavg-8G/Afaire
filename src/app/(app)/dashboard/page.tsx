@@ -37,7 +37,7 @@ import {
   setDate as setDayOfMonth // Added setDate
 } from 'date-fns';
 import { enUS, es, fr } from 'date-fns/locale';
-import { ArrowLeft, LayoutDashboard, ListChecks, BarChart3, CheckCircle, Circle, TrendingUp, LineChart, ActivityIcon, Flame, Package } from 'lucide-react';
+import { ArrowLeft, LayoutDashboard, ListChecks, BarChart3, CheckCircle, Circle, TrendingUp, LineChart, ActivityIcon, Flame, Package, TrendingDown } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -187,20 +187,25 @@ const isInstanceCompletedForDashboard = (
   instance: Activity,
   rawMasterActivitiesList: Activity[] // Pass the list of master activities
 ): boolean => {
-  if (!instance.originalInstanceDate) { // Non-recurring master activity
-    // Its 'completed' status is already derived from its main occurrence in AppProvider
+  if (!instance.isRecurringInstance && instance.originalInstanceDate === instance.createdAt) {
+    // For non-recurring master activities, its 'completed' status is already derived from its main occurrence.
     return !!instance.completed;
   }
-
-  // For a recurring instance, find its master activity from the provided list
+  
+  // For a recurring instance, or potentially a non-recurring master that somehow got here without originalInstanceDate set
   const masterActivity = rawMasterActivitiesList.find(ma => ma.id === instance.masterActivityId);
   if (!masterActivity) {
     console.warn(`Dashboard: Master activity with ID ${instance.masterActivityId} not found for instance.`);
-    return false; // Or handle as appropriate if master is missing
+    return false;
   }
 
-  const occurrenceDateKey = formatISO(new Date(instance.originalInstanceDate), { representation: 'date' });
-  return !!masterActivity.completedOccurrences?.[occurrenceDateKey];
+  if (instance.originalInstanceDate) {
+    const occurrenceDateKey = formatISO(new Date(instance.originalInstanceDate), { representation: 'date' });
+    return !!masterActivity.completedOccurrences?.[occurrenceDateKey];
+  }
+
+  // Fallback for safety, though should ideally not be reached if instance.originalInstanceDate is always set
+  return !!instance.completed;
 };
 
 
@@ -327,7 +332,7 @@ export default function DashboardPage() {
 
 
   const productivityData = useMemo(() => {
-    if (!hasMounted) return { categoryChartData: [], overallCompletionRate: 0, totalActivitiesInPeriod: 0, totalCompletedInPeriod: 0, dayOfWeekCompletions: [] as BarChartDataItem[], peakProductivityDays: [] as string[] };
+    if (!hasMounted) return { categoryChartData: [], overallCompletionRate: 0, totalActivitiesInPeriod: 0, totalCompletedInPeriod: 0, dayOfWeekCompletions: [] as BarChartDataItem[], peakProductivityDays: [] as string[], daysWithMostFailures: [] as string[] };
     
     const rawMasterActivities = getRawActivities();
     const now = new Date();
@@ -355,28 +360,20 @@ export default function DashboardPage() {
       : 0;
 
     const categoryCounts: Record<string, number> = {};
-    const dayOfWeekCounts: Record<string, { total: number, completed: number }> = {
-      [t('daySun')]: { total: 0, completed: 0 }, [t('dayMon')]: { total: 0, completed: 0 }, 
-      [t('dayTue')]: { total: 0, completed: 0 }, [t('dayWed')]: { total: 0, completed: 0 },
-      [t('dayThu')]: { total: 0, completed: 0 }, [t('dayFri')]: { total: 0, completed: 0 }, 
-      [t('daySat')]: { total: 0, completed: 0 },
-    };
+    const dayOfWeekData: Record<string, { total: number, completed: number, incomplete: number }> = {};
     const dayIndexToName = (dayIndex: number) => [t('daySun'), t('dayMon'), t('dayTue'), t('dayWed'), t('dayThu'), t('dayFri'), t('daySat')][dayIndex];
+    
+    // Initialize dayOfWeekData
+    for (let i = 0; i < 7; i++) {
+        const dayName = dayIndexToName(i);
+        dayOfWeekData[dayName] = { total: 0, completed: 0, incomplete: 0 };
+    }
+
 
     completedInstancesInPeriod.forEach(instance => {
       const category = getCategoryById(instance.categoryId);
       const categoryName = category ? category.name : "Uncategorized";
       categoryCounts[categoryName] = (categoryCounts[categoryName] || 0) + 1;
-
-      if (instance.originalInstanceDate) {
-        const completionDate = new Date(instance.originalInstanceDate);
-         if (isWithinInterval(completionDate, { start: rangeStartDateFilter, end: rangeEndDateFilter })) {
-            const dayName = dayIndexToName(getDayOfWeekFn(completionDate));
-            if (dayName && dayOfWeekCounts[dayName]) {
-                dayOfWeekCounts[dayName].completed = (dayOfWeekCounts[dayName].completed || 0) + 1;
-            }
-        }
-      }
     });
     
     relevantInstances.forEach(instance => {
@@ -384,8 +381,13 @@ export default function DashboardPage() {
             const instanceDate = new Date(instance.originalInstanceDate);
             if (isWithinInterval(instanceDate, { start: rangeStartDateFilter, end: rangeEndDateFilter })) {
                 const dayName = dayIndexToName(getDayOfWeekFn(instanceDate));
-                 if (dayName && dayOfWeekCounts[dayName]) {
-                    dayOfWeekCounts[dayName].total = (dayOfWeekCounts[dayName].total || 0) + 1;
+                 if (dayName && dayOfWeekData[dayName]) {
+                    dayOfWeekData[dayName].total++;
+                    if(isInstanceCompletedForDashboard(instance, rawMasterActivities)){
+                        dayOfWeekData[dayName].completed++;
+                    } else {
+                        dayOfWeekData[dayName].incomplete++;
+                    }
                 }
             }
         }
@@ -397,9 +399,9 @@ export default function DashboardPage() {
       count,
     }));
 
-    const dayOfWeekCompletionsChartData: BarChartDataItem[] = Object.entries(dayOfWeekCounts).map(([name, counts]) => ({
+    const dayOfWeekCompletionsChartData: BarChartDataItem[] = Object.entries(dayOfWeekData).map(([name, data]) => ({
       name,
-      count: counts.completed, 
+      count: data.completed, 
     }));
     
     let peakDays: string[] = [];
@@ -414,6 +416,20 @@ export default function DashboardPage() {
         }
     });
 
+    let daysWithMostFailures: string[] = [];
+    let maxIncomplete = 0;
+    Object.entries(dayOfWeekData).forEach(([dayName, data]) => {
+        if (data.incomplete > 0) { // Only consider days with actual incomplete tasks
+            if (data.incomplete > maxIncomplete) {
+                maxIncomplete = data.incomplete;
+                daysWithMostFailures = [dayName];
+            } else if (data.incomplete === maxIncomplete) {
+                daysWithMostFailures.push(dayName);
+            }
+        }
+    });
+
+
     return {
       categoryChartData,
       overallCompletionRate,
@@ -421,6 +437,7 @@ export default function DashboardPage() {
       totalCompletedInPeriod,
       dayOfWeekCompletions: dayOfWeekCompletionsChartData, 
       peakProductivityDays: peakDays,
+      daysWithMostFailures,
     };
   }, [getRawActivities, productivityViewTimeRange, hasMounted, getCategoryById, t, dateLocale]);
 
@@ -559,7 +576,7 @@ export default function DashboardPage() {
                   <TabsTrigger value="monthly">{t('dashboardViewMonthly')}</TabsTrigger>
                 </TabsList>
               </Tabs>
-              {chartData.length > 0 ? (
+              {chartData.length > 0 && chartData.some(d => d.total > 0 || d.completed > 0) ? (
                  <BarChart data={chartData} bars={chartBars} xAxisDataKey="name" />
               ) : (
                 <div className="flex items-center justify-center h-[350px] text-muted-foreground">
@@ -663,42 +680,6 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
 
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><LineChart className="h-5 w-5" /> {t('dashboardProductivityPatterns')}</CardTitle>
-                  <CardDescription>{t('dashboardCompletionsByDay')}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {productivityData.dayOfWeekCompletions.some(d => Number(d.count) > 0) ? (
-                    <>
-                      <BarChart data={productivityData.dayOfWeekCompletions} bars={dayOfWeekChartBars} xAxisDataKey="name" height={250} />
-                      <p className="text-sm text-center mt-4 font-medium">
-                        {productivityData.peakProductivityDays.length === 0 && t('dashboardNoPeakDay')}
-                        {productivityData.peakProductivityDays.length === 1 && t('dashboardPeakDaySingle', { day: productivityData.peakProductivityDays[0] })}
-                        {productivityData.peakProductivityDays.length > 1 && t('dashboardPeakDayMultiple', { days: productivityData.peakProductivityDays.join(', ') })}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-sm text-muted-foreground text-center py-4">{t('dashboardNoDataForAnalysis')}</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2"><ActivityIcon className="h-5 w-5" /> {t('dashboardCategoryBreakdown')}</CardTitle>
-                  <CardDescription>{t('dashboardActivityCountLabel')}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {productivityData.categoryChartData.length > 0 ? (
-                    <BarChart data={productivityData.categoryChartData} bars={categoryChartBars} xAxisDataKey="name" height={300} />
-                  ) : (
-                    <p className="text-sm text-muted-foreground text-center py-4">{t('dashboardNoDataForAnalysis')}</p>
-                  )}
-                </CardContent>
-              </Card>
-
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2"><CheckCircle className="h-5 w-5" /> {t('dashboardCompletionStats')}</CardTitle>
@@ -724,6 +705,68 @@ export default function DashboardPage() {
                    )}
                 </CardContent>
               </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><LineChart className="h-5 w-5" /> {t('dashboardProductivityPatterns')}</CardTitle>
+                  <CardDescription>{t('dashboardCompletionsByDay')}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {productivityData.dayOfWeekCompletions.some(d => Number(d.count) > 0) ? (
+                    <>
+                      <BarChart data={productivityData.dayOfWeekCompletions} bars={dayOfWeekChartBars} xAxisDataKey="name" height={250} />
+                      <p className="text-sm text-center mt-4 font-medium">
+                        {productivityData.peakProductivityDays.length === 0 && t('dashboardNoPeakDay')}
+                        {productivityData.peakProductivityDays.length === 1 && t('dashboardPeakDaySingle', { day: productivityData.peakProductivityDays[0] })}
+                        {productivityData.peakProductivityDays.length > 1 && t('dashboardPeakDayMultiple', { days: productivityData.peakProductivityDays.join(', ') })}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">{t('dashboardNoDataForAnalysis')}</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><TrendingDown className="h-5 w-5 text-destructive" /> {t('dashboardFailureAnalysisTitle')}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {productivityData.totalActivitiesInPeriod > 0 ? (
+                    productivityData.daysWithMostFailures.length > 0 ? (
+                      <p className="text-sm text-center">
+                        {t('dashboardFailureAnalysisMostIncomplete', { days: productivityData.daysWithMostFailures.join(', ') })}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-center text-green-600 dark:text-green-500">
+                        {t('dashboardFailureAnalysisAllComplete')}
+                      </p>
+                    )
+                  ) : (
+                     <p className="text-sm text-muted-foreground text-center">{t('dashboardFailureAnalysisNoData')}</p>
+                  )}
+                  {productivityData.daysWithMostFailures.length > 0 && (
+                    <p className="text-xs text-muted-foreground text-center pt-2">
+                      {t('dashboardFailureAnalysisInsight')}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><ActivityIcon className="h-5 w-5" /> {t('dashboardCategoryBreakdown')}</CardTitle>
+                  <CardDescription>{t('dashboardActivityCountLabel')}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {productivityData.categoryChartData.length > 0 ? (
+                    <BarChart data={productivityData.categoryChartData} bars={categoryChartBars} xAxisDataKey="name" height={300} />
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">{t('dashboardNoDataForAnalysis')}</p>
+                  )}
+                </CardContent>
+              </Card>
+
             </div>
           )}
         </CardContent>

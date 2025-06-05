@@ -287,6 +287,11 @@ export type Translations = {
   dashboardLongestStreak: string;
   dashboardStreakDays: (params: { count: number }) => string;
   dashboardStreakInsight: string;
+  dashboardFailureAnalysisTitle: string;
+  dashboardFailureAnalysisMostIncomplete: (params: { days: string }) => string;
+  dashboardFailureAnalysisAllComplete: string;
+  dashboardFailureAnalysisInsight: string;
+  dashboardFailureAnalysisNoData: string;
 
 
   // History Page
@@ -615,6 +620,11 @@ export const translations: Record<Locale, Translations> = {
     dashboardLongestStreak: "Longest Streak",
     dashboardStreakDays: (params) => `${params.count} day${params.count === 1 ? '' : 's'}`,
     dashboardStreakInsight: "Consistency is key! Uncompleted tasks break streaks.",
+    dashboardFailureAnalysisTitle: "What days do you usually miss your habits?",
+    dashboardFailureAnalysisMostIncomplete: (params) => `The days with the most incomplete tasks are: ${params.days}.`,
+    dashboardFailureAnalysisAllComplete: "Congratulations! It seems you complete all your tasks or have no tasks scheduled in this period.",
+    dashboardFailureAnalysisInsight: "If this is recurrent, would it be beneficial to schedule fewer tasks for those days?",
+    dashboardFailureAnalysisNoData: "Not enough data to analyze failure days.",
     historyPageTitle: "Activity History",
     historyPageDescription: "Recent actions performed during this session.",
     noHistoryYet: "No activity recorded in this session yet.",
@@ -988,6 +998,11 @@ export const translations: Record<Locale, Translations> = {
     dashboardLongestStreak: "Racha Más Larga",
     dashboardStreakDays: (params) => `${params.count} día${params.count === 1 ? '' : 's'}`,
     dashboardStreakInsight: "¡La constancia es la clave! Las tareas no completadas rompen las rachas.",
+    dashboardFailureAnalysisTitle: "¿Qué días sueles fallar en tus hábitos?",
+    dashboardFailureAnalysisMostIncomplete: (params) => `Los días que más tareas quedan incompletas son: ${params.days}.`,
+    dashboardFailureAnalysisAllComplete: "¡Felicidades! Parece que completas todas tus tareas o no tienes tareas programadas en este periodo.",
+    dashboardFailureAnalysisInsight: "Si esto es recurrente, ¿te convendría programar menos tareas para esos días?",
+    dashboardFailureAnalysisNoData: "No hay suficientes datos para analizar los días de fallo.",
     historyPageTitle: "Historial de Actividad",
     historyPageDescription: "Acciones recientes realizadas durante esta sesión.",
     noHistoryYet: "Aún no se ha registrado actividad en esta sesión.",
@@ -1361,6 +1376,11 @@ export const translations: Record<Locale, Translations> = {
     dashboardLongestStreak: "Plus Longue Série",
     dashboardStreakDays: (params) => `${params.count} jour${params.count === 1 ? '' : 's'}`,
     dashboardStreakInsight: "La régularité est la clé ! Les tâches non terminées brisent les séries.",
+    dashboardFailureAnalysisTitle: "Quels jours manquez-vous habituellement vos habitudes ?",
+    dashboardFailureAnalysisMostIncomplete: (params) => `Les jours avec le plus de tâches incomplètes sont : ${params.days}.`,
+    dashboardFailureAnalysisAllComplete: "Félicitations ! Il semble que vous terminez toutes vos tâches ou que vous n'avez aucune tâche planifiée pour cette période.",
+    dashboardFailureAnalysisInsight: "Si cela est récurrent, serait-il avantageux de planifier moins de tâches pour ces jours-là ?",
+    dashboardFailureAnalysisNoData: "Pas assez de données pour analyser les jours d'échec.",
     historyPageTitle: "Historique des activités",
     historyPageDescription: "Actions récentes effectuées pendant cette session.",
     noHistoryYet: "Aucune activité enregistrée dans cette session pour le moment.",
@@ -1487,3 +1507,4 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
+
