@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Layers, Languages, Sun, Moon, Laptop, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings, MoreVertical, BellRing, BellOff, BellPlus, Users, Timer, Brain } from 'lucide-react'; // Added Brain
+import { Layers, Languages, Sun, Moon, Laptop, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings, MoreVertical, BellRing, BellOff, BellPlus, Users, Smile } from 'lucide-react'; // Added Smile
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { APP_NAME } from '@/lib/constants';
 import dynamic from 'next/dynamic';
@@ -25,7 +25,6 @@ import { formatDistanceToNowStrict } from 'date-fns';
 import { enUS, es, fr } from 'date-fns/locale';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import PomodoroTimerPopover from '@/components/pomodoro/pomodoro-timer-popover';
 
 const ChangePasswordModal = dynamic(() => import('@/components/forms/change-password-modal'), {
   ssr: false, 
@@ -46,8 +45,6 @@ export default function AppHeader() {
     clearAllUINotifications,
     systemNotificationPermission,
     requestSystemNotificationPermission,
-    startPomodoroLongBreak, // Added
-    isPomodoroReady, // Added
   } = useAppStore();
   const router = useRouter();
 
@@ -178,12 +175,12 @@ export default function AppHeader() {
 
   const sharedOptionsItems = (isMobileMenu: boolean) => (
     <>
-      {isMobileMenu && ( // Add Long Break option to mobile menu as well
-        <DropdownMenuItem onClick={startPomodoroLongBreak} disabled={!isPomodoroReady}>
-          <Brain className="mr-2 h-4 w-4" />
-          {t('startLongBreakHeaderLabel')}
-        </DropdownMenuItem>
-      )}
+      <DropdownMenuItem asChild>
+        <Link href="/habits" className="flex items-center w-full">
+            <Smile className="mr-2 h-4 w-4" /> 
+            {t('manageHabits')}
+        </Link>
+      </DropdownMenuItem>
       <DropdownMenuItem asChild>
         <Link href="/history" className="flex items-center w-full">
             <HistoryIcon className="mr-2 h-4 w-4" />
@@ -253,20 +250,6 @@ export default function AppHeader() {
           {/* Right Group */}
           <div className="flex items-center gap-x-1 sm:gap-x-2 mr-4">
             
-            {/* Pomodoro Timer - Desktop Only */}
-            <div className="hidden md:flex items-center gap-x-1">
-              <PomodoroTimerPopover />
-              <Button 
-                variant="outline" 
-                size="icon" 
-                onClick={startPomodoroLongBreak} 
-                disabled={!isPomodoroReady}
-                aria-label={t('startLongBreakHeaderLabel')}
-              >
-                <Brain className="h-5 w-5" />
-              </Button>
-            </div>
-
             {/* Notification Bell - Visible on all screen sizes */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -294,6 +277,11 @@ export default function AppHeader() {
               <Link href="/categories" passHref>
                 <Button variant="outline" size="icon" aria-label={t('manageCategories')}>
                   <Layers className="h-5 w-5" />
+                </Button>
+              </Link>
+              <Link href="/habits" passHref>
+                <Button variant="outline" size="icon" aria-label={t('manageHabits') as string}>
+                  <Smile className="h-5 w-5" />
                 </Button>
               </Link>
               {appMode === 'personal' && (
@@ -342,6 +330,7 @@ export default function AppHeader() {
                       {t('manageCategories')}
                     </Link>
                   </DropdownMenuItem>
+                  {/* Habits link for mobile already part of sharedOptionsItems */}
                   {sharedOptionsItems(true)} 
                 </DropdownMenuContent>
               </DropdownMenu>
