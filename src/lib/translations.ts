@@ -39,7 +39,7 @@ export type Translations = {
   systemNotificationsDismissed: string;
   manageAssignees: string;
   pomodoroTimerMenuLabel: string;
-
+  startLongBreakHeaderLabel: string; // New
 
   // CategoriesPage
   backToCalendar: string;
@@ -93,11 +93,11 @@ export type Translations = {
   administratorLabel: string;
   adminBadge: string;
   adminStatusEditDisabled: string;
-  passwordComplexityRequirements: string; // Added
-  passwordRequiresLowercase: string; // Added
-  passwordRequiresUppercase: string; // Added
-  passwordRequiresNumber: string; // Added
-  passwordRequiresSymbol: string; // Added
+  passwordComplexityRequirements: string; 
+  passwordRequiresLowercase: string; 
+  passwordRequiresUppercase: string; 
+  passwordRequiresNumber: string; 
+  passwordRequiresSymbol: string; 
 
 
   // ActivityEditorPage
@@ -402,6 +402,7 @@ export const translations: Record<Locale, Translations> = {
     systemNotificationsDismissed: "You can enable notifications later from the options menu.",
     manageAssignees: "Manage Assignees",
     pomodoroTimerMenuLabel: "Pomodoro Timer",
+    startLongBreakHeaderLabel: "Start Long Break",
     backToCalendar: "Back to Calendar",
     addCategory: "Add Category",
     editCategory: "Edit Category",
@@ -785,6 +786,7 @@ export const translations: Record<Locale, Translations> = {
     systemNotificationsDismissed: "Puedes activar las notificaciones más tarde desde el menú de opciones.",
     manageAssignees: "Gestionar Asignados",
     pomodoroTimerMenuLabel: "Temporizador Pomodoro",
+    startLongBreakHeaderLabel: "Iniciar Descanso Largo",
     backToCalendar: "Volver al Calendario",
     addCategory: "Añadir Categoría",
     editCategory: "Editar Categoría",
@@ -1168,6 +1170,7 @@ export const translations: Record<Locale, Translations> = {
     systemNotificationsDismissed: "Vous pourrez activer les notifications plus tard depuis le menu des options.",
     manageAssignees: "Gérer les Personnes Assignées",
     pomodoroTimerMenuLabel: "Minuteur Pomodoro",
+    startLongBreakHeaderLabel: "Commencer Longue Pause",
     backToCalendar: "Retour au calendrier",
     addCategory: "Ajouter une catégorie",
     editCategory: "Modifier la catégorie",
@@ -1527,5 +1530,3 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
-
-

@@ -3,11 +3,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Layers, Languages, Sun, Moon, Laptop, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings, MoreVertical, BellRing, BellOff, BellPlus, Users, Timer } from 'lucide-react';
+import { Layers, Languages, Sun, Moon, Laptop, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings, MoreVertical, BellRing, BellOff, BellPlus, Users, Timer, Brain } from 'lucide-react'; // Added Brain
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { APP_NAME } from '@/lib/constants';
-// import ChangePasswordModal from '@/components/forms/change-password-modal'; // Original import
-import dynamic from 'next/dynamic'; // Import dynamic
+import dynamic from 'next/dynamic';
 import { useTranslations } from '@/contexts/language-context';
 import { useTheme } from 'next-themes';
 import {
@@ -28,10 +27,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import PomodoroTimerPopover from '@/components/pomodoro/pomodoro-timer-popover';
 
-// Dynamically import ChangePasswordModal
 const ChangePasswordModal = dynamic(() => import('@/components/forms/change-password-modal'), {
-  ssr: false, // No need to SSR a modal that's initially closed
-  loading: () => <p>Loading...</p> // Optional loading state
+  ssr: false, 
+  loading: () => <p>Loading...</p> 
 });
 
 export default function AppHeader() {
@@ -48,6 +46,8 @@ export default function AppHeader() {
     clearAllUINotifications,
     systemNotificationPermission,
     requestSystemNotificationPermission,
+    startPomodoroLongBreak, // Added
+    isPomodoroReady, // Added
   } = useAppStore();
   const router = useRouter();
 
@@ -166,7 +166,7 @@ export default function AppHeader() {
           {t('systemNotificationsBlocked')}
         </DropdownMenuItem>
       );
-    } else { // 'default' or null
+    } else { 
       return (
         <DropdownMenuItem onClick={requestSystemNotificationPermission}>
           <BellPlus className="mr-2 h-4 w-4" />
@@ -178,21 +178,19 @@ export default function AppHeader() {
 
   const sharedOptionsItems = (isMobileMenu: boolean) => (
     <>
+      {isMobileMenu && ( // Add Long Break option to mobile menu as well
+        <DropdownMenuItem onClick={startPomodoroLongBreak} disabled={!isPomodoroReady}>
+          <Brain className="mr-2 h-4 w-4" />
+          {t('startLongBreakHeaderLabel')}
+        </DropdownMenuItem>
+      )}
       <DropdownMenuItem asChild>
         <Link href="/history" className="flex items-center w-full">
             <HistoryIcon className="mr-2 h-4 w-4" />
             {t('viewHistory')}
         </Link>
       </DropdownMenuItem>
-      {appMode === 'personal' && !isMobileMenu && ( // Only for desktop "Options" menu
-         <DropdownMenuItem asChild>
-            <Link href="/assignees" className="flex items-center w-full">
-                <Users className="mr-2 h-4 w-4" />
-                {t('manageAssignees')}
-            </Link>
-        </DropdownMenuItem>
-      )}
-       {appMode === 'personal' && isMobileMenu && ( // For mobile "More Options" menu
+      {appMode === 'personal' && ( 
          <DropdownMenuItem asChild>
             <Link href="/assignees" className="flex items-center w-full">
                 <Users className="mr-2 h-4 w-4" />
@@ -252,13 +250,21 @@ export default function AppHeader() {
           {/* Center Group: Desktop App Mode Toggle Switch */}
           {desktopAppModeToggleSwitch}
 
-
           {/* Right Group */}
           <div className="flex items-center gap-x-1 sm:gap-x-2 mr-4">
             
             {/* Pomodoro Timer - Desktop Only */}
-            <div className="hidden md:block">
+            <div className="hidden md:flex items-center gap-x-1">
               <PomodoroTimerPopover />
+              <Button 
+                variant="outline" 
+                size="icon" 
+                onClick={startPomodoroLongBreak} 
+                disabled={!isPomodoroReady}
+                aria-label={t('startLongBreakHeaderLabel')}
+              >
+                <Brain className="h-5 w-5" />
+              </Button>
             </div>
 
             {/* Notification Bell - Visible on all screen sizes */}
@@ -349,4 +355,3 @@ export default function AppHeader() {
     </>
   );
 }
-

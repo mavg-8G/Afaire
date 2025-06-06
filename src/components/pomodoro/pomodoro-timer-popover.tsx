@@ -4,7 +4,7 @@
 import React, { useMemo } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { Timer, Play, Pause, RotateCcw, Coffee, Briefcase, Brain, Loader2 } from 'lucide-react'; // Added Brain for Long Break, Loader2
+import { Timer, Play, Pause, RotateCcw, Coffee, Loader2 } from 'lucide-react'; // Removed Brain
 import { useAppStore } from '@/hooks/use-app-store';
 import { useTranslations } from '@/contexts/language-context';
 import { Progress } from "@/components/ui/progress";
@@ -29,18 +29,18 @@ export default function PomodoroTimerPopover() {
     pomodoroCyclesCompleted,
     startPomodoroWork,
     startPomodoroShortBreak,
-    startPomodoroLongBreak,
+    // startPomodoroLongBreak, // Removed
     pausePomodoro,
     resumePomodoro,
     resetPomodoro,
-    isPomodoroReady, // Consume new state
+    isPomodoroReady,
   } = useAppStore();
   const { t } = useTranslations();
 
   const formattedTime = useMemo(() => formatTime(pomodoroTimeRemaining), [pomodoroTimeRemaining]);
 
   const currentPhaseText = useMemo(() => {
-    if (!isPomodoroReady) return t('pomodoroInitializing'); // New text for initializing
+    if (!isPomodoroReady) return t('pomodoroInitializing');
     if (pomodoroPhase === 'work') return t('pomodoroWorkSession');
     if (pomodoroPhase === 'shortBreak') return t('pomodoroShortBreakSession');
     if (pomodoroPhase === 'longBreak') return t('pomodoroLongBreakSession');
@@ -116,31 +116,20 @@ export default function PomodoroTimerPopover() {
 
 
           {isPomodoroReady && pomodoroPhase === 'off' && (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2"> {/* Changed to grid-cols-1 */}
                 <Button 
                     variant="outline" 
                     onClick={startPomodoroShortBreak} 
                     size="sm" 
                     disabled={!isPomodoroReady}
                     className={cn(
-                    "w-full whitespace-normal h-auto py-1.5 text-center"
+                    "w-full whitespace-normal h-auto py-1.5 text-center" // Ensured w-full
                     )}
                 >
                     <Coffee className="mr-2 h-4 w-4 flex-shrink-0" />
                     <span>{t('pomodoroStartShortBreak').split('(')[0].trim()}</span>
                 </Button>
-                <Button 
-                    variant="outline" 
-                    onClick={startPomodoroLongBreak} 
-                    size="sm" 
-                    disabled={!isPomodoroReady}
-                    className={cn(
-                    "w-full whitespace-normal h-auto py-1.5 text-center"
-                    )}
-                >
-                    <Brain className="mr-2 h-4 w-4 flex-shrink-0" /> 
-                    <span>{t('pomodoroStartLongBreak').split('(')[0].trim()}</span>
-                </Button>
+                {/* Removed "Start Long Break" button from here */}
             </div>
           )}
           
