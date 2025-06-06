@@ -45,7 +45,7 @@ const categoryFormSchema = z.object({
 type CategoryFormData = z.infer<typeof categoryFormSchema>;
 
 export default function ManageCategoriesPage() {
-  const { categories: filteredCategories, addCategory, updateCategory, deleteCategory, appMode, isLoading: isAppLoading } = useAppStore();
+  const { categories: filteredCategories, addCategory, updateCategory, deleteCategory, appMode, isLoading: isAppLoading, toast } = useAppStore();
   const { t } = useTranslations();
   const [categoryToDelete, setCategoryToDelete] = useState<number | null>(null); // Changed to number
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -74,25 +74,37 @@ export default function ManageCategoriesPage() {
 
   const onSubmit = async (data: CategoryFormData) => {
     setIsSubmitting(true);
-    if (editingCategory) {
-      await updateCategory(editingCategory.id, { name: data.name, iconName: data.iconName, mode: data.mode }, editingCategory);
-      setEditingCategory(null);
-    } else {
-      await addCategory(data.name, data.iconName, data.mode);
+    try {
+      if (editingCategory) {
+        await updateCategory(editingCategory.id, { name: data.name, iconName: data.iconName, mode: data.mode }, editingCategory);
+        setEditingCategory(null);
+      } else {
+        await addCategory(data.name, data.iconName, data.mode);
+      }
+      form.reset({ name: "", iconName: "", mode: appMode });
+    } catch (error) {
+      // Error toast is handled by AppProvider
+      console.error("Failed to save category:", error);
+    } finally {
+      setIsSubmitting(false);
     }
-    form.reset({ name: "", iconName: "", mode: appMode });
-    setIsSubmitting(false);
   };
 
   const handleDeleteCategory = async (categoryId: number) => {
-    setIsSubmitting(true); // Potentially disable delete button during operation
-    await deleteCategory(categoryId);
-    setCategoryToDelete(null);
-    if (editingCategory?.id === categoryId) {
-      setEditingCategory(null);
-      form.reset({ name: "", iconName: "", mode: appMode });
+    setIsSubmitting(true);
+    try {
+      await deleteCategory(categoryId);
+      setCategoryToDelete(null);
+      if (editingCategory?.id === categoryId) {
+        setEditingCategory(null);
+        form.reset({ name: "", iconName: "", mode: appMode });
+      }
+    } catch (error) {
+      // Error toast is handled by AppProvider
+      console.error("Failed to delete category:", error);
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
   };
 
   const handleEditCategory = (category: Category) => {
@@ -251,7 +263,7 @@ export default function ManageCategoriesPage() {
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel onClick={() => setCategoryToDelete(null)}>{t('cancel')}</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDeleteCategory(category.id)}>
+                                <AlertDialogAction onClick={() => handleDeleteCategory(category.id)} disabled={isSubmitting}>
                                   {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t('delete')}
                                 </AlertDialogAction>
                               </AlertDialogFooter>

@@ -51,7 +51,7 @@ const assigneeFormSchemaBase = z.object({
 type AssigneeFormData = z.infer<typeof assigneeFormSchemaBase>;
 
 export default function ManageAssigneesPage() {
-  const { assignees, addAssignee, updateAssignee, deleteAssignee, appMode, isLoading: isAppStoreLoading } = useAppStore();
+  const { assignees, addAssignee, updateAssignee, deleteAssignee, appMode, isLoading: isAppStoreLoading, toast } = useAppStore();
   const { t } = useTranslations();
   const router = useRouter();
   const [assigneeToDelete, setAssigneeToDelete] = useState<number | null>(null);
@@ -97,9 +97,6 @@ export default function ManageAssigneesPage() {
           message: t('passwordIsRequiredForCreation'),
           path: ['password'],
         });
-        // If password is required and not provided, no need to check complexity or confirmation yet.
-        // Zod will stop on the first error for a path unless multiple issues are added for the same path in one go.
-        // We return here to avoid further password checks if it's simply not provided when required.
         return;
       }
 
@@ -108,8 +105,8 @@ export default function ManageAssigneesPage() {
         const parsedPassword = individualPasswordSchema.safeParse(data.password);
         if (!parsedPassword.success) {
           parsedPassword.error.issues.forEach(issue => {
-            ctx.addIssue({ // Add each specific complexity error to the 'password' path
-              code: z.ZodIssueCode.custom, // Use custom to ensure message is displayed
+            ctx.addIssue({ 
+              code: z.ZodIssueCode.custom, 
               message: issue.message,
               path: ['password'],
             });
@@ -125,11 +122,9 @@ export default function ManageAssigneesPage() {
           });
         }
       } else if (!isCreating && data.confirmPassword && data.confirmPassword.length > 0 && !passwordProvided) {
-        // Edge case: Editing, confirmPassword is filled, but password is not.
-        // This implies an attempt to set a password, so password field should also be filled.
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: t('passwordIsRequiredForCreation'), // Re-use or create new: "Password required if confirming new one"
+            message: t('passwordIsRequiredForCreation'), 
             path: ['password'],
         });
       }
@@ -140,7 +135,7 @@ export default function ManageAssigneesPage() {
   const form = useForm<AssigneeFormData>({
     resolver: zodResolver(assigneeFormSchema),
     defaultValues: { name: "", username: "", password: "", confirmPassword: "", isAdmin: false },
-    mode: 'onBlur', // Validate on blur to show errors after user moves from field
+    mode: 'onBlur', 
   });
 
   useEffect(() => {
@@ -161,9 +156,7 @@ export default function ManageAssigneesPage() {
     } else {
       form.reset({ name: "", username: "", password: "", confirmPassword: "", isAdmin: false });
     }
-    // Trigger validation after resetting, especially relevant when switching between create/edit
-    // as the schema conditions (e.g., password required on create) might change.
-    const timer = setTimeout(() => form.trigger(), 0); // Trigger validation in the next tick
+    const timer = setTimeout(() => form.trigger(), 0); 
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingAssignee, form.reset, form.trigger]);
@@ -182,7 +175,6 @@ export default function ManageAssigneesPage() {
         setEditingAssignee(null);
       } else {
         if (!passwordToUpdate) {
-            // This should ideally be caught by Zod validation, but as a safeguard
             form.setError("password", { type: "manual", message: t('passwordIsRequiredForCreation') });
             setIsSubmitting(false);
             return;
@@ -191,8 +183,11 @@ export default function ManageAssigneesPage() {
       }
       form.reset({ name: "", username: "", password: "", confirmPassword: "", isAdmin: false });
     } catch (error) {
+      // Error toast is handled by AppProvider or within addAssignee/updateAssignee
       console.error("Failed to save assignee:", error);
-      // Error toast is likely handled within addAssignee/updateAssignee via useAppStore
+      if (error instanceof Error && error.message.includes(t('usernameTakenErrorDescription', {username: data.username}))) {
+         form.setError("username", { type: "manual", message: error.message});
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -208,6 +203,7 @@ export default function ManageAssigneesPage() {
         form.reset({ name: "", username: "", password: "", confirmPassword: "", isAdmin: false });
       }
     } catch (error) {
+      // Error toast is handled by AppProvider
       console.error("Failed to delete assignee:", error);
     } finally {
       setIsSubmitting(false);
@@ -299,11 +295,11 @@ export default function ManageAssigneesPage() {
                             </Button>
                           </div>
                         </FormControl>
-                        <FormMessage /> {/* This will now show all password-related errors */}
+                        <FormMessage /> 
                       </FormItem>
                     )}
                   />
-                 {(form.watch('password') || !editingAssignee) && ( // Show confirm password if password has content OR if creating new user
+                 {(form.watch('password') || !editingAssignee) && ( 
                     <FormField
                         control={form.control}
                         name="confirmPassword"

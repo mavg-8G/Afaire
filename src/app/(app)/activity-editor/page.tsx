@@ -258,9 +258,7 @@ export default function ActivityEditorPage() {
         
         const { todos, ...updatePayloadForCore } = activityPayloadBase; 
         await updateActivity(currentActivityId, updatePayloadForCore as Partial<Omit<Activity, 'id' | 'todos'>>, activityToEdit);
-        
-        toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
-
+        // Success toast is handled by AppProvider's updateActivity
       } else {
         const addPayload = {
             ...activityPayloadBase,
@@ -270,7 +268,7 @@ export default function ActivityEditorPage() {
           addPayload as Omit<Activity, 'id' | 'todos' | 'createdAt' | 'completed' | 'completedAt' | 'notes' | 'recurrence' | 'completedOccurrences' | 'responsiblePersonIds' | 'categoryId'| 'appMode'| 'masterActivityId' | 'isRecurringInstance' | 'originalInstanceDate'> & { todos?: Omit<Todo, 'id'>[], time?: string, notes?: string, recurrence?: RecurrenceRule | null, responsiblePersonIds?: number[], categoryId: number, appMode: AppMode },
           data.activityDate.getTime() // getTime() from normalized date
         );
-        toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
+        // Success toast is handled by AppProvider's addActivity
       }
       router.replace('/');
     } catch (error) {
