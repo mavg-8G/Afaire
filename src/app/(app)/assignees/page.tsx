@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -31,18 +31,19 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useTranslations } from '@/contexts/language-context';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 
 const MIN_USERNAME_LENGTH = 3;
-const MIN_PASSWORD_LENGTH = 6; // Align with ChangePasswordModal
+const MIN_PASSWORD_LENGTH = 8; // Updated minimum password length
 
+// Base schema definition, actual validation happens in the useMemo hook
 const assigneeFormSchemaBase = z.object({
-  name: z.string().min(1, "assigneeNameLabel"),
-  username: z.string().min(MIN_USERNAME_LENGTH, "usernameMinLength"),
-  password: z.string().optional(), // Optional for edit, required for create
+  name: z.string(),
+  username: z.string(),
+  password: z.string().optional(),
   confirmPassword: z.string().optional(),
   isAdmin: z.boolean().optional().default(false),
 });
@@ -59,32 +60,79 @@ export default function ManageAssigneesPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  const assigneeFormSchema = useMemo(() => {
+    const passwordValidationMessages = {
+        length: t('passwordMinLength', { length: MIN_PASSWORD_LENGTH }),
+        lowercase: t('passwordRequiresLowercase'),
+        uppercase: t('passwordRequiresUppercase'),
+        number: t('passwordRequiresNumber'),
+        symbol: t('passwordRequiresSymbol'),
+    };
 
-  const assigneeFormSchema = React.useMemo(() => {
+    // This schema defines the rules for a valid password string if one is provided
+    const individualPasswordSchema = z.string()
+        .min(MIN_PASSWORD_LENGTH, passwordValidationMessages.length)
+        .regex(/[a-z]/, passwordValidationMessages.lowercase)
+        .regex(/[A-Z]/, passwordValidationMessages.uppercase)
+        .regex(/[0-9]/, passwordValidationMessages.number)
+        .regex(/[!@#$%^&*]/, passwordValidationMessages.symbol);
+
     return assigneeFormSchemaBase.extend({
-        name: z.string().min(1, t('assigneeNameLabel')),
-        username: z.string()
-                .min(MIN_USERNAME_LENGTH, t('usernameMinLength', { length: MIN_USERNAME_LENGTH }))
-                .min(1,t('usernameIsRequired')),
-        password: z.string().optional(), // Keep optional base
-        confirmPassword: z.string().optional(),
-        isAdmin: z.boolean().optional().default(false),
-    }).refine(data => { // Conditional validation for password on create
-        if (!editingAssignee && (!data.password || data.password.length < MIN_PASSWORD_LENGTH)) {
-            return false;
+      name: z.string().min(1, t('assigneeNameLabel')),
+      username: z.string()
+              .min(MIN_USERNAME_LENGTH, t('usernameMinLength', { length: MIN_USERNAME_LENGTH }))
+              .min(1,t('usernameIsRequired')),
+      // Password and confirmPassword are kept simple here; complex logic is in .superRefine
+      password: z.string().optional(),
+      confirmPassword: z.string().optional(),
+      isAdmin: z.boolean().optional().default(false),
+    }).superRefine((data, ctx) => {
+      const isCreating = !editingAssignee;
+      const passwordProvided = data.password && data.password.length > 0;
+
+      // Rule 1: Password is required if creating a new user
+      if (isCreating && (!data.password || data.password.trim() === "")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: t('passwordIsRequiredForCreation'),
+          path: ['password'],
+        });
+        // If password is required and not provided, no need to check complexity or confirmation yet.
+        // Zod will stop on the first error for a path unless multiple issues are added for the same path in one go.
+        // We return here to avoid further password checks if it's simply not provided when required.
+        return;
+      }
+
+      // Rule 2: If a password string is provided (either for create or update), it must meet complexity requirements
+      if (passwordProvided) {
+        const parsedPassword = individualPasswordSchema.safeParse(data.password);
+        if (!parsedPassword.success) {
+          parsedPassword.error.issues.forEach(issue => {
+            ctx.addIssue({ // Add each specific complexity error to the 'password' path
+              code: z.ZodIssueCode.custom, // Use custom to ensure message is displayed
+              message: issue.message,
+              path: ['password'],
+            });
+          });
         }
-        return true;
-    }, {
-        message: t('passwordMinLength', { length: MIN_PASSWORD_LENGTH }),
-        path: ['password'],
-    }).refine(data => {
-        if ((!editingAssignee && data.password) || (editingAssignee && data.password)) { // If password is being set/changed
-            return data.password === data.confirmPassword;
+
+        // Rule 3: If a password string is provided, it must be confirmed
+        if (data.password !== data.confirmPassword) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: t('passwordUpdateErrorPasswordsDoNotMatch'),
+            path: ['confirmPassword'],
+          });
         }
-        return true; // No password change, no need to confirm
-    }, {
-        message: t('passwordUpdateErrorPasswordsDoNotMatch'),
-        path: ['confirmPassword'],
+      } else if (!isCreating && data.confirmPassword && data.confirmPassword.length > 0 && !passwordProvided) {
+        // Edge case: Editing, confirmPassword is filled, but password is not.
+        // This implies an attempt to set a password, so password field should also be filled.
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: t('passwordIsRequiredForCreation'), // Re-use or create new: "Password required if confirming new one"
+            path: ['password'],
+        });
+      }
     });
   }, [t, editingAssignee]);
 
@@ -92,6 +140,7 @@ export default function ManageAssigneesPage() {
   const form = useForm<AssigneeFormData>({
     resolver: zodResolver(assigneeFormSchema),
     defaultValues: { name: "", username: "", password: "", confirmPassword: "", isAdmin: false },
+    mode: 'onBlur', // Validate on blur to show errors after user moves from field
   });
 
   useEffect(() => {
@@ -101,18 +150,21 @@ export default function ManageAssigneesPage() {
   }, [appMode, router]);
 
   useEffect(() => {
-    form.trigger(); 
     if (editingAssignee) {
-      form.reset({ 
-        name: editingAssignee.name, 
-        username: editingAssignee.username || "", 
+      form.reset({
+        name: editingAssignee.name,
+        username: editingAssignee.username || "",
         isAdmin: !!editingAssignee.isAdmin,
-        password: "", // Clear password fields on edit
-        confirmPassword: "" 
+        password: "",
+        confirmPassword: ""
       });
     } else {
       form.reset({ name: "", username: "", password: "", confirmPassword: "", isAdmin: false });
     }
+    // Trigger validation after resetting, especially relevant when switching between create/edit
+    // as the schema conditions (e.g., password required on create) might change.
+    const timer = setTimeout(() => form.trigger(), 0); // Trigger validation in the next tick
+    return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingAssignee, form.reset, form.trigger]);
 
@@ -120,24 +172,27 @@ export default function ManageAssigneesPage() {
   const onSubmit = async (data: AssigneeFormData) => {
     setIsSubmitting(true);
     try {
+      const passwordToUpdate = data.password && data.password.length >= MIN_PASSWORD_LENGTH ? data.password : undefined;
       if (editingAssignee) {
-        await updateAssignee(editingAssignee.id, { 
-          name: data.name, 
-          username: data.username, 
-          isAdmin: data.isAdmin 
-        }, data.password && data.password.length >= MIN_PASSWORD_LENGTH ? data.password : undefined);
+        await updateAssignee(editingAssignee.id, {
+          name: data.name,
+          username: data.username,
+          isAdmin: data.isAdmin
+        }, passwordToUpdate);
         setEditingAssignee(null);
       } else {
-        if (!data.password) { // Should be caught by zod, but as a safeguard
+        if (!passwordToUpdate) {
+            // This should ideally be caught by Zod validation, but as a safeguard
             form.setError("password", { type: "manual", message: t('passwordIsRequiredForCreation') });
             setIsSubmitting(false);
             return;
         }
-        await addAssignee(data.name, data.username, data.password, data.isAdmin);
+        await addAssignee(data.name, data.username, passwordToUpdate, data.isAdmin);
       }
       form.reset({ name: "", username: "", password: "", confirmPassword: "", isAdmin: false });
     } catch (error) {
       console.error("Failed to save assignee:", error);
+      // Error toast is likely handled within addAssignee/updateAssignee via useAppStore
     } finally {
       setIsSubmitting(false);
     }
@@ -209,10 +264,10 @@ export default function ManageAssigneesPage() {
                       <FormItem>
                         <FormLabel>{t('usernameLabel')}</FormLabel>
                         <FormControl>
-                          <Input 
-                            placeholder={t('usernamePlaceholder')} 
-                            {...field} 
-                            disabled={isSubmitting || isAppStoreLoading} 
+                          <Input
+                            placeholder={t('usernamePlaceholder')}
+                            {...field}
+                            disabled={isSubmitting || isAppStoreLoading}
                           />
                         </FormControl>
                         <FormMessage />
@@ -227,10 +282,10 @@ export default function ManageAssigneesPage() {
                         <FormLabel>{editingAssignee ? t('newPasswordOptionalLabel') : t('passwordLabel')}</FormLabel>
                         <FormControl>
                            <div className="relative">
-                            <Input 
+                            <Input
                                 type={showPassword ? "text" : "password"}
-                                placeholder={editingAssignee ? t('leaveBlankToKeepCurrent') : t('enterPasswordPlaceholder')} 
-                                {...field} 
+                                placeholder={editingAssignee ? t('leaveBlankToKeepCurrent') : t('enterPasswordPlaceholder')}
+                                {...field}
                                 disabled={isSubmitting || isAppStoreLoading}
                                 className="pr-10"
                             />
@@ -244,12 +299,11 @@ export default function ManageAssigneesPage() {
                             </Button>
                           </div>
                         </FormControl>
-                        <FormMessage />
+                        <FormMessage /> {/* This will now show all password-related errors */}
                       </FormItem>
                     )}
                   />
-                  {/* Confirm Password Field - shown if password field has content */}
-                 {(form.watch('password') || !editingAssignee) && (
+                 {(form.watch('password') || !editingAssignee) && ( // Show confirm password if password has content OR if creating new user
                     <FormField
                         control={form.control}
                         name="confirmPassword"
@@ -258,10 +312,10 @@ export default function ManageAssigneesPage() {
                             <FormLabel>{t('confirmPasswordLabel')}</FormLabel>
                             <FormControl>
                             <div className="relative">
-                                <Input 
+                                <Input
                                     type={showConfirmPassword ? "text" : "password"}
-                                    placeholder={t('confirmPasswordPlaceholder')} 
-                                    {...field} 
+                                    placeholder={t('confirmPasswordPlaceholder')}
+                                    {...field}
                                     disabled={isSubmitting || isAppStoreLoading}
                                     className="pr-10"
                                 />
@@ -290,7 +344,7 @@ export default function ManageAssigneesPage() {
                           <Checkbox
                             checked={field.value}
                             onCheckedChange={field.onChange}
-                            disabled={isSubmitting || isAppStoreLoading} 
+                            disabled={isSubmitting || isAppStoreLoading}
                             aria-labelledby="is-admin-label"
                           />
                         </FormControl>
@@ -380,3 +434,5 @@ export default function ManageAssigneesPage() {
     </div>
   );
 }
+
+    
