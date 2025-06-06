@@ -93,6 +93,11 @@ export type Translations = {
   administratorLabel: string;
   adminBadge: string;
   adminStatusEditDisabled: string;
+  passwordComplexityRequirements: string; // Added
+  passwordRequiresLowercase: string; // Added
+  passwordRequiresUppercase: string; // Added
+  passwordRequiresNumber: string; // Added
+  passwordRequiresSymbol: string; // Added
 
 
   // ActivityEditorPage
@@ -446,6 +451,11 @@ export const translations: Record<Locale, Translations> = {
     administratorLabel: "Administrator",
     adminBadge: "Admin",
     adminStatusEditDisabled: "Admin status can be changed during edit.",
+    passwordComplexityRequirements: "Password must meet complexity requirements.",
+    passwordRequiresLowercase: "Must contain at least one lowercase letter.",
+    passwordRequiresUppercase: "Must contain at least one uppercase letter.",
+    passwordRequiresNumber: "Must contain at least one number.",
+    passwordRequiresSymbol: "Must contain at least one symbol (e.g., !@#$%^&*).",
     editActivityTitle: "Edit Activity",
     addActivityTitle: "Add New Activity",
     editActivityDescription: (params) => `Update the details of your activity. Default date: ${params.formattedInitialDate}.`,
@@ -824,6 +834,11 @@ export const translations: Record<Locale, Translations> = {
     administratorLabel: "Administrador",
     adminBadge: "Admin",
     adminStatusEditDisabled: "El estado de administrador se puede cambiar durante la edición.",
+    passwordComplexityRequirements: "La contraseña debe cumplir los requisitos de complejidad.",
+    passwordRequiresLowercase: "Debe contener al menos una letra minúscula.",
+    passwordRequiresUppercase: "Debe contener al menos una letra mayúscula.",
+    passwordRequiresNumber: "Debe contener al menos un número.",
+    passwordRequiresSymbol: "Debe contener al menos un símbolo (ej: !@#$%^&*).",
     editActivityTitle: "Editar Actividad",
     addActivityTitle: "Añadir Nueva Actividad",
     editActivityDescription: (params) => `Actualiza los detalles de tu actividad. Fecha por defecto: ${params.formattedInitialDate}.`,
@@ -1202,6 +1217,11 @@ export const translations: Record<Locale, Translations> = {
     administratorLabel: "Administrateur",
     adminBadge: "Admin",
     adminStatusEditDisabled: "Le statut d'administrateur peut être modifié lors de l'édition.",
+    passwordComplexityRequirements: "Le mot de passe doit répondre aux exigences de complexité.",
+    passwordRequiresLowercase: "Doit contenir au moins une lettre minuscule.",
+    passwordRequiresUppercase: "Doit contenir au moins une lettre majuscule.",
+    passwordRequiresNumber: "Doit contenir au moins un chiffre.",
+    passwordRequiresSymbol: "Doit contenir au moins un symbole (ex: !@#$%^&*).",
     editActivityTitle: "Modifier l'activité",
     addActivityTitle: "Ajouter une nouvelle activité",
     editActivityDescription: (params) => `Mettez à jour les détails de votre activité. Date par défaut : ${params.formattedInitialDate}.`,
@@ -1507,4 +1527,5 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
+
 
