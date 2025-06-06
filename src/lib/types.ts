@@ -4,6 +4,7 @@ import type { LucideIcon } from 'lucide-react';
 // --- JWT ---
 export interface Token {
   access_token: string;
+  refresh_token: string; // Added refresh_token
   token_type: string;
   user_id: number;
   username: string;

@@ -43,7 +43,8 @@ export type AppContextType = AppContextTypeImport;
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode_v2';
-const LOCAL_STORAGE_KEY_JWT = 'todoFlowJWT_v1';
+const LOCAL_STORAGE_KEY_JWT = 'todoFlowJWT_v1'; // Access Token
+const LOCAL_STORAGE_KEY_REFRESH_JWT = 'todoFlowRefreshJWT_v1'; // Refresh Token
 const LOCAL_STORAGE_KEY_UI_NOTIFICATIONS = 'todoFlowUINotifications_v2';
 const LOCAL_STORAGE_KEY_APP_PIN = 'todoFlowAppPin_v2';
 
@@ -414,7 +415,15 @@ const backendToFrontendHistory = (backendHistory: BackendHistory): HistoryLogEnt
 });
 
 const formatBackendError = (errorData: any, defaultMessage: string): string => {
-  if (errorData && errorData.detail) {
+  if (errorData && typeof errorData === 'object') {
+    // Handle new structured error first { error: "name", message: "desc", detail: "desc", error_id: "id" }
+    if (typeof errorData.message === 'string') {
+      return errorData.message;
+    }
+    if (typeof errorData.detail === 'string') { // Fallback if message is not present but detail is
+      return errorData.detail;
+    }
+    // Handle old Pydantic RequestValidationError format (errorData.detail is an array)
     if (Array.isArray(errorData.detail)) {
       return errorData.detail
         .map((validationError: any) => {
@@ -424,8 +433,6 @@ const formatBackendError = (errorData: any, defaultMessage: string): string => {
           return `${loc}: ${validationError.msg}`;
         })
         .join('; ');
-    } else if (typeof errorData.detail === 'string') {
-      return errorData.detail;
     }
   }
   return defaultMessage;
@@ -435,7 +442,7 @@ const createApiErrorToast = (
     err: unknown,
     toastFn: (options: any) => void,
     defaultTitleKey: keyof Translations,
-    operationType: 'loading' | 'adding' | 'updating' | 'deleting' | 'authenticating' | 'logging',
+    operationType: 'loading' | 'adding' | 'updating' | 'deleting' | 'authenticating' | 'logging' | 'refreshing',
     translationFn: (key: keyof Translations, params?: any) => string,
     endpoint?: string,
   ) => {
@@ -466,7 +473,7 @@ Error Message: ${error.message || 'No message'}.`;
     } else if (error.message && error.message.toLowerCase().includes("unexpected token '<'") && error.message.toLowerCase().includes("html")) {
       descriptionKey = 'toastInvalidJsonErrorDescription';
       descriptionParams = { endpoint: endpoint || API_BASE_URL };
-    } else if (error.message) {
+    } else if (error.message) { // This will now catch formatted messages from formatBackendError
         customDescription = error.message;
     }
 
@@ -484,8 +491,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [assignees, setAllAssignees] = useState<Assignee[]>([]);
   const [appModeState, setAppModeState] = useState<AppMode>('personal');
-  const [jwtToken, setJwtToken] = useState<string | null>(null);
+  
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [refreshTokenState, setRefreshTokenState] = useState<string | null>(null);
   const [decodedJwt, setDecodedJwt] = useState<DecodedToken | null>(null);
+  const isRefreshingTokenRef = useRef(false); // To prevent multiple refresh attempts
 
   const [isLoadingState, setIsLoadingState] = useState<boolean>(true);
   const [isActivitiesLoading, setIsActivitiesLoading] = useState(true);
@@ -516,7 +526,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isAppLocked, setIsAppLocked] = useState(false);
   const [appPinState, setAppPinState] = useState<string | null>(null);
 
-  const isAuthenticated = !!jwtToken;
+  const isAuthenticated = !!accessToken;
 
   const postToServiceWorkerLogic = useCallback((message: any) => {
     if (typeof window !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller) {
@@ -549,11 +559,142 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return decodedJwt?.userId ? decodedJwt.userId : (decodedJwt?.sub ? parseInt(decodedJwt.sub, 10) : null);
   }, [decodedJwt]);
 
-  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}, tokenToUse?: string | null): Promise<Response> => {
-    const currentToken = tokenToUse || jwtToken;
+  const logout = useCallback((isTokenRefreshFailure: boolean = false) => {
+    if (!isTokenRefreshFailure) { // Avoid duplicate history log if logout is due to refresh failure
+        addHistoryLogEntryRef.current?.('historyLogLogout', undefined, 'account');
+    }
+    setAccessToken(null);
+    setRefreshTokenState(null);
+    setDecodedJwt(null);
+    if (typeof window !== 'undefined') {
+        localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
+        localStorage.removeItem(LOCAL_STORAGE_KEY_REFRESH_JWT);
+    }
 
-    if (!currentToken && !url.endsWith('/token') && !url.includes(`${API_BASE_URL}/token`)) {
-      throw new Error("No JWT token available for authenticated request.");
+    setIsAppLocked(false);
+    setPersonalActivities([]);
+    setWorkActivities([]);
+    setAllCategories([]);
+    setAllAssignees([]);
+    setHistoryLog([]);
+    setUINotifications([]);
+
+    postToServiceWorkerRef.current({ type: 'RESET_TIMER' });
+    if (logoutChannel) logoutChannel.postMessage('logout_event_v2');
+  }, []);
+
+
+  const decodeAndSetAccessToken = useCallback(async (tokenString: string | null, initialUserDetails?: Pick<DecodedToken, 'userId' | 'username' | 'isAdmin'>): Promise<DecodedToken | null> => {
+    if (!tokenString) {
+      setAccessToken(null);
+      setDecodedJwt(null);
+      if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
+      return null;
+    }
+    try {
+      const secret = new TextEncoder().encode(JWT_SECRET_KEY_FOR_DECODING);
+      const { payload } = await jose.jwtVerify(tokenString, secret, { algorithms: ['HS256'] });
+
+      const newDecodedJwt: DecodedToken = {
+        sub: payload.sub!,
+        exp: payload.exp!,
+        userId: initialUserDetails?.userId ?? (payload.sub ? parseInt(payload.sub, 10) : undefined),
+        username: initialUserDetails?.username,
+        isAdmin: initialUserDetails?.isAdmin,
+      };
+
+      setAccessToken(tokenString);
+      setDecodedJwt(newDecodedJwt);
+      if (typeof window !== 'undefined') localStorage.setItem(LOCAL_STORAGE_KEY_JWT, tokenString);
+      return newDecodedJwt;
+    } catch (err) {
+      const error = err as Error;
+      console.error("[AppProvider] Failed to verify/decode Access Token:", error.message, error.name);
+      if (error.name === 'JWTExpired') {
+        toast({ variant: "destructive", title: "Session Expired", description: "Your access token has expired."});
+      } else {
+        toast({ variant: "destructive", title: "Authentication Error", description: "Invalid access token."});
+      }
+      // Don't logout here directly, let fetchWithAuth handle refresh or final logout
+      setAccessToken(null);
+      setDecodedJwt(null);
+      if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
+      return null;
+    }
+  }, [toast]);
+
+  const refreshTokenLogicInternal = useCallback(async (): Promise<boolean> => {
+    if (isRefreshingTokenRef.current) {
+        // Wait for the ongoing refresh attempt
+        return new Promise((resolve) => {
+            const interval = setInterval(() => {
+                if (!isRefreshingTokenRef.current) {
+                    clearInterval(interval);
+                    resolve(!!accessToken); // Resolve based on whether token was successfully updated
+                }
+            }, 100);
+        });
+    }
+
+    isRefreshingTokenRef.current = true;
+    const currentRefreshToken = refreshTokenState || (typeof window !== 'undefined' ? localStorage.getItem(LOCAL_STORAGE_KEY_REFRESH_JWT) : null);
+
+    if (!currentRefreshToken) {
+        console.warn("[AppProvider] No refresh token available for refresh attempt.");
+        logout(true);
+        isRefreshingTokenRef.current = false;
+        return false;
+    }
+
+    try {
+        const formData = new URLSearchParams();
+        formData.append('refresh_token', currentRefreshToken);
+
+        const response = await fetch(`${API_BASE_URL}/refresh-token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData.toString(),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: "Failed to refresh token: " + response.statusText }));
+            throw new Error(formatBackendError(errorData, `Refresh token failed: HTTP ${response.status}`));
+        }
+
+        const newAuthData = await response.json();
+        if (newAuthData.access_token) {
+            // For decodeAndSetAccessToken, we don't have full user details from refresh, so pass undefined for initialUserDetails
+            await decodeAndSetAccessToken(newAuthData.access_token, undefined); 
+            isRefreshingTokenRef.current = false;
+            return true;
+        } else {
+            throw new Error("New access token not found in refresh response.");
+        }
+    } catch (err) {
+        console.error("[AppProvider] Refresh token failed:", (err as Error).message);
+        createApiErrorToast(err, toast, "loginErrorTitle", "refreshing", t, `${API_BASE_URL}/refresh-token`);
+        logout(true); // Logout if refresh fails
+        isRefreshingTokenRef.current = false;
+        return false;
+    }
+  }, [refreshTokenState, API_BASE_URL, decodeAndSetAccessToken, logout, toast, t, accessToken]);
+
+
+  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}, isRetry: boolean = false): Promise<Response> => {
+    let currentToken = accessToken;
+    let currentDecoded = decodedJwt;
+
+    if (currentDecoded && currentDecoded.exp * 1000 < Date.now() - (10 * 1000)) { // 10 second buffer
+        console.log("[AppProvider] Access token expired or nearing expiry, attempting refresh...");
+        const refreshed = await refreshTokenLogicInternal();
+        if (!refreshed) {
+            throw new Error("Session expired. Please log in again."); // This will trigger logout via catch block
+        }
+        currentToken = localStorage.getItem(LOCAL_STORAGE_KEY_JWT); // Get newly set token
+    }
+    
+    if (!currentToken && !url.endsWith('/token') && !url.includes('/refresh-token') && !url.includes(`${API_BASE_URL}/token`)) {
+        throw new Error("No JWT token available for authenticated request.");
     }
 
     const headers = new Headers(options.headers || {});
@@ -569,11 +710,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, { ...options, headers });
 
-    if (response.status === 401 && !url.endsWith('/token') && !url.includes(`${API_BASE_URL}/token`)) {
-        throw new Error(`Unauthorized: ${response.statusText}`);
+    if (response.status === 401 && !isRetry && !url.endsWith('/token') && !url.includes('/refresh-token') && !url.includes(`${API_BASE_URL}/token`)) {
+        console.log("[AppProvider] Received 401, attempting token refresh and retry...");
+        const refreshed = await refreshTokenLogicInternal();
+        if (refreshed) {
+            console.log("[AppProvider] Token refreshed, retrying original request.");
+            return fetchWithAuth(url, options, true); // Retry once
+        } else {
+            // If refresh failed, the logout would have been called within refreshTokenLogicInternal.
+            // We still throw an error to stop the current operation.
+             throw new Error(`Unauthorized: ${response.statusText} (refresh failed)`);
+        }
     }
     return response;
-  }, [jwtToken]);
+  }, [accessToken, decodedJwt, API_BASE_URL, refreshTokenLogicInternal]);
 
   const addHistoryLogEntryLogic = useCallback(async (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined | null>, scope: HistoryLogEntry['scope'] = 'account') => {
     const currentUserId = getCurrentUserId();
@@ -614,106 +764,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [addHistoryLogEntryLogic]);
 
 
-  const logout = useCallback(() => {
-    addHistoryLogEntryRef.current?.('historyLogLogout', undefined, 'account');
-    setJwtToken(null);
-    setDecodedJwt(null);
-    if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
-
-    setIsAppLocked(false);
-
-    setPersonalActivities([]);
-    setWorkActivities([]);
-    setAllCategories([]);
-    setAllAssignees([]);
-    setHistoryLog([]);
-    setUINotifications([]);
-
-    postToServiceWorkerRef.current({ type: 'RESET_TIMER' });
-    if (logoutChannel) logoutChannel.postMessage('logout_event_v2');
-  }, []);
-
-  const decodeAndSetToken = useCallback(async (tokenString: string | null) => {
-    if (!tokenString) {
-      setJwtToken(null);
-      setDecodedJwt(null);
-      if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
-      return null;
-    }
-    try {
-      let accessToken = tokenString;
-      let tokenDataFromLogin: Token | null = null;
-      try {
-        const parsed = JSON.parse(tokenString); // Expects full Token object from login
-        if (parsed && parsed.access_token && parsed.user_id !== undefined) {
-          tokenDataFromLogin = parsed as Token;
-          accessToken = parsed.access_token;
-        } else {
-          // If not a full Token object, it might be just the access_token string (e.g., from localStorage)
-          // In this case, we won't have user_id, username, is_admin directly from this parse
-        }
-      } catch (e) {
-        // Not a JSON string, assume it's just the access_token itself
-      }
-
-      const secret = new TextEncoder().encode(JWT_SECRET_KEY_FOR_DECODING);
-      const { payload } = await jose.jwtVerify(accessToken, secret, { algorithms: ['HS256'] });
-
-      const newDecodedJwt: DecodedToken = {
-        sub: payload.sub!,
-        exp: payload.exp!,
-        // Prioritize details from the full login token response if available
-        userId: tokenDataFromLogin?.user_id ?? (payload.sub ? parseInt(payload.sub,10) : undefined),
-        username: tokenDataFromLogin?.username ?? undefined, // Or fetch separately if needed
-        isAdmin: tokenDataFromLogin?.is_admin ?? undefined,   // Or fetch separately
-      };
-
-      setJwtToken(accessToken); // Store only the access_token string
-      setDecodedJwt(newDecodedJwt);
-      if (typeof window !== 'undefined') localStorage.setItem(LOCAL_STORAGE_KEY_JWT, accessToken); // Store only access_token
-      return newDecodedJwt;
-    } catch (err) {
-      const error = err as Error;
-      console.error("[AppProvider] Failed to verify/decode JWT:", error.message, error.name, error.stack);
-      if (error.name === 'JWTExpired') {
-        toast({ variant: "destructive", title: "Session Expired", description: "Your session has expired. Please log in again."});
-      }
-      setJwtToken(null);
-      setDecodedJwt(null);
-      if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
-      if (isAuthenticated) logout();
-      return null;
-    }
-  }, [toast, isAuthenticated, logout]);
-
-
   useEffect(() => {
     const loadClientSideDataAndFetchInitial = async () => {
       setIsLoadingState(true);
-      setIsActivitiesLoading(true);
-      setIsCategoriesLoading(true);
-      setIsAssigneesLoading(true);
-      setIsHistoryLoading(true);
+      // ... (rest of the loading flags)
 
       const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
       if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) setAppModeState(storedAppMode);
 
-      const storedTokenString = localStorage.getItem(LOCAL_STORAGE_KEY_JWT);
-      let currentTokenForInitialLoad: string | null = null;
+      const storedAccessToken = localStorage.getItem(LOCAL_STORAGE_KEY_JWT);
+      const storedRefreshToken = localStorage.getItem(LOCAL_STORAGE_KEY_REFRESH_JWT);
       let currentDecodedToken: DecodedToken | null = null;
 
-      if (storedTokenString) {
-          // When loading from localStorage, it's just the access_token string.
-          // decodeAndSetToken will handle verifying it and populating decodedJwt.
-          // It won't have the full Token object details (user_id, username, is_admin)
-          // unless we make a separate call to a /users/me endpoint after token verification.
-          // For now, decodedJwt will primarily have sub and exp.
-          currentDecodedToken = await decodeAndSetToken(storedTokenString);
-          if (currentDecodedToken) {
-            currentTokenForInitialLoad = storedTokenString;
+      if (storedAccessToken) {
+          // We need to validate this token, it might be expired.
+          // decodeAndSetAccessToken will try to decode. If it fails (e.g. expired), it won't set the token.
+          // The user_id, username, is_admin aren't available from just the access token for initial details.
+          // They are primarily set during the login response.
+          currentDecodedToken = await decodeAndSetAccessToken(storedAccessToken, undefined);
+          if (currentDecodedToken && storedRefreshToken) {
+              setRefreshTokenState(storedRefreshToken);
+          } else if (!currentDecodedToken && storedRefreshToken) {
+              // Access token invalid/expired, but refresh token exists. Try to refresh.
+              const refreshed = await refreshTokenLogicInternal(); // refreshTokenLogicInternal sets new access token if successful
+              if (refreshed) {
+                 // At this point, accessToken and decodedJwt should be updated by refreshTokenLogicInternal
+                 // We can re-fetch them from state if needed for consistency, but it's tricky due to async nature.
+                 // The subsequent fetchWithAuth calls will use the new token.
+              } else {
+                 // Refresh failed, user is effectively logged out.
+                 // Ensure all token states are cleared.
+                 logout(true);
+              }
+          } else if (!storedRefreshToken) {
+             // Access token exists but no refresh token, or access token is invalid and no refresh token.
+             // Effectively logged out if access token is invalid.
+             if (!currentDecodedToken) logout(true);
           }
       }
 
+      // ... (rest of the initial data loading for UI notifications, PIN, etc.) ...
       const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
       if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
       if (typeof window !== 'undefined' && 'Notification' in window) setSystemNotificationPermission(Notification.permission);
@@ -721,17 +811,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const storedPin = localStorage.getItem(LOCAL_STORAGE_KEY_APP_PIN);
       if (storedPin) {
         setAppPinState(storedPin);
-        if (currentTokenForInitialLoad) setIsAppLocked(true);
+        if (accessToken) setIsAppLocked(true); // Use state `accessToken`
       }
 
-      if (currentTokenForInitialLoad && currentDecodedToken) {
+
+      if (accessToken && decodedJwt) { // Check state `accessToken`
         try {
+            setIsActivitiesLoading(true);
+            setIsCategoriesLoading(true);
+            setIsAssigneesLoading(true);
+            setIsHistoryLoading(true);
+            // Fetch initial data
             const [actResponse, catResponse, userResponse, histResponse, allOccurrencesResponse] = await Promise.all([
-                fetchWithAuth(`${API_BASE_URL}/activities`, {}, currentTokenForInitialLoad),
-                fetchWithAuth(`${API_BASE_URL}/categories`, {}, currentTokenForInitialLoad),
-                fetchWithAuth(`${API_BASE_URL}/users`, {}, currentTokenForInitialLoad),
-                fetchWithAuth(`${API_BASE_URL}/history`, {}, currentTokenForInitialLoad),
-                fetchWithAuth(`${API_BASE_URL}/activity-occurrences`, {}, currentTokenForInitialLoad)
+                fetchWithAuth(`${API_BASE_URL}/activities`),
+                fetchWithAuth(`${API_BASE_URL}/categories`),
+                fetchWithAuth(`${API_BASE_URL}/users`),
+                fetchWithAuth(`${API_BASE_URL}/history`),
+                fetchWithAuth(`${API_BASE_URL}/activity-occurrences`)
             ]);
 
             if (!actResponse.ok) throw new Error(`Activities fetch failed: HTTP ${actResponse.status} ${actResponse.statusText}`);
@@ -799,8 +895,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             setPersonalActivities(newPersonal); setWorkActivities(newWork);
 
         } catch (err) {
-            if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
-            else { createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`);}
+             if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401') || err.message.includes("Session expired"))) {
+                logout(true); // Logout if initial fetches fail due to auth
+            } else {
+                createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`);
+            }
         } finally {
             setIsActivitiesLoading(false);
             setIsCategoriesLoading(false);
@@ -818,7 +917,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     loadClientSideDataAndFetchInitial();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [decodeAndSetToken, t, toast, fetchWithAuth, API_BASE_URL]);
+  }, [decodeAndSetAccessToken, refreshTokenLogicInternal, t, toast, API_BASE_URL, logout]); // Added logout to dependency array if it's used
 
 
  useEffect(() => {
@@ -1144,11 +1243,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     formData.append('username', username);
     formData.append('password', password);
 
-    let newAccessToken: string | null = null;
-    let loggedInUser: DecodedToken | null = null;
-
     try {
-      const response = await fetch(`${API_BASE_URL}/token`, {
+      const response = await fetch(`${API_BASE_URL}/token`, { // No auth needed for login
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: formData.toString(),
@@ -1157,12 +1253,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const errorData = await response.json().catch(() => ({ detail: response.statusText }));
         throw new Error(formatBackendError(errorData, `Login failed: HTTP ${response.status}`));
       }
-      const tokenData: Token = await response.json();
-      loggedInUser = await decodeAndSetToken(JSON.stringify(tokenData)); // Pass full Token object
+      const tokenData: Token = await response.json(); // Includes access_token and refresh_token
+
+      // Store refresh token
+      setRefreshTokenState(tokenData.refresh_token);
+      if (typeof window !== 'undefined') localStorage.setItem(LOCAL_STORAGE_KEY_REFRESH_JWT, tokenData.refresh_token);
+
+      // Decode and set access token, passing user details from login response for initial DecodedToken population
+      const loggedInUser = await decodeAndSetAccessToken(tokenData.access_token, {
+        userId: tokenData.user_id,
+        username: tokenData.username,
+        isAdmin: tokenData.is_admin
+      });
 
       if (!loggedInUser) throw new Error("Failed to process token after login.");
-      newAccessToken = tokenData.access_token;
-
 
       addHistoryLogEntryRef.current?.('historyLogLogin', { username: tokenData.username }, 'account');
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === "granted") {
@@ -1171,7 +1275,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         stableAddUINotification({ title, description });
         showSystemNotification(title, description);
       }
-      if (newAccessToken) {
+      if (tokenData.access_token) {
           try {
               setIsActivitiesLoading(true);
               setIsCategoriesLoading(true);
@@ -1179,13 +1283,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               setIsHistoryLoading(true);
 
               const [actResponse, catResponse, userResponse, histResponse, allOccurrencesResponse] = await Promise.all([
-                  fetchWithAuth(`${API_BASE_URL}/activities`, {}, newAccessToken),
-                  fetchWithAuth(`${API_BASE_URL}/categories`, {}, newAccessToken),
-                  fetchWithAuth(`${API_BASE_URL}/users`, {}, newAccessToken),
-                  fetchWithAuth(`${API_BASE_URL}/history`, {}, newAccessToken),
-                  fetchWithAuth(`${API_BASE_URL}/activity-occurrences`, {}, newAccessToken)
+                  fetchWithAuth(`${API_BASE_URL}/activities`), // Will use the new access token
+                  fetchWithAuth(`${API_BASE_URL}/categories`),
+                  fetchWithAuth(`${API_BASE_URL}/users`),
+                  fetchWithAuth(`${API_BASE_URL}/history`),
+                  fetchWithAuth(`${API_BASE_URL}/activity-occurrences`)
               ]);
 
+              // ... (rest of the data fetching and state setting logic as before)
               if (!actResponse.ok) throw new Error(`Activities fetch failed: HTTP ${actResponse.status} ${actResponse.statusText}`);
               const backendActivitiesList: BackendActivityListItem[] = await actResponse.json();
 
@@ -1261,7 +1366,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setError((err as Error).message);
       return false;
     }
-  }, [API_BASE_URL, decodeAndSetToken, t, toast, stableAddUINotification, showSystemNotification, fetchWithAuth, appModeState, logout]);
+  }, [API_BASE_URL, decodeAndSetAccessToken, t, toast, stableAddUINotification, showSystemNotification, fetchWithAuth, appModeState, logout]);
 
   const changePassword = useCallback(async (oldPassword: string, newPassword: string): Promise<boolean> => {
     const currentUserId = getCurrentUserId();
@@ -1888,5 +1993,3 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
-
-    
