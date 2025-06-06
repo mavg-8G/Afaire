@@ -327,10 +327,8 @@ const backendToFrontendActivity = (
   let finalCompletedAt: number | null | undefined = undefined;
 
   if (recurrenceRule.type === 'none') {
-    // Use createdAtTimestamp (which is derived from backend's start_date or fallback)
-    // It's already validated to be a number representing a timestamp.
     const mainOccurrenceDate = new Date(createdAtTimestamp);
-    if (!isNaN(mainOccurrenceDate.getTime())) { // Ensure it's a valid date
+    if (!isNaN(mainOccurrenceDate.getTime())) { 
         const mainOccurrenceDateKey = formatISO(mainOccurrenceDate, { representation: 'date' });
         if (completedOccurrencesMap.hasOwnProperty(mainOccurrenceDateKey)) {
             finalCompletedStatus = completedOccurrencesMap[mainOccurrenceDateKey];
@@ -416,14 +414,12 @@ const backendToFrontendHistory = (backendHistory: BackendHistory): HistoryLogEnt
 
 const formatBackendError = (errorData: any, defaultMessage: string): string => {
   if (errorData && typeof errorData === 'object') {
-    // Handle new structured error first { error: "name", message: "desc", detail: "desc", error_id: "id" }
-    if (typeof errorData.message === 'string') {
+    if (typeof errorData.message === 'string' && errorData.message.trim() !== '') {
       return errorData.message;
     }
-    if (typeof errorData.detail === 'string') { // Fallback if message is not present but detail is
+    if (typeof errorData.detail === 'string' && errorData.detail.trim() !== '') {
       return errorData.detail;
     }
-    // Handle old Pydantic RequestValidationError format (errorData.detail is an array)
     if (Array.isArray(errorData.detail)) {
       return errorData.detail
         .map((validationError: any) => {
@@ -473,7 +469,7 @@ Error Message: ${error.message || 'No message'}.`;
     } else if (error.message && error.message.toLowerCase().includes("unexpected token '<'") && error.message.toLowerCase().includes("html")) {
       descriptionKey = 'toastInvalidJsonErrorDescription';
       descriptionParams = { endpoint: endpoint || API_BASE_URL };
-    } else if (error.message) { // This will now catch formatted messages from formatBackendError
+    } else if (error.message) { 
         customDescription = error.message;
     }
 
@@ -495,7 +491,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [refreshTokenState, setRefreshTokenState] = useState<string | null>(null);
   const [decodedJwt, setDecodedJwt] = useState<DecodedToken | null>(null);
-  const isRefreshingTokenRef = useRef(false); // To prevent multiple refresh attempts
+  const isRefreshingTokenRef = useRef(false); 
 
   const [isLoadingState, setIsLoadingState] = useState<boolean>(true);
   const [isActivitiesLoading, setIsActivitiesLoading] = useState(true);
@@ -560,7 +556,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [decodedJwt]);
 
   const logout = useCallback((isTokenRefreshFailure: boolean = false) => {
-    if (!isTokenRefreshFailure) { // Avoid duplicate history log if logout is due to refresh failure
+    if (!isTokenRefreshFailure) { 
         addHistoryLogEntryRef.current?.('historyLogLogout', undefined, 'account');
     }
     setAccessToken(null);
@@ -609,28 +605,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return newDecodedJwt;
     } catch (err) {
       const error = err as Error;
-      console.error("[AppProvider] Failed to verify/decode Access Token:", error.message, error.name);
-      if (error.name === 'JWTExpired') {
-        toast({ variant: "destructive", title: "Session Expired", description: "Your access token has expired."});
-      } else {
-        toast({ variant: "destructive", title: "Authentication Error", description: "Invalid access token."});
-      }
-      // Don't logout here directly, let fetchWithAuth handle refresh or final logout
+      console.error(`[AppProvider] Failed to verify/decode Access Token (name: ${error.name}, message: ${error.message}). Token string (first 20 chars): ${tokenString?.substring(0,20)}...`);
       setAccessToken(null);
       setDecodedJwt(null);
       if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
       return null;
     }
-  }, [toast]);
+  }, []);
 
-  const refreshTokenLogicInternal = useCallback(async (): Promise<boolean> => {
+  const refreshTokenLogicInternal = useCallback(async (): Promise<string | null> => {
     if (isRefreshingTokenRef.current) {
-        // Wait for the ongoing refresh attempt
         return new Promise((resolve) => {
             const interval = setInterval(() => {
                 if (!isRefreshingTokenRef.current) {
                     clearInterval(interval);
-                    resolve(!!accessToken); // Resolve based on whether token was successfully updated
+                    resolve(accessToken); 
                 }
             }, 100);
         });
@@ -643,7 +632,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.warn("[AppProvider] No refresh token available for refresh attempt.");
         logout(true);
         isRefreshingTokenRef.current = false;
-        return false;
+        return null;
     }
 
     try {
@@ -661,47 +650,52 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             throw new Error(formatBackendError(errorData, `Refresh token failed: HTTP ${response.status}`));
         }
 
-        const newAuthData = await response.json();
+        const newAuthData = await response.json(); // Expects { access_token: string, token_type: "bearer" }
         if (newAuthData.access_token) {
-            // For decodeAndSetAccessToken, we don't have full user details from refresh, so pass undefined for initialUserDetails
-            await decodeAndSetAccessToken(newAuthData.access_token, undefined); 
+            const decodedNewToken = await decodeAndSetAccessToken(newAuthData.access_token, undefined); 
+            if (!decodedNewToken) { 
+                console.error("[AppProvider] Failed to decode the new access token obtained from refresh.");
+                logout(true);
+                isRefreshingTokenRef.current = false;
+                return null; 
+            }
             isRefreshingTokenRef.current = false;
-            return true;
+            return newAuthData.access_token; 
         } else {
             throw new Error("New access token not found in refresh response.");
         }
     } catch (err) {
         console.error("[AppProvider] Refresh token failed:", (err as Error).message);
         createApiErrorToast(err, toast, "loginErrorTitle", "refreshing", t, `${API_BASE_URL}/refresh-token`);
-        logout(true); // Logout if refresh fails
+        logout(true); 
         isRefreshingTokenRef.current = false;
-        return false;
+        return null;
     }
   }, [refreshTokenState, API_BASE_URL, decodeAndSetAccessToken, logout, toast, t, accessToken]);
 
 
   const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}, isRetry: boolean = false): Promise<Response> => {
-    let currentToken = accessToken;
-    let currentDecoded = decodedJwt;
+    let tokenToUse = accessToken; 
 
-    if (currentDecoded && currentDecoded.exp * 1000 < Date.now() - (10 * 1000)) { // 10 second buffer
-        console.log("[AppProvider] Access token expired or nearing expiry, attempting refresh...");
-        const refreshed = await refreshTokenLogicInternal();
-        if (!refreshed) {
-            throw new Error("Session expired. Please log in again."); // This will trigger logout via catch block
+    if (decodedJwt && decodedJwt.exp * 1000 < Date.now() - (10 * 1000)) { 
+        console.log("[AppProvider] Access token expired or nearing expiry, attempting refresh (pre-request)...");
+        const newAccessTokenString = await refreshTokenLogicInternal();
+        if (!newAccessTokenString) {
+            throw new Error("Session expired. Please log in again. (Pre-request refresh failed)");
         }
-        currentToken = localStorage.getItem(LOCAL_STORAGE_KEY_JWT); // Get newly set token
+        tokenToUse = newAccessTokenString; 
     }
     
-    if (!currentToken && !url.endsWith('/token') && !url.includes('/refresh-token') && !url.includes(`${API_BASE_URL}/token`)) {
+    if (!tokenToUse && !url.endsWith('/token') && !url.includes('/refresh-token') && !url.includes(`${API_BASE_URL}/token`)) {
+        console.error(`[AppProvider] ERROR: No JWT token available for authenticated request to ${url}. 'tokenToUse' is falsy. Current accessToken state (might be stale): ${accessToken}, decodedJwt state (might be stale): ${JSON.stringify(decodedJwt)}`);
         throw new Error("No JWT token available for authenticated request.");
     }
 
     const headers = new Headers(options.headers || {});
-    if (currentToken) {
-        headers.append('Authorization', `Bearer ${currentToken}`);
+    if (tokenToUse) {
+        headers.append('Authorization', `Bearer ${tokenToUse}`);
     }
-
+    
     if (!(options.body instanceof FormData) && !(options.body instanceof URLSearchParams)) {
         if (!headers.has('Content-Type') && options.method && ['POST', 'PUT', 'PATCH'].includes(options.method.toUpperCase())) {
              headers.append('Content-Type', 'application/json');
@@ -712,18 +706,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     if (response.status === 401 && !isRetry && !url.endsWith('/token') && !url.includes('/refresh-token') && !url.includes(`${API_BASE_URL}/token`)) {
         console.log("[AppProvider] Received 401, attempting token refresh and retry...");
-        const refreshed = await refreshTokenLogicInternal();
-        if (refreshed) {
-            console.log("[AppProvider] Token refreshed, retrying original request.");
-            return fetchWithAuth(url, options, true); // Retry once
+        const newAccessTokenAfter401 = await refreshTokenLogicInternal(); 
+        if (newAccessTokenAfter401) {
+            console.log("[AppProvider] Token refreshed after 401, retrying original request.");
+            const retryHeaders = new Headers(options.headers || {});
+            retryHeaders.append('Authorization', `Bearer ${newAccessTokenAfter401}`); 
+            if (!(options.body instanceof FormData) && !(options.body instanceof URLSearchParams)) {
+                if (!retryHeaders.has('Content-Type') && options.method && ['POST', 'PUT', 'PATCH'].includes(options.method.toUpperCase())) {
+                     retryHeaders.append('Content-Type', 'application/json');
+                }
+            }
+            return fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, { ...options, headers: retryHeaders });
         } else {
-            // If refresh failed, the logout would have been called within refreshTokenLogicInternal.
-            // We still throw an error to stop the current operation.
-             throw new Error(`Unauthorized: ${response.statusText} (refresh failed)`);
+             throw new Error(`Unauthorized: ${response.statusText} (refresh failed after 401)`);
         }
     }
     return response;
-  }, [accessToken, decodedJwt, API_BASE_URL, refreshTokenLogicInternal]);
+  }, [accessToken, decodedJwt, API_BASE_URL, refreshTokenLogicInternal, logout]);
 
   const addHistoryLogEntryLogic = useCallback(async (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined | null>, scope: HistoryLogEntry['scope'] = 'account') => {
     const currentUserId = getCurrentUserId();
@@ -767,7 +766,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     const loadClientSideDataAndFetchInitial = async () => {
       setIsLoadingState(true);
-      // ... (rest of the loading flags)
+      setIsActivitiesLoading(true);
+      setIsCategoriesLoading(true);
+      setIsAssigneesLoading(true);
+      setIsHistoryLoading(true);
 
       const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
       if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) setAppModeState(storedAppMode);
@@ -777,33 +779,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       let currentDecodedToken: DecodedToken | null = null;
 
       if (storedAccessToken) {
-          // We need to validate this token, it might be expired.
-          // decodeAndSetAccessToken will try to decode. If it fails (e.g. expired), it won't set the token.
-          // The user_id, username, is_admin aren't available from just the access token for initial details.
-          // They are primarily set during the login response.
           currentDecodedToken = await decodeAndSetAccessToken(storedAccessToken, undefined);
           if (currentDecodedToken && storedRefreshToken) {
               setRefreshTokenState(storedRefreshToken);
           } else if (!currentDecodedToken && storedRefreshToken) {
-              // Access token invalid/expired, but refresh token exists. Try to refresh.
-              const refreshed = await refreshTokenLogicInternal(); // refreshTokenLogicInternal sets new access token if successful
-              if (refreshed) {
-                 // At this point, accessToken and decodedJwt should be updated by refreshTokenLogicInternal
-                 // We can re-fetch them from state if needed for consistency, but it's tricky due to async nature.
-                 // The subsequent fetchWithAuth calls will use the new token.
-              } else {
-                 // Refresh failed, user is effectively logged out.
-                 // Ensure all token states are cleared.
+              console.log("[AppProvider] Initial load: Access token invalid/expired, attempting refresh with stored refresh token.");
+              const newAccessToken = await refreshTokenLogicInternal(); 
+              if (!newAccessToken) {
                  logout(true);
               }
           } else if (!storedRefreshToken) {
-             // Access token exists but no refresh token, or access token is invalid and no refresh token.
-             // Effectively logged out if access token is invalid.
              if (!currentDecodedToken) logout(true);
           }
       }
 
-      // ... (rest of the initial data loading for UI notifications, PIN, etc.) ...
       const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
       if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
       if (typeof window !== 'undefined' && 'Notification' in window) setSystemNotificationPermission(Notification.permission);
@@ -811,17 +800,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const storedPin = localStorage.getItem(LOCAL_STORAGE_KEY_APP_PIN);
       if (storedPin) {
         setAppPinState(storedPin);
-        if (accessToken) setIsAppLocked(true); // Use state `accessToken`
+        if (accessToken) setIsAppLocked(true); 
       }
 
-
-      if (accessToken && decodedJwt) { // Check state `accessToken`
+      if (accessToken && decodedJwt) { 
         try {
-            setIsActivitiesLoading(true);
-            setIsCategoriesLoading(true);
-            setIsAssigneesLoading(true);
-            setIsHistoryLoading(true);
-            // Fetch initial data
             const [actResponse, catResponse, userResponse, histResponse, allOccurrencesResponse] = await Promise.all([
                 fetchWithAuth(`${API_BASE_URL}/activities`),
                 fetchWithAuth(`${API_BASE_URL}/categories`),
@@ -896,7 +879,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         } catch (err) {
              if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401') || err.message.includes("Session expired"))) {
-                logout(true); // Logout if initial fetches fail due to auth
+                logout(true); 
             } else {
                 createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`);
             }
@@ -917,7 +900,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     loadClientSideDataAndFetchInitial();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [decodeAndSetAccessToken, refreshTokenLogicInternal, t, toast, API_BASE_URL, logout]); // Added logout to dependency array if it's used
+  }, [decodeAndSetAccessToken, refreshTokenLogicInternal, t, toast, API_BASE_URL, logout]); 
 
 
  useEffect(() => {
@@ -1237,14 +1220,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setAppModeState(mode);
   }, [appModeState]);
 
-  const login = useCallback(async (username: string, password: string): Promise<boolean> => {
+  const login = useCallback(async (username: string, password: string, rememberMe?: boolean): Promise<boolean> => {
     setError(null);
     const formData = new URLSearchParams();
     formData.append('username', username);
     formData.append('password', password);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/token`, { // No auth needed for login
+      const response = await fetch(`${API_BASE_URL}/token`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: formData.toString(),
@@ -1253,13 +1236,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const errorData = await response.json().catch(() => ({ detail: response.statusText }));
         throw new Error(formatBackendError(errorData, `Login failed: HTTP ${response.status}`));
       }
-      const tokenData: Token = await response.json(); // Includes access_token and refresh_token
+      const tokenData: Token = await response.json(); 
 
-      // Store refresh token
       setRefreshTokenState(tokenData.refresh_token);
-      if (typeof window !== 'undefined') localStorage.setItem(LOCAL_STORAGE_KEY_REFRESH_JWT, tokenData.refresh_token);
+      if (typeof window !== 'undefined') {
+        // For "Remember Me", localStorage is fine. If not remembering, consider sessionStorage for refresh token.
+        // However, for simplicity and consistent token refresh logic, we'll use localStorage for now.
+        localStorage.setItem(LOCAL_STORAGE_KEY_REFRESH_JWT, tokenData.refresh_token);
+      }
 
-      // Decode and set access token, passing user details from login response for initial DecodedToken population
       const loggedInUser = await decodeAndSetAccessToken(tokenData.access_token, {
         userId: tokenData.user_id,
         username: tokenData.username,
@@ -1283,14 +1268,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               setIsHistoryLoading(true);
 
               const [actResponse, catResponse, userResponse, histResponse, allOccurrencesResponse] = await Promise.all([
-                  fetchWithAuth(`${API_BASE_URL}/activities`), // Will use the new access token
+                  fetchWithAuth(`${API_BASE_URL}/activities`), 
                   fetchWithAuth(`${API_BASE_URL}/categories`),
                   fetchWithAuth(`${API_BASE_URL}/users`),
                   fetchWithAuth(`${API_BASE_URL}/history`),
                   fetchWithAuth(`${API_BASE_URL}/activity-occurrences`)
               ]);
 
-              // ... (rest of the data fetching and state setting logic as before)
               if (!actResponse.ok) throw new Error(`Activities fetch failed: HTTP ${actResponse.status} ${actResponse.statusText}`);
               const backendActivitiesList: BackendActivityListItem[] = await actResponse.json();
 
@@ -1993,3 +1977,4 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+
