@@ -12,11 +12,13 @@ export const HARDCODED_APP_PIN: string | null = null;
 // Default API Base URL. Can be overridden by NEXT_PUBLIC_API_BASE_URL environment variable.
 export const DEFAULT_API_BASE_URL = "https://afaire.is-cool.dev/api";
 
-// Default JWT secret key if not set in .env. IMPORTANT: Change this for production.
-export const DEFAULT_JWT_SECRET_KEY = "your-secret-key-change-in-production";
+// Default JWT secret key if not set in .env.
+// This MUST match the SECRET_KEY used by the backend.
+export const DEFAULT_JWT_SECRET_KEY = "-9$Kc}EbDkafT$)<9k+R0wl[S[m3dL3B~$Cj^Q}cD,HGa+$tO/\`zW+HW[%lj2_";
 
 // Pomodoro Timer Durations
 export const POMODORO_WORK_DURATION_SECONDS = 25 * 60;
 export const POMODORO_SHORT_BREAK_DURATION_SECONDS = 5 * 60;
 export const POMODORO_LONG_BREAK_DURATION_SECONDS = 15 * 60;
+
 
