@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import React, { createContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type {
-  Activity, Todo, Category, AppMode, RecurrenceRule, UINotification, HistoryLogEntry, HistoryLogActionKey, Translations, Assignee, PomodoroPhase,
+  Activity, Todo, Category, AppMode, RecurrenceRule, UINotification, HistoryLogEntry, HistoryLogActionKey, Translations, Assignee,
   BackendCategoryCreatePayload, BackendCategory, BackendUser, BackendUserCreatePayload, BackendUserUpdatePayload,
   BackendActivityCreatePayload, BackendActivityUpdatePayload, BackendActivity, BackendTodoCreate, BackendHistory,
   RecurrenceType, BackendCategoryMode, BackendRepeatMode, BackendTodo,
@@ -396,22 +396,15 @@ const frontendToBackendActivityPayload = (
     payload.day_of_month = activity.recurrence.type === 'monthly' ? (activity.recurrence.dayOfMonth ?? null) : null;
 
     if (activity.recurrence.type === 'weekly' && activity.recurrence.daysOfWeek && activity.recurrence.daysOfWeek.length > 0) {
+      const dayNumberToNameArray = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
       payload.days_of_week = activity.recurrence.daysOfWeek.map(dayNum => {
-        // Ensure dayNum is treated as a number for these comparisons
-        const num = Number(dayNum);
-        if (num === 0) return "sunday";
-        if (num === 1) return "monday";
-        if (num === 2) return "tuesday";
-        if (num === 3) return "wednesday";
-        if (num === 4) return "thursday";
-        if (num === 5) return "friday";
-        if (num === 6) return "saturday";
-        // Fallback for unexpected values, though Zod schema should prevent this.
-        console.error(`[AppProvider] Unexpected dayNum in weekly recurrence: ${dayNum} (type: ${typeof dayNum})`);
-        return `invalid_day_num_${dayNum}`;
-      });
+        if (dayNum >= 0 && dayNum < dayNumberToNameArray.length) {
+          return dayNumberToNameArray[dayNum];
+        }
+        console.warn(`[AppProvider] Invalid day number ${dayNum} found in daysOfWeek. Fallback to empty string.`);
+        return ""; // Should be caught by backend validation if this occurs.
+      }).filter(name => name !== ""); // Filter out any invalid fallbacks
     } else {
-      // If not weekly, or no days specified for weekly, send null (or omit if backend handles optional better)
       payload.days_of_week = null;
     }
   } else {
@@ -449,21 +442,29 @@ const backendToFrontendHistory = (backendHistory: BackendHistory): HistoryLogEnt
 
 const formatBackendError = (errorData: any, defaultMessage: string): string => {
   if (errorData && typeof errorData === 'object') {
+    // Check for FastAPI's structured error first (often in errorData.message for HTTPExceptions or directly for RequestValidationErrors)
+    if (errorData.error && typeof errorData.message === 'string' && errorData.message.trim() !== '') {
+      return `${errorData.error}: ${errorData.message}`; // Example: "ValidationError: Username already exists"
+    }
     if (typeof errorData.message === 'string' && errorData.message.trim() !== '') {
-        return errorData.message;
+        return errorData.message; // For simpler error messages from backend
     }
-    if (typeof errorData.detail === 'string' && errorData.detail.trim() !== '') {
-      return errorData.detail;
-    }
-    if (Array.isArray(errorData.detail)) {
-      return errorData.detail
+    // Handle Pydantic RequestValidationError (often directly in errorData or errorData.detail)
+    const validationDetails = errorData.detail || (Array.isArray(errorData) ? errorData : null);
+    if (Array.isArray(validationDetails)) {
+      return validationDetails
         .map((validationError: any) => {
           const loc = validationError.loc && Array.isArray(validationError.loc)
             ? validationError.loc.filter((item: any) => item !== 'body').join(' > ') 
             : 'Field';
-          return `${loc}: ${validationError.msg}`;
+          const msg = validationError.msg || 'Invalid input';
+          return `${loc}: ${msg}`;
         })
         .join('; ');
+    }
+     // Fallback for other string detail messages
+    if (typeof errorData.detail === 'string' && errorData.detail.trim() !== '') {
+      return errorData.detail;
     }
   }
   return defaultMessage;
@@ -505,7 +506,7 @@ Error Message: ${error.message || 'No message'}.`;
       descriptionKey = 'toastInvalidJsonErrorDescription';
       descriptionParams = { endpoint: endpoint || API_BASE_URL };
     } else if (error.message) {
-        customDescription = error.message;
+        customDescription = error.message; // Use the formatted error message from formatBackendError
     }
 
     toastFn({
@@ -1469,6 +1470,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const payload = frontendToBackendActivityPayload(frontendActivityShell) as BackendActivityCreatePayload;
     payload.todos = (activityData.todos || []).map(t => ({text: t.text, complete: !!t.completed}));
+    console.log("[AppProvider] addActivity PAYLOAD:", JSON.stringify(payload, null, 2));
 
 
     try {
@@ -1510,6 +1512,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const effectiveAppMode = updates.appMode || activityToUpdate.appMode;
     const payload = frontendToBackendActivityPayload({ ...activityToUpdate, ...updates, appMode: effectiveAppMode }, true) as BackendActivityUpdatePayload;
+    console.log("[AppProvider] updateActivity PAYLOAD:", JSON.stringify(payload, null, 2));
+
 
     try {
       const response = await fetchWithAuth(`${API_BASE_URL}/activities/${activityId}`, { method: 'PUT', body: JSON.stringify(payload) });
