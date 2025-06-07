@@ -397,17 +397,20 @@ const frontendToBackendActivityPayload = (
 
     if (activity.recurrence.type === 'weekly' && activity.recurrence.daysOfWeek && activity.recurrence.daysOfWeek.length > 0) {
       const dayNumberToNameArray = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-      payload.days_of_week = activity.recurrence.daysOfWeek.map(dayNum => {
-        const num = Number(dayNum);
-        if (!isNaN(num) && num >= 0 && num < dayNumberToNameArray.length) {
-          return dayNumberToNameArray[num];
-        }
-        console.warn(`[AppProvider] Invalid day number ${dayNum} found in daysOfWeek during mapping. This should ideally be caught by form validation.`);
-        return ""; 
-      }).filter(name => name !== "");
+      payload.days_of_week = activity.recurrence.daysOfWeek
+        .map((dayNumEntry: number | string) => {
+          const numValue: number = typeof dayNumEntry === 'string' ? parseInt(dayNumEntry, 10) : dayNumEntry;
+          if (!isNaN(numValue) && numValue >= 0 && numValue < dayNumberToNameArray.length) {
+            return dayNumberToNameArray[numValue];
+          }
+          console.warn(`[AppProvider] frontendToBackendActivityPayload: Invalid day number value '${dayNumEntry}' (type: ${typeof dayNumEntry}). Skipping.`);
+          return null; // Invalid entries will be filtered out
+        })
+        .filter((name): name is string => name !== null); // Keep only valid, non-null string names
       
       if (payload.days_of_week.length === 0) {
-        payload.days_of_week = null;
+        // If all entries were invalid or the initial array was effectively empty of valid days
+        payload.days_of_week = null; 
       }
     } else {
       payload.days_of_week = null;
@@ -565,6 +568,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [decodedJwt]);
 
   const logout = useCallback((isTokenRefreshFailure: boolean = false) => {
+    console.log(`[AppProvider logout] Initiating logout. Is token refresh failure: ${isTokenRefreshFailure}`);
     if (!isTokenRefreshFailure && addHistoryLogEntryRef.current) {
         addHistoryLogEntryRef.current('historyLogLogout', undefined, 'account');
     }
@@ -574,6 +578,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (typeof window !== 'undefined') {
         localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
         localStorage.removeItem(LOCAL_STORAGE_KEY_REFRESH_JWT);
+        console.log("[AppProvider logout] JWT and Refresh JWT removed from localStorage.");
     }
 
     setIsAppLocked(false);
@@ -585,6 +590,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setUINotifications([]);
     setHabits([]);
     setHabitCompletions({});
+    console.log("[AppProvider logout] Client-side app state cleared.");
 
     if (logoutChannel) logoutChannel.postMessage('logout_event_v2');
   }, []);
@@ -695,46 +701,44 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
   const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}): Promise<Response> => {
-    console.log(`[AppProvider fetchWithAuth] Attempting to fetch: ${url}`);
-    let currentTokenInScope = accessToken; 
-    let currentDecodedInScope = decodedJwt; 
+    let currentTokenInScope = accessToken;
+    let currentDecodedInScope = decodedJwt;
+    console.log(`[AppProvider fetchWithAuth] Initial attempt for ${url}. Token in state: ${currentTokenInScope ? 'Yes' : 'No'}`);
 
     if (!currentTokenInScope && typeof window !== 'undefined') {
         const storedToken = localStorage.getItem(LOCAL_STORAGE_KEY_JWT);
         if (storedToken) {
-            console.log("[AppProvider fetchWithAuth] No token in state, but found in localStorage. Attempting to decode.");
-            const decodedFromStorage = await decodeAndSetAccessToken(storedToken, undefined);
+            console.log("[AppProvider fetchWithAuth] No token in state, but found in localStorage. Attempting to decode for current request.");
+            const decodedFromStorage = await decodeAndSetAccessToken(storedToken, undefined); // This updates state
             if (decodedFromStorage) {
-                currentTokenInScope = storedToken;
-                currentDecodedInScope = decodedFromStorage;
-                console.log("[AppProvider fetchWithAuth] Successfully decoded token from localStorage for current scope.");
+                currentTokenInScope = storedToken; // Use for this call
+                currentDecodedInScope = decodedFromStorage; // Use for this call
+                console.log("[AppProvider fetchWithAuth] Successfully used token from localStorage for this request.");
             } else {
-                console.warn("[AppProvider fetchWithAuth] Failed to decode token from localStorage.");
+                 console.warn("[AppProvider fetchWithAuth] Failed to decode token from localStorage for this request. Proceeding without token for now.");
             }
+        } else {
+            console.log("[AppProvider fetchWithAuth] No token in state or localStorage.");
         }
     }
 
-    console.log(`[AppProvider fetchWithAuth] Token before refresh check: ${currentTokenInScope ? currentTokenInScope.substring(0,10)+'...' : 'null'}`);
-    console.log(`[AppProvider fetchWithAuth] Decoded JWT before refresh check:`, currentDecodedInScope);
-
-    const needsRefresh = (!currentTokenInScope && (refreshTokenState || (typeof window !== 'undefined' && localStorage.getItem(LOCAL_STORAGE_KEY_REFRESH_JWT)))) ||
-                         (currentTokenInScope && currentDecodedInScope && currentDecodedInScope.exp * 1000 < Date.now() + 10000);
+    const tokenIsExpired = currentTokenInScope && currentDecodedInScope && currentDecodedInScope.exp * 1000 < Date.now() + 10000;
+    const needsRefresh = (!currentTokenInScope && (refreshTokenState || (typeof window !== 'undefined' && localStorage.getItem(LOCAL_STORAGE_KEY_REFRESH_JWT)))) || tokenIsExpired;
 
     if (needsRefresh && !url.endsWith('/token') && !url.includes('/refresh-token')) {
-        console.log(`[AppProvider fetchWithAuth] Token needs refresh for ${url}. Current token expired or missing. Attempting refresh.`);
+        console.log(`[AppProvider fetchWithAuth] Token needs refresh for ${url}. Current token ${currentTokenInScope ? (tokenIsExpired ? 'expired' : 'exists') : 'missing'}. Refreshing.`);
         const newAccessTokenString = await refreshTokenLogicInternal();
         if (!newAccessTokenString) {
-            console.error(`[AppProvider fetchWithAuth] Token refresh failed for ${url}. Throwing error.`);
+            console.error(`[AppProvider fetchWithAuth] Token refresh failed for ${url}. Throwing error as auth is required.`);
+            logout(true); // Ensure logout if refresh fails critically
             throw new Error("Session expired. Please log in again. (Refresh failed before request)");
         }
-        currentTokenInScope = newAccessTokenString; 
-        // decodedJwt state is updated by refreshTokenLogicInternal via decodeAndSetAccessToken, so currentDecodedInScope will be stale here
-        // We rely on the new currentTokenInScope for the immediate request.
-        console.log(`[AppProvider fetchWithAuth] Token refreshed successfully for ${url}. New token: ${currentTokenInScope.substring(0,10)}...`);
+        currentTokenInScope = newAccessTokenString;
+        console.log(`[AppProvider fetchWithAuth] Token refreshed successfully for ${url}.`);
     }
 
     if (!currentTokenInScope && !url.endsWith('/token') && !url.includes('/refresh-token')) {
-        console.error(`[AppProvider fetchWithAuth] CRITICAL: No JWT token available for authenticated request to ${url} after refresh attempt. currentTokenInScope is falsy.`);
+        console.error(`[AppProvider fetchWithAuth] CRITICAL: No JWT token available for authenticated request to ${url} even after refresh attempt.`);
         toast({
             variant: "destructive",
             title: "Authentication Error",
@@ -753,11 +757,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
              headers.append('Content-Type', 'application/json');
         }
     }
-    console.log(`[AppProvider fetchWithAuth] Fetching ${url} with token: ${currentTokenInScope ? currentTokenInScope.substring(0,10)+'...' : 'None'}`);
+    console.log(`[AppProvider fetchWithAuth] Making API call to ${url}. Token being used: ${currentTokenInScope ? 'Yes' : 'No'}`);
 
     let response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, { ...options, headers });
 
-    if (response.status === 401 && !url.endsWith('/token') && !url.includes('/refresh-token')) {
+    if (response.status === 401 && !url.endsWith('/token') && !url.includes('/refresh-token') && !isRefreshingTokenRef.current) {
         console.log(`[AppProvider fetchWithAuth] Received 401 for ${url}, attempting token refresh (retry).`);
         const newAccessTokenAfter401 = await refreshTokenLogicInternal();
         if (newAccessTokenAfter401) {
@@ -771,12 +775,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             console.log(`[AppProvider fetchWithAuth] Retrying ${url} with newly refreshed token (after 401).`);
             response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, { ...options, headers: retryHeaders });
         } else {
-             console.error(`[AppProvider fetchWithAuth] Token refresh failed after 401 for ${url}.`);
+             console.error(`[AppProvider fetchWithAuth] Token refresh failed after 401 for ${url}. Logging out.`);
+             logout(true); // Critical failure, log out
              throw new Error(`Unauthorized: ${response.statusText} (refresh failed after 401)`);
         }
     }
     return response;
-  }, [accessToken, decodedJwt, refreshTokenState, API_BASE_URL, refreshTokenLogicInternal, decodeAndSetAccessToken, toast]);
+  }, [accessToken, decodedJwt, refreshTokenState, API_BASE_URL, refreshTokenLogicInternal, decodeAndSetAccessToken, toast, logout]);
 
 
   const addHistoryLogEntryLogic = useCallback(async (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined | null>, scope: HistoryLogEntry['scope'] = 'account') => {
@@ -823,145 +828,142 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     const loadClientSideDataAndFetchInitial = async () => {
-      console.log("[AppProvider useEffect init] Starting initial load.");
+      console.log("[AppProvider useEffect init] Starting initial load sequence.");
       setIsLoadingState(true); 
 
       const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
       if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) setAppModeState(storedAppMode);
 
-      const storedAccessToken = localStorage.getItem(LOCAL_STORAGE_KEY_JWT);
-      const storedRefreshToken = localStorage.getItem(LOCAL_STORAGE_KEY_REFRESH_JWT);
+      const storedAccessTokenString = localStorage.getItem(LOCAL_STORAGE_KEY_JWT);
+      const storedRefreshTokenString = localStorage.getItem(LOCAL_STORAGE_KEY_REFRESH_JWT);
       let effectiveAccessToken: string | null = null;
 
-      console.log("[AppProvider useEffect init] Stored Access Token:", storedAccessToken ? storedAccessToken.substring(0,10)+'...' : 'null');
-      console.log("[AppProvider useEffect init] Stored Refresh Token:", storedRefreshToken ? storedRefreshToken.substring(0,10)+'...' : 'null');
+      console.log(`[AppProvider useEffect init] Found tokens in localStorage - Access: ${storedAccessTokenString ? 'Yes' : 'No'}, Refresh: ${storedRefreshTokenString ? 'Yes' : 'No'}`);
 
-
-      if (storedAccessToken) {
-          console.log("[AppProvider useEffect init] Found stored access token. Decoding...");
-          const decoded = await decodeAndSetAccessToken(storedAccessToken, undefined); 
-          if (decoded && decoded.exp * 1000 > Date.now() + 10000) { 
-              effectiveAccessToken = storedAccessToken;
-              console.log("[AppProvider useEffect init] Stored access token is valid.");
-          } else if (storedRefreshToken) { 
-              console.log("[AppProvider useEffect init] Stored access token expired or missing, but refresh token exists. Attempting refresh.");
-              setRefreshTokenState(storedRefreshToken); // Ensure refresh token is in state for refreshTokenLogicInternal
-              effectiveAccessToken = await refreshTokenLogicInternal(); 
-              if (effectiveAccessToken) console.log("[AppProvider useEffect init] Refresh successful during init.");
-              else console.warn("[AppProvider useEffect init] Refresh failed during init.");
-          } else { 
-              console.warn("[AppProvider useEffect init] Stored access token expired/missing, no refresh token. Logging out.");
-              logout(true);
+      if (storedAccessTokenString) {
+          const decoded = await decodeAndSetAccessToken(storedAccessTokenString, undefined);
+          if (decoded && decoded.exp * 1000 > Date.now() + 10000) { // 10s buffer
+              effectiveAccessToken = storedAccessTokenString;
+              console.log("[AppProvider useEffect init] Stored access token is valid and set.");
+          } else if (storedRefreshTokenString) {
+              console.log("[AppProvider useEffect init] Stored access token expired or invalid, attempting refresh with stored refresh token.");
+              setRefreshTokenState(storedRefreshTokenString); // Ensure refresh token is in state for refreshTokenLogicInternal
+              effectiveAccessToken = await refreshTokenLogicInternal();
+              if(effectiveAccessToken) console.log("[AppProvider useEffect init] Token refresh successful during init.");
+              else console.warn("[AppProvider useEffect init] Token refresh FAILED during init.");
+          } else {
+              console.warn("[AppProvider useEffect init] Stored access token expired/invalid, no refresh token available. Will logout.");
+              effectiveAccessToken = null; // Explicitly null
           }
-      } else if (storedRefreshToken) { 
-          console.log("[AppProvider useEffect init] No access token, but refresh token exists. Attempting refresh.");
-          setRefreshTokenState(storedRefreshToken);
+      } else if (storedRefreshTokenString) {
+          console.log("[AppProvider useEffect init] No access token in localStorage, but refresh token found. Attempting refresh.");
+          setRefreshTokenState(storedRefreshTokenString);
           effectiveAccessToken = await refreshTokenLogicInternal();
-          if (effectiveAccessToken) console.log("[AppProvider useEffect init] Refresh successful during init (no prior access token).");
-          else console.warn("[AppProvider useEffect init] Refresh failed during init (no prior access token).");
+          if(effectiveAccessToken) console.log("[AppProvider useEffect init] Token refresh successful (no prior access token).");
+          else console.warn("[AppProvider useEffect init] Token refresh FAILED (no prior access token).");
       } else {
-          console.log("[AppProvider useEffect init] No tokens found in localStorage.");
+          console.log("[AppProvider useEffect init] No tokens found in localStorage. User is not authenticated.");
+          effectiveAccessToken = null;
+      }
+
+      if (!effectiveAccessToken) {
+          console.log("[AppProvider useEffect init] No effective access token after initial load/refresh. Logging out and skipping data fetches.");
+          logout(true); // Critical: ensure clean logout state if no token could be established
+          setIsLoadingState(false);
+          setIsActivitiesLoading(false); setIsCategoriesLoading(false); setIsAssigneesLoading(false); setIsHistoryLoading(false);
+          return; // Stop further execution in this effect if not authenticated
       }
       
-      console.log("[AppProvider useEffect init] Effective Access Token after init logic:", effectiveAccessToken ? effectiveAccessToken.substring(0,10)+'...' : 'null');
-
-
+      console.log("[AppProvider useEffect init] Effective Access Token established. Proceeding with data fetching.");
+      // Load other client-side data
       const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
       if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
       if (typeof window !== 'undefined' && 'Notification' in window) setSystemNotificationPermission(Notification.permission);
       const storedPin = localStorage.getItem(LOCAL_STORAGE_KEY_APP_PIN);
-      if (storedPin) setAppPinState(storedPin);
+      if (storedPin) { setAppPinState(storedPin); setIsAppLocked(true); }
       const storedHabits = localStorage.getItem(LOCAL_STORAGE_KEY_HABITS);
       if (storedHabits) try { setHabits(JSON.parse(storedHabits).map((h: Habit) => ({ ...h, icon: getIconComponent(h.iconName) }))); } catch (e) { console.error("Failed to parse habits", e); }
       const storedHabitCompletions = localStorage.getItem(LOCAL_STORAGE_KEY_HABIT_COMPLETIONS);
       if (storedHabitCompletions) try { setHabitCompletions(JSON.parse(storedHabitCompletions)); } catch (e) { console.error("Failed to parse habit completions", e); }
 
-      if (effectiveAccessToken) { 
-        console.log("[AppProvider useEffect init] Proceeding with data fetching as token is available.");
-        setIsActivitiesLoading(true); setIsCategoriesLoading(true); setIsAssigneesLoading(true); setIsHistoryLoading(true);
-        if (storedPin) setIsAppLocked(true); 
+      // Fetch initial data from backend since we have a token
+      setIsActivitiesLoading(true); setIsCategoriesLoading(true); setIsAssigneesLoading(true); setIsHistoryLoading(true);
+      try {
+          const [actResponse, catResponse, userResponse, histResponse, allOccurrencesResponse] = await Promise.all([
+              fetchWithAuth(`${API_BASE_URL}/activities`),
+              fetchWithAuth(`${API_BASE_URL}/categories`),
+              fetchWithAuth(`${API_BASE_URL}/users`),
+              fetchWithAuth(`${API_BASE_URL}/history`),
+              fetchWithAuth(`${API_BASE_URL}/activity-occurrences`)
+          ]);
 
-        try {
-            const [actResponse, catResponse, userResponse, histResponse, allOccurrencesResponse] = await Promise.all([
-                fetchWithAuth(`${API_BASE_URL}/activities`),
-                fetchWithAuth(`${API_BASE_URL}/categories`),
-                fetchWithAuth(`${API_BASE_URL}/users`),
-                fetchWithAuth(`${API_BASE_URL}/history`),
-                fetchWithAuth(`${API_BASE_URL}/activity-occurrences`)
-            ]);
+          if (!actResponse.ok) throw new Error(`Activities fetch failed: HTTP ${actResponse.status} ${actResponse.statusText}`);
+          const backendActivitiesList: BackendActivityListItem[] = await actResponse.json();
 
-            if (!actResponse.ok) throw new Error(`Activities fetch failed: HTTP ${actResponse.status} ${actResponse.statusText}`);
-            const backendActivitiesList: BackendActivityListItem[] = await actResponse.json();
+          if (!catResponse.ok) throw new Error(`Categories fetch failed: HTTP ${catResponse.status} ${catResponse.statusText}`);
+          const backendCategories: BackendCategory[] = await catResponse.json();
+          setAllCategories(backendCategories.map(cat => backendToFrontendCategory(cat)));
 
-            if (!catResponse.ok) throw new Error(`Categories fetch failed: HTTP ${catResponse.status} ${catResponse.statusText}`);
-            const backendCategories: BackendCategory[] = await catResponse.json();
-            setAllCategories(backendCategories.map(cat => backendToFrontendCategory(cat)));
+          if (!userResponse.ok) throw new Error(`Users fetch failed: HTTP ${userResponse.status} ${userResponse.statusText}`);
+          const backendUsers: BackendUser[] = await userResponse.json();
+          setAllAssignees(backendUsers.map(user => backendToFrontendAssignee(user)));
 
-            if (!userResponse.ok) throw new Error(`Users fetch failed: HTTP ${userResponse.status} ${userResponse.statusText}`);
-            const backendUsers: BackendUser[] = await userResponse.json();
-            setAllAssignees(backendUsers.map(user => backendToFrontendAssignee(user)));
+          if (!histResponse.ok) throw new Error(`History fetch failed: HTTP ${histResponse.status} ${histResponse.statusText}`);
+          const backendHistoryItems: BackendHistory[] = await histResponse.json();
+          setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
 
-            if (!histResponse.ok) throw new Error(`History fetch failed: HTTP ${histResponse.status} ${histResponse.statusText}`);
-            const backendHistoryItems: BackendHistory[] = await histResponse.json();
-            setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
+          let allBackendOccurrences: BackendActivityOccurrence[] = [];
+          if (allOccurrencesResponse.ok) {
+              allBackendOccurrences = await allOccurrencesResponse.json();
+          } else {
+              console.warn(`[AppProvider] Failed to fetch all occurrences: HTTP ${allOccurrencesResponse.status}`);
+          }
 
-            let allBackendOccurrences: BackendActivityOccurrence[] = [];
-            if (allOccurrencesResponse.ok) {
-                allBackendOccurrences = await allOccurrencesResponse.json();
-            } else {
-                console.warn(`[AppProvider] Failed to fetch all occurrences: HTTP ${allOccurrencesResponse.status}`);
-            }
-
-            const newPersonal: Activity[] = [], newWork: Activity[] = [];
-            backendActivitiesList.forEach(beListItem => {
-                if (!beListItem || typeof beListItem.id !== 'number') {
-                    console.warn("[AppProvider] Encountered a null/undefined or ID-less item in backendActivitiesList. Skipping.", beListItem);
-                    return;
-                }
-                try {
-                    let feAct = backendToFrontendActivity(beListItem, appModeState);
-                    const activityOccurrences = allBackendOccurrences.filter(occ => occ.activity_id === feAct.id);
-                    const occurrencesMap: Record<string, boolean> = {};
-                    activityOccurrences.forEach(occ => {
-                        try {
-                            const dateKey = formatISO(parseISO(occ.date), { representation: 'date' });
-                            occurrencesMap[dateKey] = occ.complete;
-                        } catch (e) {
-                            console.warn(`[AppProvider] Failed to parse occurrence date for activity ${feAct.id} during initial load: ${occ.date}`, e);
-                        }
-                    });
-                    feAct.completedOccurrences = occurrencesMap;
-                    if (feAct.recurrence?.type === 'none' && feAct.createdAt) {
-                        const mainOccurrenceDate = new Date(feAct.createdAt);
-                        if(!isNaN(mainOccurrenceDate.getTime())) {
-                            const mainOccurrenceDateKey = formatISO(mainOccurrenceDate, { representation: 'date' });
-                            if (occurrencesMap.hasOwnProperty(mainOccurrenceDateKey)) {
-                                feAct.completed = occurrencesMap[mainOccurrenceDateKey];
-                                feAct.completedAt = feAct.completed ? mainOccurrenceDate.getTime() : null;
-                            }
-                        }
-                    }
-                    if (feAct.appMode === 'personal') newPersonal.push(feAct); else newWork.push(feAct);
-                } catch (conversionError) {
-                    console.error(`[AppProvider] Failed to convert backend activity list item (ID: ${beListItem.id || 'unknown'}) to frontend format during initial load. Skipping this item.`, conversionError, beListItem);
-                }
-            });
-            setPersonalActivities(newPersonal); setWorkActivities(newWork);
-            console.log("[AppProvider useEffect init] Data fetching completed.");
-        } catch (err) {
-             console.error("[AppProvider useEffect init] Error during initial data fetch:", err);
-             if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401') || err.message.toLowerCase().includes("session expired"))) {
-                logout(true);
-            } else {
-                createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`);
-            }
-        } finally {
-            setIsActivitiesLoading(false); setIsCategoriesLoading(false); setIsAssigneesLoading(false); setIsHistoryLoading(false);
-        }
-      } else { 
-        console.log("[AppProvider useEffect init] No access token established after trying to load/refresh. Skipping data fetch. Ensuring logout state.");
-        setIsActivitiesLoading(false); setIsCategoriesLoading(false); setIsAssigneesLoading(false); setIsHistoryLoading(false);
-        if (!effectiveAccessToken) logout(true);
+          const newPersonal: Activity[] = [], newWork: Activity[] = [];
+          backendActivitiesList.forEach(beListItem => {
+              if (!beListItem || typeof beListItem.id !== 'number') {
+                  console.warn("[AppProvider] Encountered a null/undefined or ID-less item in backendActivitiesList. Skipping.", beListItem);
+                  return;
+              }
+              try {
+                  let feAct = backendToFrontendActivity(beListItem, appModeState);
+                  const activityOccurrences = allBackendOccurrences.filter(occ => occ.activity_id === feAct.id);
+                  const occurrencesMap: Record<string, boolean> = {};
+                  activityOccurrences.forEach(occ => {
+                      try {
+                          const dateKey = formatISO(parseISO(occ.date), { representation: 'date' });
+                          occurrencesMap[dateKey] = occ.complete;
+                      } catch (e) {
+                          console.warn(`[AppProvider] Failed to parse occurrence date for activity ${feAct.id} during initial load: ${occ.date}`, e);
+                      }
+                  });
+                  feAct.completedOccurrences = occurrencesMap;
+                  if (feAct.recurrence?.type === 'none' && feAct.createdAt) {
+                      const mainOccurrenceDate = new Date(feAct.createdAt);
+                      if(!isNaN(mainOccurrenceDate.getTime())) {
+                          const mainOccurrenceDateKey = formatISO(mainOccurrenceDate, { representation: 'date' });
+                          if (occurrencesMap.hasOwnProperty(mainOccurrenceDateKey)) {
+                              feAct.completed = occurrencesMap[mainOccurrenceDateKey];
+                              feAct.completedAt = feAct.completed ? mainOccurrenceDate.getTime() : null;
+                          }
+                      }
+                  }
+                  if (feAct.appMode === 'personal') newPersonal.push(feAct); else newWork.push(feAct);
+              } catch (conversionError) {
+                  console.error(`[AppProvider] Failed to convert backend activity list item (ID: ${beListItem.id || 'unknown'}) to frontend format during initial load. Skipping this item.`, conversionError, beListItem);
+              }
+          });
+          setPersonalActivities(newPersonal); setWorkActivities(newWork);
+          console.log("[AppProvider useEffect init] Data fetching completed.");
+      } catch (err) {
+           console.error("[AppProvider useEffect init] Error during initial data fetch:", err);
+           if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401') || err.message.toLowerCase().includes("session expired"))) {
+              logout(true);
+          } else {
+              createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`);
+          }
+      } finally {
+          setIsActivitiesLoading(false); setIsCategoriesLoading(false); setIsAssigneesLoading(false); setIsHistoryLoading(false);
       }
       setIsLoadingState(false); 
       console.log("[AppProvider useEffect init] Initial load process finished.");
@@ -969,7 +971,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     loadClientSideDataAndFetchInitial();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
+  }, []); // Dependencies removed to ensure it only runs once on mount. State changes within are managed.
 
 
  useEffect(() => {
