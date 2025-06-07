@@ -1,3 +1,4 @@
+"use client";
 
 // This layout is specifically for the /login route.
 // It should not contain the AppHeader or other elements from the main app layout.
