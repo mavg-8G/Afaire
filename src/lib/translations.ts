@@ -38,8 +38,6 @@ export type Translations = {
   systemNotificationsNotYetEnabled: string;
   systemNotificationsDismissed: string;
   manageAssignees: string;
-  pomodoroTimerMenuLabel: string;
-  startLongBreakHeaderLabel: string; // New
 
   // CategoriesPage
   backToCalendar: string;
@@ -323,36 +321,26 @@ export type Translations = {
   historyScopeWork: string;
   historyScopeCategory: string;
   historyScopeAssignee: string;
+  historyScopeHabit: string; // Added
+
+  // Habits Feature
+  manageHabits: string;
+  habitsPageDescription: string;
+  habitsFeatureComingSoon: string;
+  toastHabitAddedTitle: string;
+  toastHabitAddedDescription: (params: { habitName: string }) => string;
+  toastHabitUpdatedTitle: string;
+  toastHabitUpdatedDescription: (params: { habitName: string }) => string;
+  toastHabitDeletedTitle: string;
+  toastHabitDeletedDescription: (params: { habitName: string }) => string;
+  historyLogAddHabit: (params: { habitId: string, name: string }) => string;
+  historyLogUpdateHabit: (params: { habitId: string, newName: string, oldName?: string }) => string;
+  historyLogDeleteHabit: (params: { habitId: string, name: string }) => string;
+  historyLogToggleHabitCompletion: (params: { habitName: string, slotName: string, date: string, completed: boolean }) => string;
+
 
   // Motivational Phrases
   motivationalPhrases: string[];
-
-  // Pomodoro Timer
-  pomodoroTitle: string;
-  pomodoroStartWork: string;
-  pomodoroStartShortBreak: string;
-  pomodoroStartLongBreak: string;
-  pomodoroPause: string;
-  pomodoroResume: string;
-  pomodoroReset: string;
-  pomodoroWorkSession: string;
-  pomodoroShortBreakSession: string;
-  pomodoroLongBreakSession: string;
-  pomodoroReadyToStart: string;
-  pomodoroWorkSessionEnded: string;
-  pomodoroShortBreakEnded: string;
-  pomodoroLongBreakEnded: string;
-  pomodoroTakeABreakOrStartNext: string;
-  pomodoroFocusOnTask: string;
-  pomodoroShortRelaxation: string;
-  pomodoroLongRelaxation: string;
-  pomodoroCyclesCompleted: (params: { cycles: number }) => string;
-  pomodoroTakeAShortBreak: string;
-  pomodoroTakeALongBreak: string;
-  pomodoroBackToWork: string;
-  pomodoroErrorTitle: string;
-  pomodoroSWNotReady: string;
-  pomodoroInitializing: string;
 
   // App Lock Screen
   appLockedTitle: string;
@@ -401,8 +389,6 @@ export const translations: Record<Locale, Translations> = {
     systemNotificationsNotYetEnabled: "System notifications not yet enabled.",
     systemNotificationsDismissed: "You can enable notifications later from the options menu.",
     manageAssignees: "Manage Assignees",
-    pomodoroTimerMenuLabel: "Pomodoro Timer",
-    startLongBreakHeaderLabel: "Start Long Break",
     backToCalendar: "Back to Calendar",
     addCategory: "Add Category",
     editCategory: "Edit Category",
@@ -688,7 +674,7 @@ export const translations: Record<Locale, Translations> = {
             if(params.oldName && params.oldName === params.newName) desc += `"${params.newName}".`; // Add name if not part of changes
             desc += ` Changes: ${changes.join(', ')}.`;
         } else if (!params.oldName || params.oldName === params.newName) {
-            desc += ` (Icon: ${params.newIconName}, Mode: ${params.newMode}).`;
+             desc += ` (Icon: ${params.newIconName}, Mode: ${params.newMode}).`;
         }
         return desc.trim();
     },
@@ -704,6 +690,20 @@ export const translations: Record<Locale, Translations> = {
     historyScopeWork: "Work",
     historyScopeCategory: "Category",
     historyScopeAssignee: "Assignee",
+    historyScopeHabit: "Habit", // Added
+    manageHabits: "Manage Habits", // Added
+    habitsPageDescription: "Create and manage your daily habits.", // Added
+    habitsFeatureComingSoon: "Habit tracking feature coming soon! Use this page to manage your habits.", // Added
+    toastHabitAddedTitle: "Habit Added",
+    toastHabitAddedDescription: (params) => `Habit "${params.habitName}" has been added.`,
+    toastHabitUpdatedTitle: "Habit Updated",
+    toastHabitUpdatedDescription: (params) => `Habit "${params.habitName}" has been updated.`,
+    toastHabitDeletedTitle: "Habit Deleted",
+    toastHabitDeletedDescription: (params) => `Habit "${params.habitName}" has been removed.`,
+    historyLogAddHabit: (params) => `Added Habit: "${params.name}".`,
+    historyLogUpdateHabit: (params) => `Updated Habit: "${params.oldName}" to "${params.newName}".`,
+    historyLogDeleteHabit: (params) => `Deleted Habit: "${params.name}".`,
+    historyLogToggleHabitCompletion: (params) => `Toggled completion for habit "${params.habitName}", slot "${params.slotName}" on ${params.date} to ${params.completed ? 'completed' : 'incomplete'}.`,
     motivationalPhrases: [
       "The secret of getting ahead is getting started.",
       "Don't watch the clock; do what it does. Keep going.",
@@ -716,31 +716,6 @@ export const translations: Record<Locale, Translations> = {
       "Well done is better than well said.",
       "You are never too old to set another goal or to dream a new dream."
     ],
-    pomodoroTitle: "Pomodoro Timer",
-    pomodoroStartWork: "Start Work (25 min)",
-    pomodoroStartShortBreak: "Start Short Break (5 min)",
-    pomodoroStartLongBreak: "Start Long Break (15 min)",
-    pomodoroPause: "Pause",
-    pomodoroResume: "Resume",
-    pomodoroReset: "Reset",
-    pomodoroWorkSession: "Work Session",
-    pomodoroShortBreakSession: "Short Break",
-    pomodoroLongBreakSession: "Long Break",
-    pomodoroReadyToStart: "Ready to start?",
-    pomodoroWorkSessionEnded: "Work Session Ended",
-    pomodoroShortBreakEnded: "Short Break Ended",
-    pomodoroLongBreakEnded: "Long Break Ended",
-    pomodoroTakeABreakOrStartNext: "Time for a break or start the next session!",
-    pomodoroFocusOnTask: "Focus on your task!",
-    pomodoroShortRelaxation: "Time for a short relaxation.",
-    pomodoroLongRelaxation: "Time for a longer rest.",
-    pomodoroCyclesCompleted: (params) => `${params.cycles} work cycle(s) completed.`,
-    pomodoroTakeAShortBreak: "Time for a short break!",
-    pomodoroTakeALongBreak: "Time for a long break!",
-    pomodoroBackToWork: "Time to get back to work!",
-    pomodoroErrorTitle: "Pomodoro Error",
-    pomodoroSWNotReady: "Service Worker for Pomodoro not ready. Please wait or reload.",
-    pomodoroInitializing: "Initializing...",
     appLockedTitle: "App Locked",
     appLockedDescription: "Enter your PIN to continue.",
     appPinInputLabel: "PIN",
@@ -785,8 +760,6 @@ export const translations: Record<Locale, Translations> = {
     systemNotificationsNotYetEnabled: "Notificaciones del sistema aún no activadas.",
     systemNotificationsDismissed: "Puedes activar las notificaciones más tarde desde el menú de opciones.",
     manageAssignees: "Gestionar Asignados",
-    pomodoroTimerMenuLabel: "Temporizador Pomodoro",
-    startLongBreakHeaderLabel: "Iniciar Descanso Largo",
     backToCalendar: "Volver al Calendario",
     addCategory: "Añadir Categoría",
     editCategory: "Editar Categoría",
@@ -1088,6 +1061,20 @@ export const translations: Record<Locale, Translations> = {
     historyScopeWork: "Trabajo",
     historyScopeCategory: "Categoría",
     historyScopeAssignee: "Asignado",
+    historyScopeHabit: "Hábito", // Added
+    manageHabits: "Gestionar Hábitos", // Added
+    habitsPageDescription: "Crea y gestiona tus hábitos diarios.", // Added
+    habitsFeatureComingSoon: "¡La función de seguimiento de hábitos llegará pronto! Utiliza esta página para gestionar tus hábitos.", // Added
+    toastHabitAddedTitle: "Hábito Añadido",
+    toastHabitAddedDescription: (params) => `El hábito "${params.habitName}" ha sido añadido.`,
+    toastHabitUpdatedTitle: "Hábito Actualizado",
+    toastHabitUpdatedDescription: (params) => `El hábito "${params.habitName}" ha sido actualizado.`,
+    toastHabitDeletedTitle: "Hábito Eliminado",
+    toastHabitDeletedDescription: (params) => `El hábito "${params.habitName}" ha sido eliminado.`,
+    historyLogAddHabit: (params) => `Añadido Hábito: "${params.name}".`,
+    historyLogUpdateHabit: (params) => `Actualizado Hábito: "${params.oldName}" a "${params.newName}".`,
+    historyLogDeleteHabit: (params) => `Eliminado Hábito: "${params.name}".`,
+    historyLogToggleHabitCompletion: (params) => `Completado para el hábito "${params.habitName}", franja "${params.slotName}" en ${params.date} cambiado a ${params.completed ? 'completado' : 'incompleto'}.`,
     motivationalPhrases: [
       "El secreto para salir adelante es empezar.",
       "No mires el reloj; haz lo que él hace. Sigue adelante.",
@@ -1100,31 +1087,6 @@ export const translations: Record<Locale, Translations> = {
       "Bien hecho es mejor que bien dicho.",
       "Nunca eres demasiado viejo para establecer otra meta o para soñar un nuevo sueño."
     ],
-    pomodoroTitle: "Temporizador Pomodoro",
-    pomodoroStartWork: "Iniciar Trabajo (25 min)",
-    pomodoroStartShortBreak: "Iniciar Descanso Corto (5 min)",
-    pomodoroStartLongBreak: "Iniciar Descanso Largo (15 min)",
-    pomodoroPause: "Pausar",
-    pomodoroResume: "Reanudar",
-    pomodoroReset: "Reiniciar",
-    pomodoroWorkSession: "Sesión de Trabajo",
-    pomodoroShortBreakSession: "Descanso Corto",
-    pomodoroLongBreakSession: "Descanso Largo",
-    pomodoroReadyToStart: "¿Listo para empezar?",
-    pomodoroWorkSessionEnded: "Sesión de Trabajo Terminada",
-    pomodoroShortBreakEnded: "Descanso Corto Terminado",
-    pomodoroLongBreakEnded: "Descanso Largo Terminado",
-    pomodoroTakeABreakOrStartNext: "¡Tiempo de un descanso o de iniciar la siguiente sesión!",
-    pomodoroFocusOnTask: "¡Concéntrate en tu tarea!",
-    pomodoroShortRelaxation: "Tiempo para una breve relajación.",
-    pomodoroLongRelaxation: "Tiempo para un descanso más largo.",
-    pomodoroCyclesCompleted: (params) => `${params.cycles} ciclo(s) de trabajo completado(s).`,
-    pomodoroTakeAShortBreak: "¡Tiempo para un descanso corto!",
-    pomodoroTakeALongBreak: "¡Tiempo para un descanso largo!",
-    pomodoroBackToWork: "¡Hora de volver al trabajo!",
-    pomodoroErrorTitle: "Error de Pomodoro",
-    pomodoroSWNotReady: "Service Worker para Pomodoro no listo. Espera o recarga.",
-    pomodoroInitializing: "Inicializando...",
     appLockedTitle: "Aplicación Bloqueada",
     appLockedDescription: "Introduce tu PIN para continuar.",
     appPinInputLabel: "PIN",
@@ -1169,8 +1131,6 @@ export const translations: Record<Locale, Translations> = {
     systemNotificationsNotYetEnabled: "Notifications système pas encore activées.",
     systemNotificationsDismissed: "Vous pourrez activer les notifications plus tard depuis le menu des options.",
     manageAssignees: "Gérer les Personnes Assignées",
-    pomodoroTimerMenuLabel: "Minuteur Pomodoro",
-    startLongBreakHeaderLabel: "Commencer Longue Pause",
     backToCalendar: "Retour au calendrier",
     addCategory: "Ajouter une catégorie",
     editCategory: "Modifier la catégorie",
@@ -1472,6 +1432,20 @@ export const translations: Record<Locale, Translations> = {
     historyScopeWork: "Travail",
     historyScopeCategory: "Catégorie",
     historyScopeAssignee: "Personne Assignée",
+    historyScopeHabit: "Habitude", // Added
+    manageHabits: "Gérer les habitudes", // Added
+    habitsPageDescription: "Créez et gérez vos habitudes quotidiennes.", // Added
+    habitsFeatureComingSoon: "La fonctionnalité de suivi des habitudes arrive bientôt ! Utilisez cette page pour gérer vos habitudes.", // Added
+    toastHabitAddedTitle: "Habitude Ajoutée",
+    toastHabitAddedDescription: (params) => `L'habitude "${params.habitName}" a été ajoutée.`,
+    toastHabitUpdatedTitle: "Habitude Mise à Jour",
+    toastHabitUpdatedDescription: (params) => `L'habitude "${params.habitName}" a été mise à jour.`,
+    toastHabitDeletedTitle: "Habitude Supprimée",
+    toastHabitDeletedDescription: (params) => `L'habitude "${params.habitName}" a été supprimée.`,
+    historyLogAddHabit: (params) => `Habitude ajoutée : "${params.name}".`,
+    historyLogUpdateHabit: (params) => `Habitude mise à jour : "${params.oldName}" en "${params.newName}".`,
+    historyLogDeleteHabit: (params) => `Habitude supprimée : "${params.name}".`,
+    historyLogToggleHabitCompletion: (params) => `Achèvement pour l'habitude "${params.habitName}", créneau "${params.slotName}" le ${params.date} basculé à ${params.completed ? 'terminé' : 'incomplet'}.`,
     motivationalPhrases: [
         "Le secret pour avancer, c'est de commencer.",
         "Ne regarde pas l'horloge ; fais ce qu'elle fait. Continue.",
@@ -1484,31 +1458,6 @@ export const translations: Record<Locale, Translations> = {
         "Bien fait vaut mieux que bien dit.",
         "On n'est jamais trop vieux pour se fixer un autre but ou pour rêver un nouveau rêve."
     ],
-    pomodoroTitle: "Minuteur Pomodoro",
-    pomodoroStartWork: "Démarrer Travail (25 min)",
-    pomodoroStartShortBreak: "Démarrer Pause Courte (5 min)",
-    pomodoroStartLongBreak: "Démarrer Longue Pause (15 min)",
-    pomodoroPause: "Pause",
-    pomodoroResume: "Reprendre",
-    pomodoroReset: "Réinitialiser",
-    pomodoroWorkSession: "Session de Travail",
-    pomodoroShortBreakSession: "Pause Courte",
-    pomodoroLongBreakSession: "Longue Pause",
-    pomodoroReadyToStart: "Prêt à commencer ?",
-    pomodoroWorkSessionEnded: "Session de travail terminée",
-    pomodoroShortBreakEnded: "Pause courte terminée",
-    pomodoroLongBreakEnded: "Longue pause terminée",
-    pomodoroTakeABreakOrStartNext: "C'est l'heure d'une pause ou de commencer la session suivante !",
-    pomodoroFocusOnTask: "Concentrez-vous sur votre tâche !",
-    pomodoroShortRelaxation: "Temps pour une courte relaxation.",
-    pomodoroLongRelaxation: "Temps pour un repos plus long.",
-    pomodoroCyclesCompleted: (params) => `${params.cycles} cycle(s) de travail terminé(s).`,
-    pomodoroTakeAShortBreak: "C'est l'heure d'une courte pause !",
-    pomodoroTakeALongBreak: "C'est l'heure d'une longue pause !",
-    pomodoroBackToWork: "C'est l'heure de retourner au travail !",
-    pomodoroErrorTitle: "Erreur Pomodoro",
-    pomodoroSWNotReady: "Service Worker pour Pomodoro non prêt. Veuillez patienter ou recharger.",
-    pomodoroInitializing: "Initialisation...",
     appLockedTitle: "Application Verrouillée",
     appLockedDescription: "Entrez votre PIN pour continuer.",
     appPinInputLabel: "PIN",
@@ -1530,3 +1479,4 @@ type PathImpl<T, Key extends keyof T> =
 type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
+
