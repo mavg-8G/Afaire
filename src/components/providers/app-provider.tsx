@@ -8,9 +8,9 @@ import type {
   BackendActivityCreatePayload, BackendActivityUpdatePayload, BackendActivity, BackendTodoCreate, BackendHistory,
   RecurrenceType, BackendCategoryMode, BackendRepeatMode, BackendTodo,
   Token, DecodedToken, BackendHistoryCreatePayload, BackendCategoryUpdatePayload, AppContextType as AppContextTypeImport,
-  BackendActivityListItem, BackendActivityOccurrence, BackendActivityOccurrenceCreate, BackendActivityOccurrenceUpdate
+  BackendActivityListItem, BackendActivityOccurrence, BackendActivityOccurrenceCreate, BackendActivityOccurrenceUpdate, Habit, HabitSlot, HabitCompletions
 } from '@/lib/types';
-import { DEFAULT_API_BASE_URL, DEFAULT_JWT_SECRET_KEY, POMODORO_WORK_DURATION_SECONDS, POMODORO_SHORT_BREAK_DURATION_SECONDS, POMODORO_LONG_BREAK_DURATION_SECONDS } from '@/lib/constants';
+import { DEFAULT_API_BASE_URL, DEFAULT_JWT_SECRET_KEY } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import * as jose from 'jose';
@@ -43,10 +43,12 @@ export type AppContextType = AppContextTypeImport;
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEY_APP_MODE = 'todoFlowAppMode_v2';
-const LOCAL_STORAGE_KEY_JWT = 'todoFlowJWT_v1'; // Access Token
-const LOCAL_STORAGE_KEY_REFRESH_JWT = 'todoFlowRefreshJWT_v1'; // Refresh Token
+const LOCAL_STORAGE_KEY_JWT = 'todoFlowJWT_v1';
+const LOCAL_STORAGE_KEY_REFRESH_JWT = 'todoFlowRefreshJWT_v1';
 const LOCAL_STORAGE_KEY_UI_NOTIFICATIONS = 'todoFlowUINotifications_v2';
 const LOCAL_STORAGE_KEY_APP_PIN = 'todoFlowAppPin_v2';
+const LOCAL_STORAGE_KEY_HABITS = 'todoFlowHabits_v1';
+const LOCAL_STORAGE_KEY_HABIT_COMPLETIONS = 'todoFlowHabitCompletions_v1';
 
 
 const getIconComponent = (iconName: string): Icons.LucideIcon => {
@@ -268,8 +270,21 @@ const backendToFrontendActivity = (
 
   let daysOfWeekArray: number[] = [];
   if (backendActivity.days_of_week && typeof backendActivity.days_of_week === 'string') {
-    daysOfWeekArray = backendActivity.days_of_week.split(',').map(dayStr => parseInt(dayStr.trim(), 10)).filter(num => !isNaN(num) && num >= 0 && num <=6);
+    const dayNameToNumberMap: { [key: string]: number } = {
+        "sunday": 0, "monday": 1, "tuesday": 2, "wednesday": 3, "thursday": 4, "friday": 5, "saturday": 6
+    };
+    daysOfWeekArray = backendActivity.days_of_week.split(',')
+      .map(dayStrOrNum => {
+        const dayStrLower = dayStrOrNum.trim().toLowerCase();
+        if (dayNameToNumberMap.hasOwnProperty(dayStrLower)) {
+            return dayNameToNumberMap[dayStrLower];
+        }
+        const num = parseInt(dayStrOrNum.trim(), 10);
+        return !isNaN(num) && num >= 0 && num <= 6 ? num : -1; 
+      })
+      .filter(num => num !== -1);
   }
+
 
   const recurrenceRule: RecurrenceRule = {
     type: backendActivity.repeat_mode as RecurrenceType,
@@ -328,7 +343,7 @@ const backendToFrontendActivity = (
 
   if (recurrenceRule.type === 'none') {
     const mainOccurrenceDate = new Date(createdAtTimestamp);
-    if (!isNaN(mainOccurrenceDate.getTime())) { 
+    if (!isNaN(mainOccurrenceDate.getTime())) {
         const mainOccurrenceDateKey = formatISO(mainOccurrenceDate, { representation: 'date' });
         if (completedOccurrencesMap.hasOwnProperty(mainOccurrenceDateKey)) {
             finalCompletedStatus = completedOccurrencesMap[mainOccurrenceDateKey];
@@ -378,14 +393,34 @@ const frontendToBackendActivityPayload = (
   if (activity.recurrence && activity.recurrence.type !== 'none') {
     payload.repeat_mode = activity.recurrence.type as BackendRepeatMode;
     payload.end_date = activity.recurrence.endDate ? new Date(activity.recurrence.endDate).toISOString() : null;
-    payload.days_of_week = activity.recurrence.type === 'weekly' ? (activity.recurrence.daysOfWeek || []).map(String) : null;
     payload.day_of_month = activity.recurrence.type === 'monthly' ? (activity.recurrence.dayOfMonth ?? null) : null;
+
+    if (activity.recurrence.type === 'weekly' && activity.recurrence.daysOfWeek && activity.recurrence.daysOfWeek.length > 0) {
+      payload.days_of_week = activity.recurrence.daysOfWeek.map(dayNum => {
+        // Ensure dayNum is treated as a number for these comparisons
+        const num = Number(dayNum);
+        if (num === 0) return "sunday";
+        if (num === 1) return "monday";
+        if (num === 2) return "tuesday";
+        if (num === 3) return "wednesday";
+        if (num === 4) return "thursday";
+        if (num === 5) return "friday";
+        if (num === 6) return "saturday";
+        // Fallback for unexpected values, though Zod schema should prevent this.
+        console.error(`[AppProvider] Unexpected dayNum in weekly recurrence: ${dayNum} (type: ${typeof dayNum})`);
+        return `invalid_day_num_${dayNum}`;
+      });
+    } else {
+      // If not weekly, or no days specified for weekly, send null (or omit if backend handles optional better)
+      payload.days_of_week = null;
+    }
   } else {
     payload.repeat_mode = 'none';
     payload.end_date = null;
     payload.days_of_week = null;
     payload.day_of_month = null;
   }
+
 
   if (activity.responsiblePersonIds !== undefined) {
     payload.responsible_ids = activity.responsiblePersonIds;
@@ -405,17 +440,17 @@ const frontendToBackendActivityPayload = (
 const backendToFrontendHistory = (backendHistory: BackendHistory): HistoryLogEntry => ({
   id: backendHistory.id,
   timestamp: parseISO(backendHistory.timestamp).getTime(),
-  actionKey: backendHistory.action as HistoryLogActionKey,
+  actionKey: backendHistory.action as HistoryLogActionKey, 
   backendAction: backendHistory.action,
   backendUserId: backendHistory.user_id,
-  scope: 'account',
-  details: { rawBackendAction: backendHistory.action }
+  scope: 'account', 
+  details: { rawBackendAction: backendHistory.action } 
 });
 
 const formatBackendError = (errorData: any, defaultMessage: string): string => {
   if (errorData && typeof errorData === 'object') {
     if (typeof errorData.message === 'string' && errorData.message.trim() !== '') {
-      return errorData.message;
+        return errorData.message;
     }
     if (typeof errorData.detail === 'string' && errorData.detail.trim() !== '') {
       return errorData.detail;
@@ -424,7 +459,7 @@ const formatBackendError = (errorData: any, defaultMessage: string): string => {
       return errorData.detail
         .map((validationError: any) => {
           const loc = validationError.loc && Array.isArray(validationError.loc)
-            ? validationError.loc.filter((item: any) => item !== 'body').join(' > ')
+            ? validationError.loc.filter((item: any) => item !== 'body').join(' > ') 
             : 'Field';
           return `${loc}: ${validationError.msg}`;
         })
@@ -469,7 +504,7 @@ Error Message: ${error.message || 'No message'}.`;
     } else if (error.message && error.message.toLowerCase().includes("unexpected token '<'") && error.message.toLowerCase().includes("html")) {
       descriptionKey = 'toastInvalidJsonErrorDescription';
       descriptionParams = { endpoint: endpoint || API_BASE_URL };
-    } else if (error.message) { 
+    } else if (error.message) {
         customDescription = error.message;
     }
 
@@ -491,7 +526,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [refreshTokenState, setRefreshTokenState] = useState<string | null>(null);
   const [decodedJwt, setDecodedJwt] = useState<DecodedToken | null>(null);
-  const isRefreshingTokenRef = useRef(false); 
+  const isRefreshingTokenRef = useRef(false);
 
   const [isLoadingState, setIsLoadingState] = useState<boolean>(true);
   const [isActivitiesLoading, setIsActivitiesLoading] = useState(true);
@@ -512,51 +547,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const { theme, resolvedTheme } = useTheme();
   const [systemNotificationPermission, setSystemNotificationPermission] = useState<NotificationPermission | null>(null);
 
-  const [pomodoroPhase, setPomodoroPhase] = useState<PomodoroPhase>('off');
-  const [pomodoroTimeRemaining, setPomodoroTimeRemaining] = useState(POMODORO_WORK_DURATION_SECONDS);
-  const [pomodoroIsRunning, setPomodoroIsRunning] = useState(false);
-  const [pomodoroCyclesCompleted, setPomodoroCyclesCompleted] = useState(0);
-  const [isPomodoroReady, setIsPomodoroReady] = useState(false);
-  const prevPomodoroPhaseRef = useRef<PomodoroPhase>(pomodoroPhase);
 
   const [isAppLocked, setIsAppLocked] = useState(false);
   const [appPinState, setAppPinState] = useState<string | null>(null);
 
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [habitCompletions, setHabitCompletions] = useState<HabitCompletions>({});
+
   const isAuthenticated = !!accessToken;
 
-  const postToServiceWorkerLogic = useCallback((message: any) => {
-    if (typeof window !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({ ...message, payload: { ...message.payload, locale } });
-    } else if (typeof window !== 'undefined') {
-      if (message.type !== 'GET_INITIAL_STATE' && !isPomodoroReady) {
-        toast({ variant: 'destructive', title: t('pomodoroErrorTitle') as string, description: t('pomodoroSWNotReady') as string });
-      }
-    }
-  }, [locale, t, toast, isPomodoroReady]);
-
-  const postToServiceWorkerRef = useRef(postToServiceWorkerLogic);
-
-  useEffect(() => {
-    postToServiceWorkerRef.current = postToServiceWorkerLogic;
-  }, [postToServiceWorkerLogic]);
-
-
-  const startPomodoroWork = useCallback(() => postToServiceWorkerRef.current({ type: 'START_WORK', payload: { cyclesCompleted: pomodoroCyclesCompleted } }), [pomodoroCyclesCompleted]);
-  const startPomodoroShortBreak = useCallback(() => postToServiceWorkerRef.current({ type: 'START_SHORT_BREAK' }), []);
-  const startPomodoroLongBreak = useCallback(() => postToServiceWorkerRef.current({ type: 'START_LONG_BREAK' }), []);
-  const pausePomodoro = useCallback(() => postToServiceWorkerRef.current({ type: 'PAUSE_TIMER' }), []);
-  const resumePomodoro = useCallback(() => postToServiceWorkerRef.current({ type: 'RESUME_TIMER' }), []);
-  const resetPomodoro = useCallback(() => {
-    setIsPomodoroReady(false);
-    postToServiceWorkerRef.current({ type: 'RESET_TIMER' });
-  }, []);
 
   const getCurrentUserId = useCallback((): number | null => {
     return decodedJwt?.userId ? decodedJwt.userId : (decodedJwt?.sub ? parseInt(decodedJwt.sub, 10) : null);
   }, [decodedJwt]);
 
   const logout = useCallback((isTokenRefreshFailure: boolean = false) => {
-    if (!isTokenRefreshFailure) { 
+    if (!isTokenRefreshFailure) {
         addHistoryLogEntryRef.current?.('historyLogLogout', undefined, 'account');
     }
     setAccessToken(null);
@@ -574,8 +580,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setAllAssignees([]);
     setHistoryLog([]);
     setUINotifications([]);
+    setHabits([]);
+    setHabitCompletions({});
 
-    postToServiceWorkerRef.current({ type: 'RESET_TIMER' });
     if (logoutChannel) logoutChannel.postMessage('logout_event_v2');
   }, []);
 
@@ -606,8 +613,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (err) {
       const error = err as Error;
       console.error(`[AppProvider] Failed to verify/decode Access Token (name: ${error.name}, message: ${error.message}). Token string (first 20 chars): ${tokenString?.substring(0,20)}...`);
-      setAccessToken(null);
-      setDecodedJwt(null);
+      setAccessToken(null); 
       if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
       return null;
     }
@@ -619,7 +625,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const interval = setInterval(() => {
                 if (!isRefreshingTokenRef.current) {
                     clearInterval(interval);
-                    resolve(accessToken); 
+                    resolve(accessToken);
                 }
             }, 100);
         });
@@ -650,40 +656,39 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             throw new Error(formatBackendError(errorData, `Refresh token failed: HTTP ${response.status}`));
         }
 
-        const newAuthData = await response.json(); // Expects { access_token: string, token_type: "bearer" }
+        const newAuthData = await response.json();
         if (newAuthData.access_token) {
-            const decodedNewToken = await decodeAndSetAccessToken(newAuthData.access_token, undefined); 
-            if (!decodedNewToken) { 
+            const decodedNewToken = await decodeAndSetAccessToken(newAuthData.access_token, undefined);
+            if (!decodedNewToken) {
                 console.error("[AppProvider] Failed to decode the new access token obtained from refresh.");
                 logout(true);
                 isRefreshingTokenRef.current = false;
-                return null; 
+                return null;
             }
             isRefreshingTokenRef.current = false;
-            return newAuthData.access_token; 
+            return newAuthData.access_token;
         } else {
             throw new Error("New access token not found in refresh response.");
         }
     } catch (err) {
         console.error("[AppProvider] Refresh token failed:", (err as Error).message);
         createApiErrorToast(err, toast, "loginErrorTitle", "refreshing", t, `${API_BASE_URL}/refresh-token`);
-        logout(true); 
+        logout(true);
         isRefreshingTokenRef.current = false;
         return null;
     }
   }, [refreshTokenState, API_BASE_URL, decodeAndSetAccessToken, logout, toast, t, accessToken]);
 
 
-  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}, isRetry: boolean = false): Promise<Response> => {
-    let tokenToUse = accessToken; 
+  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}): Promise<Response> => {
+    let tokenToUse = accessToken;
 
     if (decodedJwt && decodedJwt.exp * 1000 < Date.now() - (10 * 1000)) { 
-        console.log("[AppProvider] Access token expired or nearing expiry, attempting refresh (pre-request)...");
         const newAccessTokenString = await refreshTokenLogicInternal();
         if (!newAccessTokenString) {
             throw new Error("Session expired. Please log in again. (Pre-request refresh failed)");
         }
-        tokenToUse = newAccessTokenString; 
+        tokenToUse = newAccessTokenString;
     }
     
     if (!tokenToUse && !url.endsWith('/token') && !url.includes('/refresh-token') && !url.includes(`${API_BASE_URL}/token`)) {
@@ -702,27 +707,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }
 
-    const response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, { ...options, headers });
+    let response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, { ...options, headers });
 
-    if (response.status === 401 && !isRetry && !url.endsWith('/token') && !url.includes('/refresh-token') && !url.includes(`${API_BASE_URL}/token`)) {
-        console.log("[AppProvider] Received 401, attempting token refresh and retry...");
-        const newAccessTokenAfter401 = await refreshTokenLogicInternal(); 
+    if (response.status === 401 && !url.endsWith('/token') && !url.includes('/refresh-token') && !url.includes(`${API_BASE_URL}/token`)) {
+        const newAccessTokenAfter401 = await refreshTokenLogicInternal();
         if (newAccessTokenAfter401) {
-            console.log("[AppProvider] Token refreshed after 401, retrying original request.");
             const retryHeaders = new Headers(options.headers || {});
-            retryHeaders.append('Authorization', `Bearer ${newAccessTokenAfter401}`); 
+            retryHeaders.append('Authorization', `Bearer ${newAccessTokenAfter401}`);
             if (!(options.body instanceof FormData) && !(options.body instanceof URLSearchParams)) {
                 if (!retryHeaders.has('Content-Type') && options.method && ['POST', 'PUT', 'PATCH'].includes(options.method.toUpperCase())) {
                      retryHeaders.append('Content-Type', 'application/json');
                 }
             }
-            return fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, { ...options, headers: retryHeaders });
+            response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, { ...options, headers: retryHeaders });
         } else {
              throw new Error(`Unauthorized: ${response.statusText} (refresh failed after 401)`);
         }
     }
     return response;
-  }, [accessToken, decodedJwt, API_BASE_URL, refreshTokenLogicInternal, logout]);
+  }, [accessToken, decodedJwt, API_BASE_URL, refreshTokenLogicInternal]);
 
   const addHistoryLogEntryLogic = useCallback(async (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined | null>, scope: HistoryLogEntry['scope'] = 'account') => {
     const currentUserId = getCurrentUserId();
@@ -732,24 +735,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     const payload: BackendHistoryCreatePayload = {
-        action: actionKey,
+        action: actionKey, 
         user_id: currentUserId,
     };
-
-    const actionWithDetails = details ? `${actionKey} ${JSON.stringify(details)}` : actionKey;
-    payload.action = actionWithDetails.substring(0, 255);
-
+    
     try {
         const response = await fetchWithAuth(`${API_BASE_URL}/history`, {
             method: 'POST',
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload) 
         });
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ detail: response.statusText }));
             throw new Error(formatBackendError(errorData, `Failed to log history: HTTP ${response.status}`));
         }
         const newBackendHistoryEntry: BackendHistory = await response.json();
-        setHistoryLog(prevLog => [backendToFrontendHistory(newBackendHistoryEntry), ...prevLog.slice(0, 99)]);
+        const frontendLogEntry = {
+            ...backendToFrontendHistory(newBackendHistoryEntry),
+            actionKey: actionKey, 
+            details: details, 
+            scope: scope, 
+        };
+        setHistoryLog(prevLog => [frontendLogEntry, ...prevLog.slice(0, 99)]);
     } catch (err) {
         createApiErrorToast(err, toast, "historyLoadErrorTitle", "logging", t, `${API_BASE_URL}/history`);
         console.error(`[AppProvider] Failed logging history for action ${actionKey}:`, (err as Error).message);
@@ -780,18 +786,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       if (storedAccessToken) {
           currentDecodedToken = await decodeAndSetAccessToken(storedAccessToken, undefined);
-          if (currentDecodedToken && storedRefreshToken) {
+          if (currentDecodedToken && storedRefreshToken) { 
               setRefreshTokenState(storedRefreshToken);
-          } else if (!currentDecodedToken && storedRefreshToken) {
-              console.log("[AppProvider] Initial load: Access token invalid/expired, attempting refresh with stored refresh token.");
-              const newAccessToken = await refreshTokenLogicInternal(); 
+          } else if (!currentDecodedToken && storedRefreshToken) { 
+              setRefreshTokenState(storedRefreshToken); 
+              const newAccessToken = await refreshTokenLogicInternal();
               if (!newAccessToken) {
-                 logout(true);
+                 logout(true); 
               }
-          } else if (!storedRefreshToken) {
-             if (!currentDecodedToken) logout(true);
+          } else if (!storedRefreshToken) { 
+             if (!currentDecodedToken) logout(true); 
+          }
+      } else if (storedRefreshToken) { 
+          setRefreshTokenState(storedRefreshToken);
+          const newAccessToken = await refreshTokenLogicInternal();
+          if (!newAccessToken) {
+             logout(true);
           }
       }
+
 
       const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
       if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
@@ -800,8 +813,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const storedPin = localStorage.getItem(LOCAL_STORAGE_KEY_APP_PIN);
       if (storedPin) {
         setAppPinState(storedPin);
-        if (accessToken) setIsAppLocked(true); 
+        if (accessToken) setIsAppLocked(true);
       }
+      
+      const storedHabits = localStorage.getItem(LOCAL_STORAGE_KEY_HABITS);
+      if (storedHabits) {
+        try {
+            const parsedHabits: Habit[] = JSON.parse(storedHabits).map((h: Habit) => ({
+                ...h,
+                icon: getIconComponent(h.iconName)
+            }));
+            setHabits(parsedHabits);
+        } catch (e) {
+            console.error("Failed to parse stored habits:", e);
+            localStorage.removeItem(LOCAL_STORAGE_KEY_HABITS);
+        }
+      }
+      const storedHabitCompletions = localStorage.getItem(LOCAL_STORAGE_KEY_HABIT_COMPLETIONS);
+        if (storedHabitCompletions) {
+        try {
+            setHabitCompletions(JSON.parse(storedHabitCompletions));
+        } catch (e) {
+            console.error("Failed to parse stored habit completions:", e);
+            localStorage.removeItem(LOCAL_STORAGE_KEY_HABIT_COMPLETIONS);
+        }
+      }
+
 
       if (accessToken && decodedJwt) { 
         try {
@@ -878,8 +915,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             setPersonalActivities(newPersonal); setWorkActivities(newWork);
 
         } catch (err) {
-             if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401') || err.message.includes("Session expired"))) {
-                logout(true); 
+             if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401') || err.message.toLowerCase().includes("session expired"))) {
+                logout(true);
             } else {
                 createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`);
             }
@@ -889,7 +926,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             setIsAssigneesLoading(false);
             setIsHistoryLoading(false);
         }
-      } else {
+      } else { 
         setIsActivitiesLoading(false);
         setIsCategoriesLoading(false);
         setIsAssigneesLoading(false);
@@ -900,7 +937,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     loadClientSideDataAndFetchInitial();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [decodeAndSetAccessToken, refreshTokenLogicInternal, t, toast, API_BASE_URL, logout]); 
+  }, []);
 
 
  useEffect(() => {
@@ -1007,6 +1044,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [appModeState, isLoadingState]);
 
   useEffect(() => { if(!isLoadingState) localStorage.setItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS, JSON.stringify(uiNotifications));}, [uiNotifications, isLoadingState]);
+  useEffect(() => { if(!isLoadingState) localStorage.setItem(LOCAL_STORAGE_KEY_HABITS, JSON.stringify(habits)); }, [habits, isLoadingState]);
+  useEffect(() => { if(!isLoadingState) localStorage.setItem(LOCAL_STORAGE_KEY_HABIT_COMPLETIONS, JSON.stringify(habitCompletions)); }, [habitCompletions, isLoadingState]);
+
 
   useEffect(() => {
     if (isLoadingState || !isAuthenticated) return;
@@ -1111,108 +1151,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [isAuthenticated, logout]);
 
 
-  const handleSWMessage = useCallback((event: MessageEvent) => {
-        if (event.data && event.data.type) {
-            if (event.data.type === 'TIMER_STATE') {
-                const { phase, timeRemaining, isRunning, cyclesCompleted } = event.data.payload;
-                setPomodoroPhase(phase);
-                setPomodoroTimeRemaining(timeRemaining);
-                setPomodoroIsRunning(isRunning);
-                setPomodoroCyclesCompleted(cyclesCompleted);
-                if (!isPomodoroReady) setIsPomodoroReady(true);
-            } else if (event.data.type === 'SW_ERROR') {
-                toast({ variant: 'destructive', title: t('pomodoroErrorTitle') as string, description: `Service Worker: ${event.data.payload.message || 'Unknown SW Error'}`});
-            }
-        }
-    }, [isPomodoroReady, toast, t]);
-
-  useEffect(() => {
-    let handleControllerChange: (() => void) | null = null;
-    const registerAndInitializeSW = async () => {
-        try {
-            if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-                await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-                await navigator.serviceWorker.ready;
-                if (navigator.serviceWorker.controller) {
-                    setTimeout(() => postToServiceWorkerRef.current({ type: 'GET_INITIAL_STATE' }), 200);
-                } else {
-                    setIsPomodoroReady(false);
-                }
-            } else {
-                 setIsPomodoroReady(false);
-            }
-        } catch (error) {
-            console.error('Service Worker registration failed:', error);
-            setIsPomodoroReady(false);
-            toast({ variant: 'destructive', title: t('pomodoroErrorTitle') as string, description: `SW Reg Error: ${error instanceof Error ? error.message : String(error)}`});
-        }
-    };
-
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-        navigator.serviceWorker.addEventListener('message', handleSWMessage);
-
-        handleControllerChange = () => {
-            if (navigator.serviceWorker.controller) {
-                setTimeout(() => postToServiceWorkerRef.current({ type: 'GET_INITIAL_STATE' }), 200);
-            } else {
-                setIsPomodoroReady(false);
-            }
-        };
-        navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
-
-        if (document.readyState === 'complete') {
-            registerAndInitializeSW();
-        } else {
-            window.addEventListener('load', registerAndInitializeSW, { once: true });
-        }
-        if (navigator.serviceWorker.controller) {
-             setTimeout(() => postToServiceWorkerRef.current({ type: 'GET_INITIAL_STATE' }), 200);
-        }
-
-    } else {
-        setIsPomodoroReady(false);
-    }
-
-    return () => {
-        if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-            navigator.serviceWorker.removeEventListener('message', handleSWMessage);
-            if (handleControllerChange) {
-                navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
-            }
-        }
-    };
-  }, [handleSWMessage, t, toast]);
-
-  useEffect(() => {
-    if (isPomodoroReady && prevPomodoroPhaseRef.current !== pomodoroPhase && prevPomodoroPhaseRef.current !== 'off') {
-        const phaseThatEnded = prevPomodoroPhaseRef.current;
-        let titleKey: keyof Translations = 'pomodoroWorkSessionEnded';
-        let descriptionKey: keyof Translations = 'pomodoroFocusOnTask';
-
-        if (phaseThatEnded === 'work') {
-            titleKey = 'pomodoroWorkSessionEnded';
-            descriptionKey = (pomodoroCyclesCompleted > 0 && pomodoroCyclesCompleted % 4 === 0)
-                             ? 'pomodoroTakeALongBreak'
-                             : 'pomodoroTakeAShortBreak';
-        } else if (phaseThatEnded === 'shortBreak') {
-            titleKey = 'pomodoroShortBreakEnded';
-            descriptionKey = 'pomodoroBackToWork';
-        } else if (phaseThatEnded === 'longBreak') {
-            titleKey = 'pomodoroLongBreakEnded';
-            descriptionKey = 'pomodoroBackToWork';
-        }
-        const title = t(titleKey as any);
-        const description = t(descriptionKey as any);
-
-        if (title && description) {
-            stableAddUINotification({ title, description, activityId: `pomodoro_cycle_${pomodoroCyclesCompleted}_${phaseThatEnded}` });
-            toast({ title, description });
-        }
-    }
-    prevPomodoroPhaseRef.current = pomodoroPhase;
-  }, [pomodoroPhase, pomodoroCyclesCompleted, isPomodoroReady, stableAddUINotification, t, toast]);
-
-
   const setAppMode = useCallback((mode: AppMode) => {
     if (mode !== appModeState) {
       addHistoryLogEntryRef.current?.('historyLogSwitchMode', { newMode: mode.charAt(0).toUpperCase() + mode.slice(1), oldMode: appModeState.charAt(0).toUpperCase() + appModeState.slice(1) }, 'account');
@@ -1227,7 +1165,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     formData.append('password', password);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/token`, { 
+      const response = await fetch(`${API_BASE_URL}/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: formData.toString(),
@@ -1236,12 +1174,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const errorData = await response.json().catch(() => ({ detail: response.statusText }));
         throw new Error(formatBackendError(errorData, `Login failed: HTTP ${response.status}`));
       }
-      const tokenData: Token = await response.json(); 
+      const tokenData: Token = await response.json();
 
       setRefreshTokenState(tokenData.refresh_token);
       if (typeof window !== 'undefined') {
-        // For "Remember Me", localStorage is fine. If not remembering, consider sessionStorage for refresh token.
-        // However, for simplicity and consistent token refresh logic, we'll use localStorage for now.
         localStorage.setItem(LOCAL_STORAGE_KEY_REFRESH_JWT, tokenData.refresh_token);
       }
 
@@ -1268,7 +1204,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               setIsHistoryLoading(true);
 
               const [actResponse, catResponse, userResponse, histResponse, allOccurrencesResponse] = await Promise.all([
-                  fetchWithAuth(`${API_BASE_URL}/activities`), 
+                  fetchWithAuth(`${API_BASE_URL}/activities`),
                   fetchWithAuth(`${API_BASE_URL}/categories`),
                   fetchWithAuth(`${API_BASE_URL}/users`),
                   fetchWithAuth(`${API_BASE_URL}/history`),
@@ -1677,7 +1613,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       updateInList(personalActivities, setPersonalActivities);
       updateInList(workActivities, setWorkActivities);
 
-      toast({ title: t('toastTodoAddedTitle'), description: t('toastTodoAddedDescription', { todoText }) });
       return newFrontendTodo;
     } catch (err) {
         if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
@@ -1719,9 +1654,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 );
                 const updatedActivity = { ...list[activityIndex], todos: updatedTodos };
                 setter(prev => prev.map(act => act.id === activityId ? updatedActivity : act));
-                if (updates.text) {
-                    toast({ title: t('toastTodoUpdatedTitle'), description: t('toastTodoUpdatedDescription', { todoText: updates.text || "" }) });
-                }
             }
         };
         updateInList(personalActivities, setPersonalActivities);
@@ -1754,8 +1686,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       };
       updateInList(personalActivities, setPersonalActivities);
       updateInList(workActivities, setWorkActivities);
-
-      toast({ title: t('toastTodoDeletedTitle'), description: t('toastTodoDeletedDescription', { todoText: todoToDelete?.text || "Todo" }) });
     } catch (err) { if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); } else { createApiErrorToast(err, toast, "toastTodoDeletedTitle", "deleting", t, `${API_BASE_URL}/todos/${todoId}`);} setError((err as Error).message); throw err; }
   }, [API_BASE_URL, fetchWithAuth, personalActivities, workActivities, toast, t, logout]);
 
@@ -1925,6 +1855,87 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [API_BASE_URL, fetchWithAuth, appModeState, t, toast, logout]);
 
+  // Habit Methods
+  const addHabit = useCallback((name: string, iconName: string, slots: { name: string; defaultTime?: string }[]) => {
+    const newHabit: Habit = {
+      id: uuidv4(),
+      name,
+      iconName,
+      icon: getIconComponent(iconName),
+      slots: slots.map(slot => ({ id: uuidv4(), name: slot.name, defaultTime: slot.defaultTime })),
+    };
+    setHabits(prev => [...prev, newHabit]);
+    toast({ title: t('toastHabitAddedTitle'), description: t('toastHabitAddedDescription', { habitName: name }) });
+    addHistoryLogEntryRef.current?.('historyLogAddHabit', { habitId: newHabit.id, name }, 'habit');
+  }, [t, toast]);
+
+  const updateHabit = useCallback((habitId: string, updates: Partial<Omit<Habit, 'id' | 'icon' | 'slots'>> & { slots?: { id?: string; name: string; defaultTime?: string }[] }) => {
+    setHabits(prev => prev.map(h => {
+      if (h.id === habitId) {
+        const updatedHabit = { ...h };
+        if (updates.name) updatedHabit.name = updates.name;
+        if (updates.iconName) {
+          updatedHabit.iconName = updates.iconName;
+          updatedHabit.icon = getIconComponent(updates.iconName);
+        }
+        if (updates.slots) {
+          updatedHabit.slots = updates.slots.map(s => ({
+            id: s.id || uuidv4(), 
+            name: s.name,
+            defaultTime: s.defaultTime
+          }));
+        }
+        toast({ title: t('toastHabitUpdatedTitle'), description: t('toastHabitUpdatedDescription', { habitName: updatedHabit.name }) });
+        addHistoryLogEntryRef.current?.('historyLogUpdateHabit', { habitId, newName: updatedHabit.name, oldName: h.name }, 'habit');
+        return updatedHabit;
+      }
+      return h;
+    }));
+  }, [t, toast]);
+
+  const deleteHabit = useCallback((habitId: string) => {
+    const habitToDelete = habits.find(h => h.id === habitId);
+    setHabits(prev => prev.filter(h => h.id !== habitId));
+    setHabitCompletions(prev => {
+      const newCompletions = { ...prev };
+      delete newCompletions[habitId];
+      return newCompletions;
+    });
+    if (habitToDelete) {
+      toast({ title: t('toastHabitDeletedTitle'), description: t('toastHabitDeletedDescription', { habitName: habitToDelete.name }) });
+      addHistoryLogEntryRef.current?.('historyLogDeleteHabit', { habitId, name: habitToDelete.name }, 'habit');
+    }
+  }, [habits, t, toast]);
+
+  const toggleHabitSlotCompletion = useCallback((habitId: string, slotId: string, dateKey: string) => {
+    setHabitCompletions(prev => {
+      const habitSpecificCompletions = prev[habitId] || {};
+      const dateSpecificCompletions = habitSpecificCompletions[dateKey] || {};
+      const newSlotCompletionStatus = !dateSpecificCompletions[slotId];
+
+      const updatedCompletions = {
+        ...prev,
+        [habitId]: {
+          ...habitSpecificCompletions,
+          [dateKey]: {
+            ...dateSpecificCompletions,
+            [slotId]: newSlotCompletionStatus,
+          },
+        },
+      };
+      const habit = habits.find(h => h.id === habitId);
+      const slot = habit?.slots.find(s => s.id === slotId);
+      if (habit && slot) {
+        addHistoryLogEntryRef.current?.('historyLogToggleHabitCompletion', {
+          habitName: habit.name, slotName: slot.name, date: dateKey, completed: newSlotCompletionStatus
+        }, 'habit');
+      }
+      return updatedCompletions;
+    });
+  }, [habits]);
+
+  const getHabitById = useCallback((habitId: string) => habits.find(h => h.id === habitId), [habits]);
+
 
   const getCategoryById = useCallback((categoryId: number) => allCategories.find(cat => cat.id === categoryId), [allCategories]);
   const getAssigneeById = useCallback((assigneeId: number) => assignees.find(asg => asg.id === assigneeId), [assignees]);
@@ -1957,17 +1968,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     uiNotifications, addUINotification: stableAddUINotification, markUINotificationAsRead, markAllUINotificationsAsRead, clearAllUINotifications,
     historyLog, addHistoryLogEntry: addHistoryLogEntryRef.current || (async () => {}),
     systemNotificationPermission, requestSystemNotificationPermission,
-    pomodoroPhase, pomodoroTimeRemaining, pomodoroIsRunning, pomodoroCyclesCompleted,
-    startPomodoroWork, startPomodoroShortBreak, startPomodoroLongBreak, pausePomodoro, resumePomodoro, resetPomodoro, isPomodoroReady,
     isAppLocked, appPinState, unlockApp, setAppPin,
     fetchAndSetSpecificActivityDetails,
+    habits, habitCompletions, addHabit, updateHabit, deleteHabit, toggleHabitSlotCompletion, getHabitById,
   }), [
     getRawActivities, filteredCategories, assigneesForContext, appModeState, setAppMode, addActivity, updateActivity, deleteActivity, toggleOccurrenceCompletion,
     addTodoToActivity, updateTodoInActivity, deleteTodoFromActivity, getCategoryById, addCategory, updateCategory, deleteCategory, addAssignee, updateAssignee, deleteAssignee,
     getAssigneeById, combinedIsLoading, error, isAuthenticated, login, logout, changePassword, getCurrentUserId, uiNotifications, stableAddUINotification, markUINotificationAsRead,
-    markAllUINotificationsAsRead, clearAllUINotifications, historyLog, systemNotificationPermission, requestSystemNotificationPermission, pomodoroPhase,
-    pomodoroTimeRemaining, pomodoroIsRunning, pomodoroCyclesCompleted, startPomodoroWork, startPomodoroShortBreak, startPomodoroLongBreak, pausePomodoro, resumePomodoro,
-    resetPomodoro, isPomodoroReady, isAppLocked, appPinState, unlockApp, setAppPin, fetchAndSetSpecificActivityDetails
+    markAllUINotificationsAsRead, clearAllUINotifications, historyLog, systemNotificationPermission, requestSystemNotificationPermission,
+    isAppLocked, appPinState, unlockApp, setAppPin, fetchAndSetSpecificActivityDetails,
+    habits, habitCompletions, addHabit, updateHabit, deleteHabit, toggleHabitSlotCompletion, getHabitById,
   ]);
 
 
@@ -1977,4 +1987,4 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
-
+    
