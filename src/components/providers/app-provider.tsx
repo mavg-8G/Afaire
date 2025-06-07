@@ -280,7 +280,7 @@ const backendToFrontendActivity = (
             return dayNameToNumberMap[dayStrLower];
         }
         const num = parseInt(dayStrOrNum.trim(), 10);
-        return !isNaN(num) && num >= 0 && num <= 6 ? num : -1; 
+        return !isNaN(num) && num >= 0 && num <= 6 ? num : -1;
       })
       .filter(num => num !== -1);
   }
@@ -398,12 +398,17 @@ const frontendToBackendActivityPayload = (
     if (activity.recurrence.type === 'weekly' && activity.recurrence.daysOfWeek && activity.recurrence.daysOfWeek.length > 0) {
       const dayNumberToNameArray = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
       payload.days_of_week = activity.recurrence.daysOfWeek.map(dayNum => {
-        if (dayNum >= 0 && dayNum < dayNumberToNameArray.length) {
-          return dayNumberToNameArray[dayNum];
+        const num = Number(dayNum);
+        if (!isNaN(num) && num >= 0 && num < dayNumberToNameArray.length) {
+          return dayNumberToNameArray[num];
         }
-        console.warn(`[AppProvider] Invalid day number ${dayNum} found in daysOfWeek. Fallback to empty string.`);
-        return ""; // Should be caught by backend validation if this occurs.
-      }).filter(name => name !== ""); // Filter out any invalid fallbacks
+        console.warn(`[AppProvider] Invalid day number ${dayNum} found in daysOfWeek during mapping. Fallback to empty string.`);
+        return "";
+      }).filter(name => name !== "");
+
+      if (payload.days_of_week.length === 0) {
+        payload.days_of_week = null;
+      }
     } else {
       payload.days_of_week = null;
     }
@@ -433,36 +438,33 @@ const frontendToBackendActivityPayload = (
 const backendToFrontendHistory = (backendHistory: BackendHistory): HistoryLogEntry => ({
   id: backendHistory.id,
   timestamp: parseISO(backendHistory.timestamp).getTime(),
-  actionKey: backendHistory.action as HistoryLogActionKey, 
+  actionKey: backendHistory.action as HistoryLogActionKey,
   backendAction: backendHistory.action,
   backendUserId: backendHistory.user_id,
-  scope: 'account', 
-  details: { rawBackendAction: backendHistory.action } 
+  scope: 'account',
+  details: { rawBackendAction: backendHistory.action }
 });
 
 const formatBackendError = (errorData: any, defaultMessage: string): string => {
   if (errorData && typeof errorData === 'object') {
-    // Check for FastAPI's structured error first (often in errorData.message for HTTPExceptions or directly for RequestValidationErrors)
     if (errorData.error && typeof errorData.message === 'string' && errorData.message.trim() !== '') {
-      return `${errorData.error}: ${errorData.message}`; // Example: "ValidationError: Username already exists"
+      return `${errorData.error}: ${errorData.message}`;
     }
     if (typeof errorData.message === 'string' && errorData.message.trim() !== '') {
-        return errorData.message; // For simpler error messages from backend
+        return errorData.message;
     }
-    // Handle Pydantic RequestValidationError (often directly in errorData or errorData.detail)
     const validationDetails = errorData.detail || (Array.isArray(errorData) ? errorData : null);
     if (Array.isArray(validationDetails)) {
       return validationDetails
         .map((validationError: any) => {
           const loc = validationError.loc && Array.isArray(validationError.loc)
-            ? validationError.loc.filter((item: any) => item !== 'body').join(' > ') 
+            ? validationError.loc.filter((item: any) => item !== 'body').join(' > ')
             : 'Field';
           const msg = validationError.msg || 'Invalid input';
           return `${loc}: ${msg}`;
         })
         .join('; ');
     }
-     // Fallback for other string detail messages
     if (typeof errorData.detail === 'string' && errorData.detail.trim() !== '') {
       return errorData.detail;
     }
@@ -506,7 +508,7 @@ Error Message: ${error.message || 'No message'}.`;
       descriptionKey = 'toastInvalidJsonErrorDescription';
       descriptionParams = { endpoint: endpoint || API_BASE_URL };
     } else if (error.message) {
-        customDescription = error.message; // Use the formatted error message from formatBackendError
+        customDescription = error.message;
     }
 
     toastFn({
@@ -523,8 +525,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [assignees, setAllAssignees] = useState<Assignee[]>([]);
   const [appModeState, setAppModeState] = useState<AppMode>('personal');
-  
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+
+  const [accessToken, setAccessTokenState] = useState<string | null>(null); // Renamed to avoid conflict in fetchWithAuth
   const [refreshTokenState, setRefreshTokenState] = useState<string | null>(null);
   const [decodedJwt, setDecodedJwt] = useState<DecodedToken | null>(null);
   const isRefreshingTokenRef = useRef(false);
@@ -563,10 +565,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [decodedJwt]);
 
   const logout = useCallback((isTokenRefreshFailure: boolean = false) => {
-    if (!isTokenRefreshFailure) {
-        addHistoryLogEntryRef.current?.('historyLogLogout', undefined, 'account');
+    if (!isTokenRefreshFailure && addHistoryLogEntryRef.current) {
+        addHistoryLogEntryRef.current('historyLogLogout', undefined, 'account');
     }
-    setAccessToken(null);
+    setAccessTokenState(null);
     setRefreshTokenState(null);
     setDecodedJwt(null);
     if (typeof window !== 'undefined') {
@@ -590,7 +592,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const decodeAndSetAccessToken = useCallback(async (tokenString: string | null, initialUserDetails?: Pick<DecodedToken, 'userId' | 'username' | 'isAdmin'>): Promise<DecodedToken | null> => {
     if (!tokenString) {
-      setAccessToken(null);
+      setAccessTokenState(null);
       setDecodedJwt(null);
       if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
       return null;
@@ -607,14 +609,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         isAdmin: initialUserDetails?.isAdmin,
       };
 
-      setAccessToken(tokenString);
+      setAccessTokenState(tokenString);
       setDecodedJwt(newDecodedJwt);
       if (typeof window !== 'undefined') localStorage.setItem(LOCAL_STORAGE_KEY_JWT, tokenString);
       return newDecodedJwt;
     } catch (err) {
       const error = err as Error;
       console.error(`[AppProvider] Failed to verify/decode Access Token (name: ${error.name}, message: ${error.message}). Token string (first 20 chars): ${tokenString?.substring(0,20)}...`);
-      setAccessToken(null); 
+      setAccessTokenState(null);
       if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
       return null;
     }
@@ -626,7 +628,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const interval = setInterval(() => {
                 if (!isRefreshingTokenRef.current) {
                     clearInterval(interval);
-                    resolve(accessToken);
+                    resolve(accessToken); // Use state accessToken here
                 }
             }, 100);
         });
@@ -662,10 +664,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const decodedNewToken = await decodeAndSetAccessToken(newAuthData.access_token, undefined);
             if (!decodedNewToken) {
                 console.error("[AppProvider] Failed to decode the new access token obtained from refresh.");
-                logout(true);
-                isRefreshingTokenRef.current = false;
-                return null;
+                logout(true); // This will also clear accessTokenState
             }
+            // decodeAndSetAccessToken already sets accessTokenState
             isRefreshingTokenRef.current = false;
             return newAuthData.access_token;
         } else {
@@ -682,18 +683,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
   const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}): Promise<Response> => {
-    let tokenToUse = accessToken;
+    let tokenToUse = accessToken; // Use state accessToken
 
-    if (decodedJwt && decodedJwt.exp * 1000 < Date.now() - (10 * 1000)) { 
+    // Check if token is expired or about to expire (e.g., within 10 seconds)
+    if (decodedJwt && decodedJwt.exp * 1000 < Date.now() + 10000) {
         const newAccessTokenString = await refreshTokenLogicInternal();
         if (!newAccessTokenString) {
+            // refreshTokenLogicInternal handles logout on failure
             throw new Error("Session expired. Please log in again. (Pre-request refresh failed)");
         }
         tokenToUse = newAccessTokenString;
+    } else if (!tokenToUse && refreshTokenState && !url.endsWith('/token') && !url.includes('/refresh-token')) {
+        // If no access token, but refresh token exists, try to refresh
+        console.log(`[AppProvider] No access token for ${url}, attempting refresh proactively.`);
+        const newAccessTokenString = await refreshTokenLogicInternal();
+        if (!newAccessTokenString) {
+            throw new Error("Session expired or unable to refresh. Please log in again. (Proactive refresh failed)");
+        }
+        tokenToUse = newAccessTokenString;
     }
-    
+
     if (!tokenToUse && !url.endsWith('/token') && !url.includes('/refresh-token') && !url.includes(`${API_BASE_URL}/token`)) {
-        console.error(`[AppProvider] ERROR: No JWT token available for authenticated request to ${url}. 'tokenToUse' is falsy. Current accessToken state (might be stale): ${accessToken}, decodedJwt state (might be stale): ${JSON.stringify(decodedJwt)}`);
+        console.error(`[AppProvider] ERROR: No JWT token available for authenticated request to ${url}. 'tokenToUse' is falsy. Current accessToken state: ${accessToken}, decodedJwt state: ${JSON.stringify(decodedJwt)}`);
         throw new Error("No JWT token available for authenticated request.");
     }
 
@@ -701,7 +712,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (tokenToUse) {
         headers.append('Authorization', `Bearer ${tokenToUse}`);
     }
-    
+
     if (!(options.body instanceof FormData) && !(options.body instanceof URLSearchParams)) {
         if (!headers.has('Content-Type') && options.method && ['POST', 'PUT', 'PATCH'].includes(options.method.toUpperCase())) {
              headers.append('Content-Type', 'application/json');
@@ -711,6 +722,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     let response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, { ...options, headers });
 
     if (response.status === 401 && !url.endsWith('/token') && !url.includes('/refresh-token') && !url.includes(`${API_BASE_URL}/token`)) {
+        console.log(`[AppProvider] Received 401 for ${url}, attempting token refresh.`);
         const newAccessTokenAfter401 = await refreshTokenLogicInternal();
         if (newAccessTokenAfter401) {
             const retryHeaders = new Headers(options.headers || {});
@@ -722,11 +734,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
             response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, { ...options, headers: retryHeaders });
         } else {
+             // refreshTokenLogicInternal handles logout if refresh fails
              throw new Error(`Unauthorized: ${response.statusText} (refresh failed after 401)`);
         }
     }
     return response;
-  }, [accessToken, decodedJwt, API_BASE_URL, refreshTokenLogicInternal]);
+  }, [accessToken, decodedJwt, refreshTokenState, API_BASE_URL, refreshTokenLogicInternal]);
+
 
   const addHistoryLogEntryLogic = useCallback(async (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined | null>, scope: HistoryLogEntry['scope'] = 'account') => {
     const currentUserId = getCurrentUserId();
@@ -736,14 +750,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     const payload: BackendHistoryCreatePayload = {
-        action: actionKey, 
+        action: actionKey,
         user_id: currentUserId,
     };
-    
+
     try {
         const response = await fetchWithAuth(`${API_BASE_URL}/history`, {
             method: 'POST',
-            body: JSON.stringify(payload) 
+            body: JSON.stringify(payload)
         });
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ detail: response.statusText }));
@@ -752,9 +766,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const newBackendHistoryEntry: BackendHistory = await response.json();
         const frontendLogEntry = {
             ...backendToFrontendHistory(newBackendHistoryEntry),
-            actionKey: actionKey, 
-            details: details, 
-            scope: scope, 
+            actionKey: actionKey,
+            details: details,
+            scope: scope,
         };
         setHistoryLog(prevLog => [frontendLogEntry, ...prevLog.slice(0, 99)]);
     } catch (err) {
@@ -772,76 +786,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     const loadClientSideDataAndFetchInitial = async () => {
-      setIsLoadingState(true);
-      setIsActivitiesLoading(true);
-      setIsCategoriesLoading(true);
-      setIsAssigneesLoading(true);
-      setIsHistoryLoading(true);
+      setIsLoadingState(true); // Overall loading starts
 
       const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
       if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) setAppModeState(storedAppMode);
 
       const storedAccessToken = localStorage.getItem(LOCAL_STORAGE_KEY_JWT);
       const storedRefreshToken = localStorage.getItem(LOCAL_STORAGE_KEY_REFRESH_JWT);
-      let currentDecodedToken: DecodedToken | null = null;
+      let initialAccessToken: string | null = null;
 
       if (storedAccessToken) {
-          currentDecodedToken = await decodeAndSetAccessToken(storedAccessToken, undefined);
-          if (currentDecodedToken && storedRefreshToken) { 
+          const decoded = await decodeAndSetAccessToken(storedAccessToken, undefined); // This sets accessTokenState
+          if (decoded && decoded.exp * 1000 > Date.now() + 10000) { // Check if not expired or about to expire
+              initialAccessToken = storedAccessToken;
+          } else if (storedRefreshToken) { // Access token expired or missing, but refresh token exists
               setRefreshTokenState(storedRefreshToken);
-          } else if (!currentDecodedToken && storedRefreshToken) { 
-              setRefreshTokenState(storedRefreshToken); 
-              const newAccessToken = await refreshTokenLogicInternal();
-              if (!newAccessToken) {
-                 logout(true); 
-              }
-          } else if (!storedRefreshToken) { 
-             if (!currentDecodedToken) logout(true); 
+              initialAccessToken = await refreshTokenLogicInternal(); // This will set accessTokenState on success
+          } else { // Access token expired/missing, no refresh token
+              logout(true);
           }
-      } else if (storedRefreshToken) { 
+      } else if (storedRefreshToken) { // No access token, but refresh token exists
           setRefreshTokenState(storedRefreshToken);
-          const newAccessToken = await refreshTokenLogicInternal();
-          if (!newAccessToken) {
-             logout(true);
-          }
+          initialAccessToken = await refreshTokenLogicInternal(); // This will set accessTokenState on success
       }
 
-
+      // Load non-auth critical client-side data
       const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
       if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
       if (typeof window !== 'undefined' && 'Notification' in window) setSystemNotificationPermission(Notification.permission);
-
       const storedPin = localStorage.getItem(LOCAL_STORAGE_KEY_APP_PIN);
-      if (storedPin) {
-        setAppPinState(storedPin);
-        if (accessToken) setIsAppLocked(true);
-      }
-      
+      if (storedPin) setAppPinState(storedPin);
       const storedHabits = localStorage.getItem(LOCAL_STORAGE_KEY_HABITS);
-      if (storedHabits) {
-        try {
-            const parsedHabits: Habit[] = JSON.parse(storedHabits).map((h: Habit) => ({
-                ...h,
-                icon: getIconComponent(h.iconName)
-            }));
-            setHabits(parsedHabits);
-        } catch (e) {
-            console.error("Failed to parse stored habits:", e);
-            localStorage.removeItem(LOCAL_STORAGE_KEY_HABITS);
-        }
-      }
+      if (storedHabits) try { setHabits(JSON.parse(storedHabits).map((h: Habit) => ({ ...h, icon: getIconComponent(h.iconName) }))); } catch (e) { console.error("Failed to parse habits", e); }
       const storedHabitCompletions = localStorage.getItem(LOCAL_STORAGE_KEY_HABIT_COMPLETIONS);
-        if (storedHabitCompletions) {
-        try {
-            setHabitCompletions(JSON.parse(storedHabitCompletions));
-        } catch (e) {
-            console.error("Failed to parse stored habit completions:", e);
-            localStorage.removeItem(LOCAL_STORAGE_KEY_HABIT_COMPLETIONS);
-        }
-      }
+      if (storedHabitCompletions) try { setHabitCompletions(JSON.parse(storedHabitCompletions)); } catch (e) { console.error("Failed to parse habit completions", e); }
 
+      // Proceed with data fetching only if an access token was established
+      if (initialAccessToken) { // Check the token obtained/validated in this effect
+        setIsActivitiesLoading(true); setIsCategoriesLoading(true); setIsAssigneesLoading(true); setIsHistoryLoading(true);
+        if (storedPin) setIsAppLocked(true); // Lock app if PIN is set and user is authenticated
 
-      if (accessToken && decodedJwt) { 
         try {
             const [actResponse, catResponse, userResponse, histResponse, allOccurrencesResponse] = await Promise.all([
                 fetchWithAuth(`${API_BASE_URL}/activities`),
@@ -858,16 +842,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const backendCategories: BackendCategory[] = await catResponse.json();
             setAllCategories(backendCategories.map(cat => backendToFrontendCategory(cat)));
 
-
             if (!userResponse.ok) throw new Error(`Users fetch failed: HTTP ${userResponse.status} ${userResponse.statusText}`);
             const backendUsers: BackendUser[] = await userResponse.json();
             setAllAssignees(backendUsers.map(user => backendToFrontendAssignee(user)));
 
-
             if (!histResponse.ok) throw new Error(`History fetch failed: HTTP ${histResponse.status} ${histResponse.statusText}`);
             const backendHistoryItems: BackendHistory[] = await histResponse.json();
             setHistoryLog(backendHistoryItems.map(item => backendToFrontendHistory(item)));
-
 
             let allBackendOccurrences: BackendActivityOccurrence[] = [];
             if (allOccurrencesResponse.ok) {
@@ -884,7 +865,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 }
                 try {
                     let feAct = backendToFrontendActivity(beListItem, appModeState);
-
                     const activityOccurrences = allBackendOccurrences.filter(occ => occ.activity_id === feAct.id);
                     const occurrencesMap: Record<string, boolean> = {};
                     activityOccurrences.forEach(occ => {
@@ -896,7 +876,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         }
                     });
                     feAct.completedOccurrences = occurrencesMap;
-
                     if (feAct.recurrence?.type === 'none' && feAct.createdAt) {
                         const mainOccurrenceDate = new Date(feAct.createdAt);
                         if(!isNaN(mainOccurrenceDate.getTime())) {
@@ -907,7 +886,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                             }
                         }
                     }
-
                     if (feAct.appMode === 'personal') newPersonal.push(feAct); else newWork.push(feAct);
                 } catch (conversionError) {
                     console.error(`[AppProvider] Failed to convert backend activity list item (ID: ${beListItem.id || 'unknown'}) to frontend format during initial load. Skipping this item.`, conversionError, beListItem);
@@ -922,23 +900,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`);
             }
         } finally {
-            setIsActivitiesLoading(false);
-            setIsCategoriesLoading(false);
-            setIsAssigneesLoading(false);
-            setIsHistoryLoading(false);
+            setIsActivitiesLoading(false); setIsCategoriesLoading(false); setIsAssigneesLoading(false); setIsHistoryLoading(false);
         }
-      } else { 
-        setIsActivitiesLoading(false);
-        setIsCategoriesLoading(false);
-        setIsAssigneesLoading(false);
-        setIsHistoryLoading(false);
+      } else { // No access token established after trying to load/refresh
+        setIsActivitiesLoading(false); setIsCategoriesLoading(false); setIsAssigneesLoading(false); setIsHistoryLoading(false);
+        // If no token and not already logging out (e.g. from a failed refresh), ensure logout state is set.
+        if (!initialAccessToken) logout(true);
       }
-      setIsLoadingState(false);
+      setIsLoadingState(false); // Overall loading ends
     };
 
     loadClientSideDataAndFetchInitial();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // Keep dependencies minimal for initial load
 
 
  useEffect(() => {
@@ -1884,7 +1858,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
         if (updates.slots) {
           updatedHabit.slots = updates.slots.map(s => ({
-            id: s.id || uuidv4(), 
+            id: s.id || uuidv4(),
             name: s.name,
             defaultTime: s.defaultTime
           }));
@@ -1992,3 +1966,4 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 };
     
+
