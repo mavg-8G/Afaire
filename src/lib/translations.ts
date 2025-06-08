@@ -321,7 +321,7 @@ export type Translations = {
   historyScopeWork: string;
   historyScopeCategory: string;
   historyScopeAssignee: string;
-  historyScopeHabit: string; // Added
+  historyScopeHabit: string;
 
   // Habits Feature
   manageHabits: string;
@@ -333,10 +333,26 @@ export type Translations = {
   toastHabitUpdatedDescription: (params: { habitName: string }) => string;
   toastHabitDeletedTitle: string;
   toastHabitDeletedDescription: (params: { habitName: string }) => string;
-  historyLogAddHabit: (params: { habitId: string, name: string }) => string;
-  historyLogUpdateHabit: (params: { habitId: string, newName: string, oldName?: string }) => string;
-  historyLogDeleteHabit: (params: { habitId: string, name: string }) => string;
+  historyLogAddHabit: (params: { name: string }) => string;
+  historyLogUpdateHabit: (params: { newName: string, oldName?: string }) => string;
+  historyLogDeleteHabit: (params: { name: string }) => string;
   historyLogToggleHabitCompletion: (params: { habitName: string, slotName: string, date: string, completed: boolean }) => string;
+  addNewHabit: string;
+  editHabit: string;
+  habitNameLabel: string;
+  habitNamePlaceholder: string;
+  habitIconNameLabel: string;
+  habitIconNamePlaceholder: string;
+  habitSlotsLabel: string;
+  addSlotButton: string;
+  slotNameLabel: string;
+  slotNamePlaceholder: string;
+  slotDefaultTimeLabel: string;
+  slotDefaultTimePlaceholder: string;
+  deleteSlotSr: string;
+  noHabitsYet: string;
+  confirmDeleteHabitTitle: string;
+  confirmDeleteHabitDescription: (params: { habitName: string }) => string;
 
 
   // Motivational Phrases
@@ -690,10 +706,10 @@ export const translations: Record<Locale, Translations> = {
     historyScopeWork: "Work",
     historyScopeCategory: "Category",
     historyScopeAssignee: "Assignee",
-    historyScopeHabit: "Habit", // Added
-    manageHabits: "Manage Habits", // Added
-    habitsPageDescription: "Create and manage your daily habits.", // Added
-    habitsFeatureComingSoon: "Habit tracking feature coming soon! Use this page to manage your habits.", // Added
+    historyScopeHabit: "Habit",
+    manageHabits: "Manage Habits",
+    habitsPageDescription: "Create and manage your daily habits.",
+    habitsFeatureComingSoon: "Habit tracking feature coming soon! Use this page to manage your habits.",
     toastHabitAddedTitle: "Habit Added",
     toastHabitAddedDescription: (params) => `Habit "${params.habitName}" has been added.`,
     toastHabitUpdatedTitle: "Habit Updated",
@@ -701,9 +717,25 @@ export const translations: Record<Locale, Translations> = {
     toastHabitDeletedTitle: "Habit Deleted",
     toastHabitDeletedDescription: (params) => `Habit "${params.habitName}" has been removed.`,
     historyLogAddHabit: (params) => `Added Habit: "${params.name}".`,
-    historyLogUpdateHabit: (params) => `Updated Habit: "${params.oldName}" to "${params.newName}".`,
+    historyLogUpdateHabit: (params) => `Updated Habit: "${params.oldName || 'Unnamed'}" to "${params.newName}".`,
     historyLogDeleteHabit: (params) => `Deleted Habit: "${params.name}".`,
     historyLogToggleHabitCompletion: (params) => `Toggled completion for habit "${params.habitName}", slot "${params.slotName}" on ${params.date} to ${params.completed ? 'completed' : 'incomplete'}.`,
+    addNewHabit: "Add New Habit",
+    editHabit: "Edit Habit",
+    habitNameLabel: "Habit Name",
+    habitNamePlaceholder: "e.g., Morning Exercise, Drink Water",
+    habitIconNameLabel: "Habit Icon",
+    habitIconNamePlaceholder: "e.g., Activity, GlassWater",
+    habitSlotsLabel: "Time Slots / Instances",
+    addSlotButton: "Add Slot",
+    slotNameLabel: "Slot Name",
+    slotNamePlaceholder: "e.g., Morning, Before Bed",
+    slotDefaultTimeLabel: "Default Time (Optional)",
+    slotDefaultTimePlaceholder: "HH:MM",
+    deleteSlotSr: "Delete slot",
+    noHabitsYet: "No habits created yet. Add your first habit!",
+    confirmDeleteHabitTitle: "Delete Habit?",
+    confirmDeleteHabitDescription: (params) => `Are you sure you want to delete the habit "${params.habitName}"? All its completion data will also be removed.`,
     motivationalPhrases: [
       "The secret of getting ahead is getting started.",
       "Don't watch the clock; do what it does. Keep going.",
@@ -1061,10 +1093,10 @@ export const translations: Record<Locale, Translations> = {
     historyScopeWork: "Trabajo",
     historyScopeCategory: "Categoría",
     historyScopeAssignee: "Asignado",
-    historyScopeHabit: "Hábito", // Added
-    manageHabits: "Gestionar Hábitos", // Added
-    habitsPageDescription: "Crea y gestiona tus hábitos diarios.", // Added
-    habitsFeatureComingSoon: "¡La función de seguimiento de hábitos llegará pronto! Utiliza esta página para gestionar tus hábitos.", // Added
+    historyScopeHabit: "Hábito",
+    manageHabits: "Gestionar Hábitos",
+    habitsPageDescription: "Crea y gestiona tus hábitos diarios.",
+    habitsFeatureComingSoon: "¡La función de seguimiento de hábitos llegará pronto! Utiliza esta página para gestionar tus hábitos.",
     toastHabitAddedTitle: "Hábito Añadido",
     toastHabitAddedDescription: (params) => `El hábito "${params.habitName}" ha sido añadido.`,
     toastHabitUpdatedTitle: "Hábito Actualizado",
@@ -1072,9 +1104,25 @@ export const translations: Record<Locale, Translations> = {
     toastHabitDeletedTitle: "Hábito Eliminado",
     toastHabitDeletedDescription: (params) => `El hábito "${params.habitName}" ha sido eliminado.`,
     historyLogAddHabit: (params) => `Añadido Hábito: "${params.name}".`,
-    historyLogUpdateHabit: (params) => `Actualizado Hábito: "${params.oldName}" a "${params.newName}".`,
+    historyLogUpdateHabit: (params) => `Actualizado Hábito: "${params.oldName || 'Sin nombre'}" a "${params.newName}".`,
     historyLogDeleteHabit: (params) => `Eliminado Hábito: "${params.name}".`,
     historyLogToggleHabitCompletion: (params) => `Completado para el hábito "${params.habitName}", franja "${params.slotName}" en ${params.date} cambiado a ${params.completed ? 'completado' : 'incompleto'}.`,
+    addNewHabit: "Añadir Nuevo Hábito",
+    editHabit: "Editar Hábito",
+    habitNameLabel: "Nombre del Hábito",
+    habitNamePlaceholder: "Ej: Ejercicio Matutino, Beber Agua",
+    habitIconNameLabel: "Icono del Hábito",
+    habitIconNamePlaceholder: "Ej: Activity, GlassWater",
+    habitSlotsLabel: "Franjas Horarias / Instancias",
+    addSlotButton: "Añadir Franja",
+    slotNameLabel: "Nombre de la Franja",
+    slotNamePlaceholder: "Ej: Mañana, Antes de Dormir",
+    slotDefaultTimeLabel: "Hora Predeterminada (Opcional)",
+    slotDefaultTimePlaceholder: "HH:MM",
+    deleteSlotSr: "Eliminar franja",
+    noHabitsYet: "Aún no has creado hábitos. ¡Añade tu primer hábito!",
+    confirmDeleteHabitTitle: "¿Eliminar Hábito?",
+    confirmDeleteHabitDescription: (params) => `¿Estás seguro de que quieres eliminar el hábito "${params.habitName}"? Todos sus datos de completado también serán eliminados.`,
     motivationalPhrases: [
       "El secreto para salir adelante es empezar.",
       "No mires el reloj; haz lo que él hace. Sigue adelante.",
@@ -1432,10 +1480,10 @@ export const translations: Record<Locale, Translations> = {
     historyScopeWork: "Travail",
     historyScopeCategory: "Catégorie",
     historyScopeAssignee: "Personne Assignée",
-    historyScopeHabit: "Habitude", // Added
-    manageHabits: "Gérer les habitudes", // Added
-    habitsPageDescription: "Créez et gérez vos habitudes quotidiennes.", // Added
-    habitsFeatureComingSoon: "La fonctionnalité de suivi des habitudes arrive bientôt ! Utilisez cette page pour gérer vos habitudes.", // Added
+    historyScopeHabit: "Habitude",
+    manageHabits: "Gérer les habitudes",
+    habitsPageDescription: "Créez et gérez vos habitudes quotidiennes.",
+    habitsFeatureComingSoon: "La fonctionnalité de suivi des habitudes arrive bientôt ! Utilisez cette page pour gérer vos habitudes.",
     toastHabitAddedTitle: "Habitude Ajoutée",
     toastHabitAddedDescription: (params) => `L'habitude "${params.habitName}" a été ajoutée.`,
     toastHabitUpdatedTitle: "Habitude Mise à Jour",
@@ -1443,9 +1491,25 @@ export const translations: Record<Locale, Translations> = {
     toastHabitDeletedTitle: "Habitude Supprimée",
     toastHabitDeletedDescription: (params) => `L'habitude "${params.habitName}" a été supprimée.`,
     historyLogAddHabit: (params) => `Habitude ajoutée : "${params.name}".`,
-    historyLogUpdateHabit: (params) => `Habitude mise à jour : "${params.oldName}" en "${params.newName}".`,
+    historyLogUpdateHabit: (params) => `Habitude mise à jour : "${params.oldName || 'Sans nom'}" en "${params.newName}".`,
     historyLogDeleteHabit: (params) => `Habitude supprimée : "${params.name}".`,
     historyLogToggleHabitCompletion: (params) => `Achèvement pour l'habitude "${params.habitName}", créneau "${params.slotName}" le ${params.date} basculé à ${params.completed ? 'terminé' : 'incomplet'}.`,
+    addNewHabit: "Ajouter une Nouvelle Habitude",
+    editHabit: "Modifier l'Habitude",
+    habitNameLabel: "Nom de l'Habitude",
+    habitNamePlaceholder: "Ex : Exercice Matinal, Boire de l'eau",
+    habitIconNameLabel: "Icône de l'Habitude",
+    habitIconNamePlaceholder: "Ex : Activity, GlassWater",
+    habitSlotsLabel: "Créneaux Horaires / Instances",
+    addSlotButton: "Ajouter un Créneau",
+    slotNameLabel: "Nom du Créneau",
+    slotNamePlaceholder: "Ex : Matin, Avant de dormir",
+    slotDefaultTimeLabel: "Heure par Défaut (Optionnel)",
+    slotDefaultTimePlaceholder: "HH:MM",
+    deleteSlotSr: "Supprimer le créneau",
+    noHabitsYet: "Aucune habitude créée pour le moment. Ajoutez votre première habitude !",
+    confirmDeleteHabitTitle: "Supprimer l'Habitude ?",
+    confirmDeleteHabitDescription: (params) => `Êtes-vous sûr de vouloir supprimer l'habitude "${params.habitName}" ? Toutes ses données d'achèvement seront également supprimées.`,
     motivationalPhrases: [
         "Le secret pour avancer, c'est de commencer.",
         "Ne regarde pas l'horloge ; fais ce qu'elle fait. Continue.",
@@ -1480,3 +1544,4 @@ type Path<T> = PathImpl<T, keyof T> | keyof T;
 
 export type TranslationKey = Path<Translations['en']>;
 
+    

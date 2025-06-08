@@ -4,7 +4,7 @@ import type { LucideIcon } from 'lucide-react';
 // --- JWT ---
 export interface Token {
   access_token: string;
-  refresh_token: string; // Added refresh_token
+  refresh_token: string;
   token_type: string;
   user_id: number;
   username: string;
@@ -12,10 +12,9 @@ export interface Token {
 }
 
 export interface DecodedToken {
-  sub: string; // User ID (from token's 'sub' claim)
-  exp: number; // Expiry timestamp
-  // Store additional user info directly from login response if needed
-  userId?: number; // Actual user ID from backend
+  sub: string;
+  exp: number;
+  userId?: number;
   username?: string;
   isAdmin?: boolean;
 }
@@ -61,7 +60,7 @@ export interface BackendActivityOccurrence {
   activity_id: number;
   date: string; // ISO datetime string from backend
   complete: boolean;
-  activity_title?: string; // Optional, as per ActivityOccurrenceResponse
+  activity_title?: string;
 }
 
 export interface BackendActivityOccurrenceCreate {
@@ -82,13 +81,13 @@ export interface Activity {
   title: string;
   categoryId: number;
   todos: Todo[];
-  createdAt: number; // Start date timestamp
+  createdAt: number;
   time?: string;
-  completed?: boolean; // Overall completion status for non-recurring, or if all todos are done.
+  completed?: boolean;
   completedAt?: number | null;
   notes?: string;
   recurrence?: RecurrenceRule | null;
-  completedOccurrences: Record<string, boolean>; // Key: YYYY-MM-DD date string, Value: completion status
+  completedOccurrences: Record<string, boolean>;
   isRecurringInstance?: boolean;
   originalInstanceDate?: number;
   masterActivityId?: number;
@@ -96,46 +95,37 @@ export interface Activity {
   appMode: AppMode;
 }
 
-// Represents the data structure from GET /activities (list view)
-// Aligned with backend's ActivityResponse
 export interface BackendActivityListItem {
   id: number;
   title: string;
-  start_date: string; // ISO string
+  start_date: string;
   time: string;
   category_id: number;
   repeat_mode: BackendRepeatMode;
-  end_date?: string | null; // ISO string
-  days_of_week?: string | null; // Comma-separated string "0,1,2"
+  end_date?: string | null;
+  days_of_week?: string | null;
   day_of_month?: number | null;
   notes?: string | null;
   mode: BackendCategoryMode;
   responsible_ids: number[];
 }
 
-// Represents the richer data structure from GET /activities/{id} (now ActivityResponse),
-// and POST /activities, PUT /activities/{id} (still ORM model)
 export interface BackendActivity {
   id: number;
   title: string;
-  start_date: string; // ISO string
+  start_date: string;
   time: string;
   category_id: number;
   repeat_mode: BackendRepeatMode;
-  end_date?: string | null; // ISO string
-  days_of_week?: string | null; // Comma-separated string "0,1,2"
+  end_date?: string | null;
+  days_of_week?: string | null;
   day_of_month?: number | null;
   notes?: string | null;
   mode: BackendCategoryMode;
-
-  // These fields are present in the rich ORM model (e.g., POST/PUT response)
-  // but might be absent or different in ActivityResponse (e.g., GET /activities/{id})
   category?: BackendCategory;
   responsibles?: BackendUser[];
   todos?: BackendTodo[];
-  occurrences?: BackendActivityOccurrence[]; // Added for initial occurrences
-
-  // These fields are specifically from ActivityResponse (for GET /activities/{id})
+  occurrences?: BackendActivityOccurrence[];
   responsible_ids?: number[];
 }
 
@@ -255,18 +245,22 @@ export type HistoryLogActionKey =
   | 'historyLogAddCategory'
   | 'historyLogUpdateCategory'
   | 'historyLogDeleteCategory'
-  | 'historyLogSwitchMode' // Consolidated switch mode
+  | 'historyLogSwitchMode'
   | 'historyLogPasswordChangeAttempt'
   | 'historyLogAddAssignee'
   | 'historyLogUpdateAssignee'
-  | 'historyLogDeleteAssignee';
+  | 'historyLogDeleteAssignee'
+  | 'historyLogAddHabit' // New
+  | 'historyLogUpdateHabit' // New
+  | 'historyLogDeleteHabit' // New
+  | 'historyLogToggleHabitCompletion'; // New
 
 export interface HistoryLogEntry {
   id: number;
   timestamp: number;
   actionKey: HistoryLogActionKey;
   details?: Record<string, string | number | boolean | undefined | null>;
-  scope: 'account' | 'personal' | 'work' | 'category' | 'assignee';
+  scope: 'account' | 'personal' | 'work' | 'category' | 'assignee' | 'habit'; // Added 'habit'
   backendAction?: string;
   backendUserId?: number;
 }
@@ -284,8 +278,24 @@ export interface BackendHistory {
   user?: BackendUser;
 }
 
-// --- POMODORO (Client-side) ---
-export type PomodoroPhase = 'work' | 'shortBreak' | 'longBreak' | 'off';
+// --- HABITS (Client-side) ---
+export interface HabitSlot {
+  id: string;
+  name: string;
+  defaultTime?: string; // HH:MM format
+}
+
+export interface Habit {
+  id: string; // UUID
+  name: string;
+  iconName: string;
+  icon: LucideIcon;
+  slots: HabitSlot[];
+}
+
+// habitId -> dateKey (YYYY-MM-DD) -> slotId -> completed (boolean)
+export type HabitCompletions = Record<string, Record<string, Record<string, boolean>>>;
+
 
 // --- TRANSLATIONS ---
 export type { Translations } from '@/lib/translations';
@@ -321,7 +331,7 @@ export interface AppContextType {
   error: string | null;
   isAuthenticated: boolean;
   login: (username: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  logout: (isTokenRefreshFailure?: boolean) => void; // Added optional param
   changePassword: (oldPassword: string, newPassword: string) => Promise<boolean>;
   getCurrentUserId: () => number | null;
   uiNotifications: UINotification[];
@@ -333,20 +343,20 @@ export interface AppContextType {
   addHistoryLogEntry: (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined | null>, scope?: HistoryLogEntry['scope']) => Promise<void>;
   systemNotificationPermission: NotificationPermission | null;
   requestSystemNotificationPermission: () => Promise<void>;
-  pomodoroPhase: PomodoroPhase;
-  pomodoroTimeRemaining: number;
-  pomodoroIsRunning: boolean;
-  pomodoroCyclesCompleted: number;
-  startPomodoroWork: () => void;
-  startPomodoroShortBreak: () => void;
-  startPomodoroLongBreak: () => void;
-  pausePomodoro: () => void;
-  resumePomodoro: () => void;
-  resetPomodoro: () => void;
-  isPomodoroReady: boolean;
   isAppLocked: boolean;
   appPinState: string | null;
   unlockApp: (pinAttempt: string) => boolean;
   setAppPin: (pin: string | null) => void;
   fetchAndSetSpecificActivityDetails: (activityId: number) => Promise<Activity | null>;
+
+  // Habit related methods and state
+  habits: Habit[];
+  habitCompletions: HabitCompletions;
+  addHabit: (name: string, iconName: string, slots: { name: string; defaultTime?: string }[]) => void;
+  updateHabit: (habitId: string, updates: Partial<Omit<Habit, 'id' | 'icon' | 'slots'>> & { slots?: { id?: string; name: string; defaultTime?: string }[] }) => void;
+  deleteHabit: (habitId: string) => void;
+  toggleHabitSlotCompletion: (habitId: string, slotId: string, dateKey: string) => void;
+  getHabitById: (habitId: string) => Habit | undefined;
 }
+
+    

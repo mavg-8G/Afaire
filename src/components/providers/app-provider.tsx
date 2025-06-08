@@ -52,6 +52,7 @@ const LOCAL_STORAGE_KEY_HABIT_COMPLETIONS = 'todoFlowHabitCompletions_v1';
 
 
 const getIconComponent = (iconName: string): Icons.LucideIcon => {
+  if (!iconName || typeof iconName !== 'string') return Icons.Package; // Fallback for invalid iconName
   const capitalizedIconName = iconName.charAt(0).toUpperCase() + iconName.slice(1);
   const pascalCaseIconName = capitalizedIconName.replace(/[^A-Za-z0-9]/g, '');
   return (Icons as any)[pascalCaseIconName] || Icons.Package;
@@ -404,12 +405,11 @@ const frontendToBackendActivityPayload = (
             return dayNumberToNameArray[numValue];
           }
           console.warn(`[AppProvider] frontendToBackendActivityPayload: Invalid day number value '${dayNumEntry}' (type: ${typeof dayNumEntry}). Skipping.`);
-          return null; // Invalid entries will be filtered out
+          return null;
         })
-        .filter((name): name is string => name !== null); // Keep only valid, non-null string names
+        .filter((name): name is string => name !== null); 
       
       if (payload.days_of_week.length === 0) {
-        // If all entries were invalid or the initial array was effectively empty of valid days
         payload.days_of_week = null; 
       }
     } else {
@@ -444,7 +444,7 @@ const backendToFrontendHistory = (backendHistory: BackendHistory): HistoryLogEnt
   actionKey: backendHistory.action as HistoryLogActionKey,
   backendAction: backendHistory.action,
   backendUserId: backendHistory.user_id,
-  scope: 'account',
+  scope: 'account', // Default, can be overridden
   details: { rawBackendAction: backendHistory.action }
 });
 
@@ -701,43 +701,45 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
   const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}): Promise<Response> => {
-    let currentTokenInScope = accessToken;
-    let currentDecodedInScope = decodedJwt;
-    console.log(`[AppProvider fetchWithAuth] Initial attempt for ${url}. Token in state: ${currentTokenInScope ? 'Yes' : 'No'}`);
+    let currentTokenInScope: string | null = accessToken; // Start with token from state
+    let currentDecodedInScope: DecodedToken | null = decodedJwt; // Start with decoded from state
+
+    console.log(`[AppProvider fetchWithAuth] Initiating for ${url}. State token present: ${!!currentTokenInScope}`);
 
     if (!currentTokenInScope && typeof window !== 'undefined') {
         const storedToken = localStorage.getItem(LOCAL_STORAGE_KEY_JWT);
         if (storedToken) {
-            console.log("[AppProvider fetchWithAuth] No token in state, but found in localStorage. Attempting to decode for current request.");
+            console.log("[AppProvider fetchWithAuth] No token in state, attempting to use token from localStorage.");
             const decodedFromStorage = await decodeAndSetAccessToken(storedToken, undefined); // This updates state
             if (decodedFromStorage) {
-                currentTokenInScope = storedToken; // Use for this call
-                currentDecodedInScope = decodedFromStorage; // Use for this call
+                currentTokenInScope = storedToken;
+                currentDecodedInScope = decodedFromStorage;
                 console.log("[AppProvider fetchWithAuth] Successfully used token from localStorage for this request.");
             } else {
-                 console.warn("[AppProvider fetchWithAuth] Failed to decode token from localStorage for this request. Proceeding without token for now.");
+                 console.warn("[AppProvider fetchWithAuth] Failed to decode token from localStorage. Proceeding without token for now.");
             }
         } else {
-            console.log("[AppProvider fetchWithAuth] No token in state or localStorage.");
+             console.log("[AppProvider fetchWithAuth] No token in state or localStorage.");
         }
     }
-
-    const tokenIsExpired = currentTokenInScope && currentDecodedInScope && currentDecodedInScope.exp * 1000 < Date.now() + 10000;
+    
+    const tokenIsExpired = currentTokenInScope && currentDecodedInScope && currentDecodedInScope.exp * 1000 < Date.now() + 10000; // 10s buffer
     const needsRefresh = (!currentTokenInScope && (refreshTokenState || (typeof window !== 'undefined' && localStorage.getItem(LOCAL_STORAGE_KEY_REFRESH_JWT)))) || tokenIsExpired;
 
-    if (needsRefresh && !url.endsWith('/token') && !url.includes('/refresh-token')) {
-        console.log(`[AppProvider fetchWithAuth] Token needs refresh for ${url}. Current token ${currentTokenInScope ? (tokenIsExpired ? 'expired' : 'exists') : 'missing'}. Refreshing.`);
+    if (needsRefresh && !url.endsWith('/token') && !url.endsWith('/refresh-token')) { // Avoid refresh loop for token endpoints
+        console.log(`[AppProvider fetchWithAuth] Token needs refresh for ${url}. Current token ${currentTokenInScope ? (tokenIsExpired ? 'expired' : 'exists') : 'missing'}. Refreshing...`);
         const newAccessTokenString = await refreshTokenLogicInternal();
         if (!newAccessTokenString) {
-            console.error(`[AppProvider fetchWithAuth] Token refresh failed for ${url}. Throwing error as auth is required.`);
-            logout(true); // Ensure logout if refresh fails critically
+            console.error(`[AppProvider fetchWithAuth] Token refresh failed for ${url}. Logging out.`);
+            logout(true);
             throw new Error("Session expired. Please log in again. (Refresh failed before request)");
         }
-        currentTokenInScope = newAccessTokenString;
+        currentTokenInScope = newAccessTokenString; // Use the newly refreshed token
+        currentDecodedInScope = decodedJwt; // Refresh logic updates decodedJwt state
         console.log(`[AppProvider fetchWithAuth] Token refreshed successfully for ${url}.`);
     }
 
-    if (!currentTokenInScope && !url.endsWith('/token') && !url.includes('/refresh-token')) {
+    if (!currentTokenInScope && !url.endsWith('/token') && !url.endsWith('/refresh-token')) {
         console.error(`[AppProvider fetchWithAuth] CRITICAL: No JWT token available for authenticated request to ${url} even after refresh attempt.`);
         toast({
             variant: "destructive",
@@ -761,7 +763,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     let response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, { ...options, headers });
 
-    if (response.status === 401 && !url.endsWith('/token') && !url.includes('/refresh-token') && !isRefreshingTokenRef.current) {
+    if (response.status === 401 && !url.endsWith('/token') && !url.endsWith('/refresh-token') && !isRefreshingTokenRef.current) {
         console.log(`[AppProvider fetchWithAuth] Received 401 for ${url}, attempting token refresh (retry).`);
         const newAccessTokenAfter401 = await refreshTokenLogicInternal();
         if (newAccessTokenAfter401) {
@@ -847,13 +849,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               console.log("[AppProvider useEffect init] Stored access token is valid and set.");
           } else if (storedRefreshTokenString) {
               console.log("[AppProvider useEffect init] Stored access token expired or invalid, attempting refresh with stored refresh token.");
-              setRefreshTokenState(storedRefreshTokenString); // Ensure refresh token is in state for refreshTokenLogicInternal
+              setRefreshTokenState(storedRefreshTokenString); 
               effectiveAccessToken = await refreshTokenLogicInternal();
               if(effectiveAccessToken) console.log("[AppProvider useEffect init] Token refresh successful during init.");
               else console.warn("[AppProvider useEffect init] Token refresh FAILED during init.");
           } else {
               console.warn("[AppProvider useEffect init] Stored access token expired/invalid, no refresh token available. Will logout.");
-              effectiveAccessToken = null; // Explicitly null
+              effectiveAccessToken = null;
           }
       } else if (storedRefreshTokenString) {
           console.log("[AppProvider useEffect init] No access token in localStorage, but refresh token found. Attempting refresh.");
@@ -868,25 +870,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       if (!effectiveAccessToken) {
           console.log("[AppProvider useEffect init] No effective access token after initial load/refresh. Logging out and skipping data fetches.");
-          logout(true); // Critical: ensure clean logout state if no token could be established
+          logout(true); 
           setIsLoadingState(false);
           setIsActivitiesLoading(false); setIsCategoriesLoading(false); setIsAssigneesLoading(false); setIsHistoryLoading(false);
-          return; // Stop further execution in this effect if not authenticated
+          return; 
       }
       
       console.log("[AppProvider useEffect init] Effective Access Token established. Proceeding with data fetching.");
-      // Load other client-side data
+      
       const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
       if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
       if (typeof window !== 'undefined' && 'Notification' in window) setSystemNotificationPermission(Notification.permission);
       const storedPin = localStorage.getItem(LOCAL_STORAGE_KEY_APP_PIN);
       if (storedPin) { setAppPinState(storedPin); setIsAppLocked(true); }
-      const storedHabits = localStorage.getItem(LOCAL_STORAGE_KEY_HABITS);
-      if (storedHabits) try { setHabits(JSON.parse(storedHabits).map((h: Habit) => ({ ...h, icon: getIconComponent(h.iconName) }))); } catch (e) { console.error("Failed to parse habits", e); }
-      const storedHabitCompletions = localStorage.getItem(LOCAL_STORAGE_KEY_HABIT_COMPLETIONS);
-      if (storedHabitCompletions) try { setHabitCompletions(JSON.parse(storedHabitCompletions)); } catch (e) { console.error("Failed to parse habit completions", e); }
+      
+      const storedHabitsData = localStorage.getItem(LOCAL_STORAGE_KEY_HABITS);
+      if (storedHabitsData) {
+          try { setHabits(JSON.parse(storedHabitsData).map((h: Habit) => ({ ...h, icon: getIconComponent(h.iconName) }))); }
+          catch (e) { console.error("Failed to parse habits from localStorage", e); localStorage.removeItem(LOCAL_STORAGE_KEY_HABITS); }
+      }
+      const storedHabitCompletionsData = localStorage.getItem(LOCAL_STORAGE_KEY_HABIT_COMPLETIONS);
+      if (storedHabitCompletionsData) {
+          try { setHabitCompletions(JSON.parse(storedHabitCompletionsData)); }
+          catch (e) { console.error("Failed to parse habit completions from localStorage", e); localStorage.removeItem(LOCAL_STORAGE_KEY_HABIT_COMPLETIONS); }
+      }
 
-      // Fetch initial data from backend since we have a token
+
       setIsActivitiesLoading(true); setIsCategoriesLoading(true); setIsAssigneesLoading(true); setIsHistoryLoading(true);
       try {
           const [actResponse, catResponse, userResponse, histResponse, allOccurrencesResponse] = await Promise.all([
@@ -971,7 +980,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     loadClientSideDataAndFetchInitial();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Dependencies removed to ensure it only runs once on mount. State changes within are managed.
+  }, []); 
 
 
  useEffect(() => {
@@ -1078,8 +1087,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [appModeState, isLoadingState]);
 
   useEffect(() => { if(!isLoadingState) localStorage.setItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS, JSON.stringify(uiNotifications));}, [uiNotifications, isLoadingState]);
-  useEffect(() => { if(!isLoadingState) localStorage.setItem(LOCAL_STORAGE_KEY_HABITS, JSON.stringify(habits)); }, [habits, isLoadingState]);
-  useEffect(() => { if(!isLoadingState) localStorage.setItem(LOCAL_STORAGE_KEY_HABIT_COMPLETIONS, JSON.stringify(habitCompletions)); }, [habitCompletions, isLoadingState]);
+  useEffect(() => { if(!isLoadingState && habits.length > 0) localStorage.setItem(LOCAL_STORAGE_KEY_HABITS, JSON.stringify(habits));}, [habits, isLoadingState]);
+  useEffect(() => { if(!isLoadingState && Object.keys(habitCompletions).length > 0) localStorage.setItem(LOCAL_STORAGE_KEY_HABIT_COMPLETIONS, JSON.stringify(habitCompletions));}, [habitCompletions, isLoadingState]);
 
 
   useEffect(() => {
@@ -1518,7 +1527,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } else {
         setWorkActivities(prev => [...prev, newFrontendActivity]);
       }
-      toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') });
+      // toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') }); // Removed: Handled by calling page
 
       const category = allCategories.find(c => c.id === newFrontendActivity.categoryId);
       addHistoryLogEntryRef.current?.('historyLogAddActivity', {
@@ -1576,7 +1585,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
          targetSetter(prev => prev.map(act => (act.id === activityId ? finalFrontendActivity : act)));
       }
 
-      toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') });
+      // toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') }); // Removed: Handled by calling page
 
       const category = allCategories.find(c => c.id === finalFrontendActivity.categoryId);
       addHistoryLogEntryRef.current?.('historyLogUpdateActivity', {
@@ -1815,7 +1824,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             )
         );
         if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) {
-            logout();
+            logout(true);
         } else {
             createApiErrorToast(err, toast, "toastActivityUpdatedTitle", "updating", t, `${API_BASE_URL}/activity-occurrences`);
         }
@@ -1886,7 +1895,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
         return frontendActivityShell;
     } catch (err) {
-         if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(); }
+         if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401'))) { logout(true); }
          else { createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities/${activityId}`);}
         return null;
     }
@@ -1903,12 +1912,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     setHabits(prev => [...prev, newHabit]);
     toast({ title: t('toastHabitAddedTitle'), description: t('toastHabitAddedDescription', { habitName: name }) });
-    addHistoryLogEntryRef.current?.('historyLogAddHabit', { habitId: newHabit.id, name }, 'habit');
+    addHistoryLogEntryRef.current?.('historyLogAddHabit', { name }, 'habit');
   }, [t, toast]);
 
   const updateHabit = useCallback((habitId: string, updates: Partial<Omit<Habit, 'id' | 'icon' | 'slots'>> & { slots?: { id?: string; name: string; defaultTime?: string }[] }) => {
+    let oldName = "";
     setHabits(prev => prev.map(h => {
       if (h.id === habitId) {
+        oldName = h.name;
         const updatedHabit = { ...h };
         if (updates.name) updatedHabit.name = updates.name;
         if (updates.iconName) {
@@ -1923,7 +1934,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           }));
         }
         toast({ title: t('toastHabitUpdatedTitle'), description: t('toastHabitUpdatedDescription', { habitName: updatedHabit.name }) });
-        addHistoryLogEntryRef.current?.('historyLogUpdateHabit', { habitId, newName: updatedHabit.name, oldName: h.name }, 'habit');
+        addHistoryLogEntryRef.current?.('historyLogUpdateHabit', { newName: updatedHabit.name, oldName }, 'habit');
         return updatedHabit;
       }
       return h;
@@ -1940,7 +1951,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
     if (habitToDelete) {
       toast({ title: t('toastHabitDeletedTitle'), description: t('toastHabitDeletedDescription', { habitName: habitToDelete.name }) });
-      addHistoryLogEntryRef.current?.('historyLogDeleteHabit', { habitId, name: habitToDelete.name }, 'habit');
+      addHistoryLogEntryRef.current?.('historyLogDeleteHabit', { name: habitToDelete.name }, 'habit');
     }
   }, [habits, t, toast]);
 
@@ -2026,3 +2037,5 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 };
     
 
+
+    
