@@ -10,7 +10,7 @@ import type {
   Token, DecodedToken, BackendHistoryCreatePayload, BackendCategoryUpdatePayload, AppContextType as AppContextTypeImport,
   BackendActivityListItem, BackendActivityOccurrence, BackendActivityOccurrenceCreate, BackendActivityOccurrenceUpdate, Habit, HabitSlot, HabitCompletions
 } from '@/lib/types';
-import { DEFAULT_API_BASE_URL, DEFAULT_JWT_SECRET_KEY } from '@/lib/constants';
+import { DEFAULT_API_BASE_URL, } from '@/lib/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import * as jose from 'jose';

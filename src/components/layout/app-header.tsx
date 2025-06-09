@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Layers, Languages, Sun, Moon, Laptop, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings, MoreVertical, BellRing, BellOff, BellPlus, Users, Smile } from 'lucide-react'; // Added Smile
+import { Layers, Languages, Sun, Moon, Laptop, User, Briefcase, LogOut, KeyRound, LayoutDashboard, Bell, CheckCircle, Trash, MoreHorizontal, History as HistoryIcon, Settings, MoreVertical, BellRing, BellOff, BellPlus, Users, Brain } from 'lucide-react'; // Added Smile
 import { LogoIcon } from '@/components/icons/logo-icon';
 import { APP_NAME } from '@/lib/constants';
 import dynamic from 'next/dynamic';
@@ -177,7 +177,7 @@ export default function AppHeader() {
     <>
       <DropdownMenuItem asChild>
         <Link href="/habits" className="flex items-center w-full">
-            <Smile className="mr-2 h-4 w-4" /> 
+            <Brain className="mr-2 h-4 w-4" /> 
             {t('manageHabits')}
         </Link>
       </DropdownMenuItem>
@@ -281,7 +281,7 @@ export default function AppHeader() {
               </Link>
               <Link href="/habits" passHref>
                 <Button variant="outline" size="icon" aria-label={t('manageHabits') as string}>
-                  <Smile className="h-5 w-5" />
+                  <Brain className="h-5 w-5" />
                 </Button>
               </Link>
               {appMode === 'personal' && (

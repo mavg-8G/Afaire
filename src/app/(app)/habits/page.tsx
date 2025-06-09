@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/form";
 import { useAppStore } from '@/hooks/use-app-store';
 import type { Habit, HabitSlot } from '@/lib/types';
-import { Trash2, PlusCircle, Edit3, XCircle, ArrowLeft, Loader2, Smile, BookOpen, Repeat } from 'lucide-react';
+import { Trash2, PlusCircle, Edit3, XCircle, ArrowLeft, Loader2, Brain, BookOpen, Repeat } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
