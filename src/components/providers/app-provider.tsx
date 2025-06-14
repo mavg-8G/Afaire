@@ -10,7 +10,8 @@ import type {
   Token, DecodedToken, BackendHistoryCreatePayload, BackendCategoryUpdatePayload, AppContextType as AppContextTypeImport,
   BackendActivityListItem, BackendActivityOccurrence, BackendActivityOccurrenceCreate, BackendActivityOccurrenceUpdate, Habit, HabitSlot, HabitCompletions
 } from '@/lib/types';
-import { DEFAULT_API_BASE_URL, } from '@/lib/constants';
+import { DEFAULT_API_BASE_URL } from '@/lib/constants';
+import { getJwtSecretKey } from '@/lib/jwt-config'; // Import the new function
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import * as jose from 'jose';
@@ -34,7 +35,9 @@ import { useTheme } from 'next-themes';
 
 const envApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 const API_BASE_URL = (envApiBaseUrl && envApiBaseUrl.trim() !== '') ? envApiBaseUrl : DEFAULT_API_BASE_URL;
-const JWT_SECRET_KEY_FOR_DECODING = process.env.NEXT_PUBLIC_JWT_SECRET_KEY || DEFAULT_JWT_SECRET_KEY;
+
+// Get the JWT secret key using the new function
+const JWT_SECRET_KEY_FOR_DECODING = getJwtSecretKey();
 
 
 export type AppContextType = AppContextTypeImport;
@@ -51,11 +54,16 @@ const LOCAL_STORAGE_KEY_HABITS = 'todoFlowHabits_v1';
 const LOCAL_STORAGE_KEY_HABIT_COMPLETIONS = 'todoFlowHabitCompletions_v1';
 
 
-const getIconComponent = (iconName: string): Icons.LucideIcon => {
-  if (!iconName || typeof iconName !== 'string') return Icons.Package; // Fallback for invalid iconName
+export const getIconComponent = (iconName: string | undefined | null): Icons.LucideIcon => {
+  if (!iconName || typeof iconName !== 'string') return Icons.Package; 
   const capitalizedIconName = iconName.charAt(0).toUpperCase() + iconName.slice(1);
   const pascalCaseIconName = capitalizedIconName.replace(/[^A-Za-z0-9]/g, '');
-  return (Icons as any)[pascalCaseIconName] || Icons.Package;
+  const IconComponent = (Icons as any)[pascalCaseIconName];
+  if (!IconComponent) {
+    console.warn(`[AppProvider] Icon "${pascalCaseIconName}" (from "${iconName}") not found in lucide-react. Falling back to Package icon.`);
+    return Icons.Package;
+  }
+  return IconComponent;
 };
 
 let logoutChannel: BroadcastChannel | null = null;
@@ -405,7 +413,7 @@ const frontendToBackendActivityPayload = (
             return dayNumberToNameArray[numValue];
           }
           console.warn(`[AppProvider] frontendToBackendActivityPayload: Invalid day number value '${dayNumEntry}' (type: ${typeof dayNumEntry}). Skipping.`);
-          return null;
+          return null; 
         })
         .filter((name): name is string => name !== null); 
       
@@ -597,6 +605,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
   const decodeAndSetAccessToken = useCallback(async (tokenString: string | null, initialUserDetails?: Pick<DecodedToken, 'userId' | 'username' | 'isAdmin'>): Promise<DecodedToken | null> => {
+    console.log(`[AppProvider decodeAndSetAccessToken] Attempting to decode token: ${tokenString ? tokenString.substring(0,20) + '...' : 'null'}`);
     if (!tokenString) {
       console.log("[AppProvider decodeAndSetAccessToken] Token string is null. Clearing token state.");
       setAccessTokenState(null);
@@ -658,13 +667,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     try {
-        const formData = new URLSearchParams();
-        formData.append('refresh_token', currentRefreshToken);
-
         const response = await fetch(`${API_BASE_URL}/refresh-token`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: formData.toString(),
+            // No body needed if refresh token is sent via HttpOnly cookie
+            // headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, // If sending in body
+            // body: formData.toString(), // If sending in body
         });
 
         if (!response.ok) {
@@ -701,51 +708,47 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
   const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}): Promise<Response> => {
-    let currentTokenInScope: string | null = accessToken; // Start with token from state
-    let currentDecodedInScope: DecodedToken | null = decodedJwt; // Start with decoded from state
+    let currentTokenInScope: string | null = accessToken; 
+    let currentDecodedInScope: DecodedToken | null = decodedJwt;
 
-    console.log(`[AppProvider fetchWithAuth] Initiating for ${url}. State token present: ${!!currentTokenInScope}`);
-
+    console.log(`[AppProvider fetchWithAuth] Initiating for ${url}. Current token in state: ${currentTokenInScope ? 'Yes' : 'No'}`);
+    
+    // If no token in state, try from localStorage
     if (!currentTokenInScope && typeof window !== 'undefined') {
         const storedToken = localStorage.getItem(LOCAL_STORAGE_KEY_JWT);
         if (storedToken) {
-            console.log("[AppProvider fetchWithAuth] No token in state, attempting to use token from localStorage.");
-            const decodedFromStorage = await decodeAndSetAccessToken(storedToken, undefined); // This updates state
+            console.log("[AppProvider fetchWithAuth] No token in state, trying localStorage.");
+            const decodedFromStorage = await decodeAndSetAccessToken(storedToken, undefined); // This updates state if valid
             if (decodedFromStorage) {
-                currentTokenInScope = storedToken;
+                currentTokenInScope = storedToken; // Use this token for the current request
                 currentDecodedInScope = decodedFromStorage;
-                console.log("[AppProvider fetchWithAuth] Successfully used token from localStorage for this request.");
+                 console.log("[AppProvider fetchWithAuth] Token from localStorage decoded successfully.");
             } else {
-                 console.warn("[AppProvider fetchWithAuth] Failed to decode token from localStorage. Proceeding without token for now.");
+                 console.warn("[AppProvider fetchWithAuth] Token from localStorage failed to decode. Cleared from state.");
             }
-        } else {
-             console.log("[AppProvider fetchWithAuth] No token in state or localStorage.");
         }
     }
     
     const tokenIsExpired = currentTokenInScope && currentDecodedInScope && currentDecodedInScope.exp * 1000 < Date.now() + 10000; // 10s buffer
     const needsRefresh = (!currentTokenInScope && (refreshTokenState || (typeof window !== 'undefined' && localStorage.getItem(LOCAL_STORAGE_KEY_REFRESH_JWT)))) || tokenIsExpired;
 
-    if (needsRefresh && !url.endsWith('/token') && !url.endsWith('/refresh-token')) { // Avoid refresh loop for token endpoints
+    if (needsRefresh && !url.endsWith('/token') && !url.endsWith('/refresh-token') && !isRefreshingTokenRef.current) {
         console.log(`[AppProvider fetchWithAuth] Token needs refresh for ${url}. Current token ${currentTokenInScope ? (tokenIsExpired ? 'expired' : 'exists') : 'missing'}. Refreshing...`);
         const newAccessTokenString = await refreshTokenLogicInternal();
-        if (!newAccessTokenString) {
-            console.error(`[AppProvider fetchWithAuth] Token refresh failed for ${url}. Logging out.`);
+        if (newAccessTokenString) {
+            currentTokenInScope = newAccessTokenString; 
+            currentDecodedInScope = decodedJwt; // refreshTokenLogic updates decodedJwt state
+            console.log(`[AppProvider fetchWithAuth] Token refreshed successfully for ${url}.`);
+        } else {
+            console.error(`[AppProvider fetchWithAuth] Token refresh failed for ${url}. Logging out as refresh failed.`);
             logout(true);
             throw new Error("Session expired. Please log in again. (Refresh failed before request)");
         }
-        currentTokenInScope = newAccessTokenString; // Use the newly refreshed token
-        currentDecodedInScope = decodedJwt; // Refresh logic updates decodedJwt state
-        console.log(`[AppProvider fetchWithAuth] Token refreshed successfully for ${url}.`);
     }
 
     if (!currentTokenInScope && !url.endsWith('/token') && !url.endsWith('/refresh-token')) {
         console.error(`[AppProvider fetchWithAuth] CRITICAL: No JWT token available for authenticated request to ${url} even after refresh attempt.`);
-        toast({
-            variant: "destructive",
-            title: "Authentication Error",
-            description: "Your session may have expired or is invalid. Please try logging out and back in.",
-        });
+        // Do not toast here, as it might be called multiple times. Let caller handle UI feedback.
         throw new Error("No JWT token available for authenticated request.");
     }
 
@@ -759,7 +762,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
              headers.append('Content-Type', 'application/json');
         }
     }
-    console.log(`[AppProvider fetchWithAuth] Making API call to ${url}. Token being used: ${currentTokenInScope ? 'Yes' : 'No'}`);
+    console.log(`[AppProvider fetchWithAuth] Making API call to ${url}. Token being used: ${currentTokenInScope ? 'Yes (' + currentTokenInScope.substring(0,10) + '...)' : 'No'}`);
 
     let response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, { ...options, headers });
 
@@ -778,12 +781,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, { ...options, headers: retryHeaders });
         } else {
              console.error(`[AppProvider fetchWithAuth] Token refresh failed after 401 for ${url}. Logging out.`);
-             logout(true); // Critical failure, log out
+             logout(true); 
              throw new Error(`Unauthorized: ${response.statusText} (refresh failed after 401)`);
         }
     }
     return response;
-  }, [accessToken, decodedJwt, refreshTokenState, API_BASE_URL, refreshTokenLogicInternal, decodeAndSetAccessToken, toast, logout]);
+  }, [accessToken, decodedJwt, refreshTokenState, API_BASE_URL, refreshTokenLogicInternal, decodeAndSetAccessToken, logout]);
 
 
   const addHistoryLogEntryLogic = useCallback(async (actionKey: HistoryLogActionKey, details?: Record<string, string | number | boolean | undefined | null>, scope: HistoryLogEntry['scope'] = 'account') => {
@@ -966,7 +969,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           console.log("[AppProvider useEffect init] Data fetching completed.");
       } catch (err) {
            console.error("[AppProvider useEffect init] Error during initial data fetch:", err);
-           if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401') || err.message.toLowerCase().includes("session expired"))) {
+           if (err instanceof Error && (err.message.toLowerCase().includes('unauthorized') || err.message.includes('401') || err.message.toLowerCase().includes("session expired") || err.message.toLowerCase().includes("no jwt token available"))) {
               logout(true);
           } else {
               createApiErrorToast(err, toast, "toastActivityLoadErrorTitle", "loading", t, `${API_BASE_URL}/activities`);
@@ -2035,7 +2038,4 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
-    
-
-
     
