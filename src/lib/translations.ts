@@ -353,6 +353,9 @@ export type Translations = {
   noHabitsYet: string;
   confirmDeleteHabitTitle: string;
   confirmDeleteHabitDescription: (params: { habitName: string }) => string;
+  existingHabitsTitle: string; // Added
+  viewEditManageHabits: string; // Added
+  habitsCount: (params: { count: number }) => string; // Added
 
 
   // Motivational Phrases
@@ -736,6 +739,9 @@ export const translations: Record<Locale, Translations> = {
     noHabitsYet: "No habits created yet. Add your first habit!",
     confirmDeleteHabitTitle: "Delete Habit?",
     confirmDeleteHabitDescription: (params) => `Are you sure you want to delete the habit "${params.habitName}"? All its completion data will also be removed.`,
+    existingHabitsTitle: "Existing Habits",
+    viewEditManageHabits: "View, edit, and manage your current habits.",
+    habitsCount: (params) => `You have ${params.count} habit${params.count === 1 ? '' : 's'}.`,
     motivationalPhrases: [
       "The secret of getting ahead is getting started.",
       "Don't watch the clock; do what it does. Keep going.",
@@ -762,7 +768,7 @@ export const translations: Record<Locale, Translations> = {
     language: "Idioma",
     english: "Inglés",
     spanish: "Español",
-    french: "Francés",
+    french: "Français",
     theme: "Tema",
     lightTheme: "Claro",
     darkTheme: "Oscuro",
@@ -1123,6 +1129,9 @@ export const translations: Record<Locale, Translations> = {
     noHabitsYet: "Aún no has creado hábitos. ¡Añade tu primer hábito!",
     confirmDeleteHabitTitle: "¿Eliminar Hábito?",
     confirmDeleteHabitDescription: (params) => `¿Estás seguro de que quieres eliminar el hábito "${params.habitName}"? Todos sus datos de completado también serán eliminados.`,
+    existingHabitsTitle: "Hábitos Existentes",
+    viewEditManageHabits: "Ver, editar y gestionar tus hábitos actuales.",
+    habitsCount: (params) => `Tienes ${params.count} hábito${params.count === 1 ? '' : 's'}.`,
     motivationalPhrases: [
       "El secreto para salir adelante es empezar.",
       "No mires el reloj; haz lo que él hace. Sigue adelante.",
@@ -1509,7 +1518,10 @@ export const translations: Record<Locale, Translations> = {
     deleteSlotSr: "Supprimer le créneau",
     noHabitsYet: "Aucune habitude créée pour le moment. Ajoutez votre première habitude !",
     confirmDeleteHabitTitle: "Supprimer l'Habitude ?",
-    confirmDeleteHabitDescription: (params) => `Êtes-vous sûr de vouloir supprimer l'habitude "${params.habitName}" ? Toutes ses données d'achèvement seront également supprimées.`,
+    confirmDeleteHabitDescription: (params) => `Êtes-vous sûr de vouloir supprimer l'habitude "${params.habitName}"? Toutes ses données d'achèvement seront également supprimées.`,
+    existingHabitsTitle: "Habitudes Existantes",
+    viewEditManageHabits: "Visualisez, modifiez et gérez vos habitudes actuelles.",
+    habitsCount: (params) => `Vous avez ${params.count} habitude${params.count === 1 ? '' : 's'}.`,
     motivationalPhrases: [
         "Le secret pour avancer, c'est de commencer.",
         "Ne regarde pas l'horloge ; fais ce qu'elle fait. Continue.",
