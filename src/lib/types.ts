@@ -250,17 +250,17 @@ export type HistoryLogActionKey =
   | 'historyLogAddAssignee'
   | 'historyLogUpdateAssignee'
   | 'historyLogDeleteAssignee'
-  | 'historyLogAddHabit' // New
-  | 'historyLogUpdateHabit' // New
-  | 'historyLogDeleteHabit' // New
-  | 'historyLogToggleHabitCompletion'; // New
+  | 'historyLogAddHabit'
+  | 'historyLogUpdateHabit'
+  | 'historyLogDeleteHabit'
+  | 'historyLogToggleHabitCompletion';
 
 export interface HistoryLogEntry {
   id: number;
   timestamp: number;
   actionKey: HistoryLogActionKey;
   details?: Record<string, string | number | boolean | undefined | null>;
-  scope: 'account' | 'personal' | 'work' | 'category' | 'assignee' | 'habit'; // Added 'habit'
+  scope: 'account' | 'personal' | 'work' | 'category' | 'assignee' | 'habit';
   backendAction?: string;
   backendUserId?: number;
 }
@@ -278,23 +278,81 @@ export interface BackendHistory {
   user?: BackendUser;
 }
 
-// --- HABITS (Client-side) ---
+// --- HABITS ---
 export interface HabitSlot {
-  id: string;
+  id: number; // From backend
   name: string;
-  defaultTime?: string; // HH:MM format
+  default_time?: string; // HH:MM format
+  order?: number; // For frontend ordering, if needed
 }
 
 export interface Habit {
-  id: string; // UUID
+  id: number; // From backend
+  user_id?: number; // From backend (optional on frontend type if not directly used often)
   name: string;
-  iconName: string;
+  iconName: string; // Corresponds to icon_name from backend
   icon: LucideIcon;
   slots: HabitSlot[];
 }
 
-// habitId -> dateKey (YYYY-MM-DD) -> slotId -> completed (boolean)
-export type HabitCompletions = Record<string, Record<string, Record<string, boolean>>>;
+// For creating habits, slots won't have IDs yet
+export interface HabitSlotCreateData {
+  name: string;
+  default_time?: string;
+}
+export interface HabitCreateData {
+  name: string;
+  icon_name: string; // Matches backend schema
+  slots: HabitSlotCreateData[];
+}
+
+// For updating habits
+export interface HabitUpdateData {
+  name?: string;
+  icon_name?: string;
+  slots?: HabitSlotCreateData[]; // Backend expects a list of slot creation data
+}
+
+// For storing completion status, including the backend ID of the completion record
+export interface HabitSlotCompletionStatus {
+  completed: boolean;
+  completionId?: number; // Backend ID of the HabitCompletion record
+}
+
+// habitId (number) -> dateKey (YYYY-MM-DD) -> slotId (number) -> HabitSlotCompletionStatus
+export type HabitCompletions = Record<number, Record<string, Record<number, HabitSlotCompletionStatus>>>;
+
+export interface BackendHabitSlot { // Mirrors backend response for a slot
+  id: number;
+  name: string;
+  default_time?: string;
+}
+export interface BackendHabit { // Mirrors backend response for a habit
+  id: number;
+  user_id: number;
+  name: string;
+  icon_name: string;
+  slots: BackendHabitSlot[];
+}
+
+export interface BackendHabitCompletionCreatePayload {
+    habit_id: number;
+    slot_id: number;
+    completion_date: string; // ISO datetime string
+    is_completed: boolean;
+}
+
+export interface BackendHabitCompletionUpdatePayload {
+    is_completed: boolean;
+}
+
+export interface BackendHabitCompletion {
+    id: number;
+    habit_id: number;
+    slot_id: number;
+    completion_date: string; // ISO datetime string
+    is_completed: boolean;
+}
 
 
 // --- TRANSLATIONS ---
@@ -331,7 +389,7 @@ export interface AppContextType {
   error: string | null;
   isAuthenticated: boolean;
   login: (username: string, password: string) => Promise<boolean>;
-  logout: (isTokenRefreshFailure?: boolean) => void; // Added optional param
+  logout: (isTokenRefreshFailure?: boolean) => void;
   changePassword: (oldPassword: string, newPassword: string) => Promise<boolean>;
   getCurrentUserId: () => number | null;
   uiNotifications: UINotification[];
@@ -349,14 +407,13 @@ export interface AppContextType {
   setAppPin: (pin: string | null) => void;
   fetchAndSetSpecificActivityDetails: (activityId: number) => Promise<Activity | null>;
 
-  // Habit related methods and state
   habits: Habit[];
   habitCompletions: HabitCompletions;
-  addHabit: (name: string, iconName: string, slots: { name: string; defaultTime?: string }[]) => void;
-  updateHabit: (habitId: string, updates: Partial<Omit<Habit, 'id' | 'icon' | 'slots'>> & { slots?: { id?: string; name: string; defaultTime?: string }[] }) => void;
-  deleteHabit: (habitId: string) => void;
-  toggleHabitSlotCompletion: (habitId: string, slotId: string, dateKey: string) => void;
-  getHabitById: (habitId: string) => Habit | undefined;
+  addHabit: (habitData: HabitCreateData) => Promise<void>;
+  updateHabit: (habitId: number, habitData: HabitUpdateData) => Promise<void>;
+  deleteHabit: (habitId: number) => Promise<void>;
+  toggleHabitSlotCompletion: (habitId: number, slotId: number, dateKey: string, currentStatus: HabitSlotCompletionStatus | undefined) => Promise<void>;
+  getHabitById: (habitId: number) => Habit | undefined;
 }
 
     

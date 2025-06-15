@@ -19,8 +19,8 @@ import {
   FormDescription as ShadcnFormDescription,
 } from "@/components/ui/form";
 import { useAppStore } from '@/hooks/use-app-store';
-import type { Habit, HabitSlot } from '@/lib/types';
-import { Trash2, PlusCircle, Edit3, XCircle, ArrowLeft, Loader2, Brain, BookOpen, Repeat } from 'lucide-react';
+import type { Habit, HabitSlot, HabitCreateData, HabitSlotCreateData } from '@/lib/types'; // Use HabitCreateData for form
+import { Trash2, PlusCircle, Edit3, XCircle, ArrowLeft, Loader2, Brain } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,18 +34,19 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslations } from '@/contexts/language-context';
-import { getIconComponent } from '@/components/providers/app-provider'; // Helper, assuming it's exported or defined locally
 
-const habitSlotSchema = z.object({
-  id: z.string().optional(),
+// Schema for a single slot in the form
+const formHabitSlotSchema = z.object({
+  id: z.union([z.string(), z.number()]).optional(), // Keep client-side ID for useFieldArray, or backend ID for existing
   name: z.string().min(1, "Slot name cannot be empty."),
-  defaultTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format. Use HH:MM.").optional().or(z.literal('')),
+  default_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Invalid time format. Use HH:MM.").optional().or(z.literal('')),
 });
 
+// Schema for the main habit form
 const habitFormSchema = z.object({
   name: z.string().min(1, "Habit name is required."),
-  iconName: z.string().min(1, "Icon name is required (e.g., BookOpen, Repeat)."),
-  slots: z.array(habitSlotSchema).min(1, "At least one slot is required for a habit."),
+  icon_name: z.string().min(1, "Icon name is required (e.g., BookOpen, Repeat)."),
+  slots: z.array(formHabitSlotSchema).min(1, "At least one slot is required for a habit."),
 });
 
 type HabitFormData = z.infer<typeof habitFormSchema>;
@@ -53,7 +54,7 @@ type HabitFormData = z.infer<typeof habitFormSchema>;
 export default function ManageHabitsPage() {
   const { habits, addHabit, updateHabit, deleteHabit, isLoading: isAppLoading } = useAppStore();
   const { t } = useTranslations();
-  const [habitToDelete, setHabitToDelete] = useState<string | null>(null);
+  const [habitToDelete, setHabitToDelete] = useState<number | null>(null); // Use number for backend ID
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -61,8 +62,8 @@ export default function ManageHabitsPage() {
     resolver: zodResolver(habitFormSchema),
     defaultValues: {
       name: "",
-      iconName: "",
-      slots: [{ name: "", defaultTime: "" }],
+      icon_name: "",
+      slots: [{ name: "", default_time: "" }], // Start with one empty slot
     },
   });
 
@@ -75,53 +76,62 @@ export default function ManageHabitsPage() {
     if (editingHabit) {
       form.reset({
         name: editingHabit.name,
-        iconName: editingHabit.iconName,
-        slots: editingHabit.slots.map(s => ({ id: s.id, name: s.name, defaultTime: s.defaultTime || "" })),
+        icon_name: editingHabit.iconName, // Matches icon_name on backend
+        slots: editingHabit.slots.map(s => ({
+          id: s.id, // Backend integer ID
+          name: s.name,
+          default_time: s.default_time || ""
+        })),
       });
     } else {
-      form.reset({ name: "", iconName: "", slots: [{ name: "", defaultTime: "" }] });
+      form.reset({ name: "", icon_name: "", slots: [{ name: "", default_time: "" }] });
     }
   }, [editingHabit, form]);
 
   const onSubmit = async (data: HabitFormData) => {
     setIsSubmitting(true);
     try {
-      const slotsPayload = data.slots.map(s => ({
-        id: s.id, // Keep existing ID for updates
+      const slotsPayload: HabitSlotCreateData[] = data.slots.map(s => ({
         name: s.name,
-        defaultTime: s.defaultTime || undefined,
+        default_time: s.default_time || undefined, // Send undefined if empty string
       }));
 
       if (editingHabit) {
-        updateHabit(editingHabit.id, {
+        await updateHabit(editingHabit.id, { // editingHabit.id is number
           name: data.name,
-          iconName: data.iconName,
-          slots: slotsPayload,
+          icon_name: data.icon_name,
+          slots: slotsPayload, // Backend expects list of slot data for creation/matching
         });
         setEditingHabit(null);
       } else {
-        addHabit(data.name, data.iconName, slotsPayload.map(({name, defaultTime}) => ({name, defaultTime})));
+        const habitToCreate: HabitCreateData = {
+          name: data.name,
+          icon_name: data.icon_name,
+          slots: slotsPayload,
+        };
+        await addHabit(habitToCreate);
       }
-      form.reset({ name: "", iconName: "", slots: [{ name: "", defaultTime: "" }] });
+      form.reset({ name: "", icon_name: "", slots: [{ name: "", default_time: "" }] });
     } catch (error) {
       console.error("Failed to save habit:", error);
-      // Toast for error will be handled by AppProvider if thrown from there
+      // Error toast is handled by AppProvider
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDeleteHabit = async (habitId: string) => {
+  const handleDeleteHabit = async (habitId: number) => { // Expect number
     setIsSubmitting(true);
     try {
-      deleteHabit(habitId);
+      await deleteHabit(habitId);
       setHabitToDelete(null);
       if (editingHabit?.id === habitId) {
         setEditingHabit(null);
-        form.reset({ name: "", iconName: "", slots: [{ name: "", defaultTime: "" }] });
+        form.reset({ name: "", icon_name: "", slots: [{ name: "", default_time: "" }] });
       }
     } catch (error) {
       console.error("Failed to delete habit:", error);
+      // Error toast is handled by AppProvider
     } finally {
       setIsSubmitting(false);
     }
@@ -134,7 +144,7 @@ export default function ManageHabitsPage() {
 
   const handleCancelEdit = () => {
     setEditingHabit(null);
-    form.reset({ name: "", iconName: "", slots: [{ name: "", defaultTime: "" }] });
+    form.reset({ name: "", icon_name: "", slots: [{ name: "", default_time: "" }] });
   };
   
   const iconNameDescKey = t('iconNameDescriptionLink');
@@ -178,7 +188,7 @@ export default function ManageHabitsPage() {
                   />
                   <FormField
                     control={form.control}
-                    name="iconName"
+                    name="icon_name" // Matches backend schema
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>{t('habitIconNameLabel')}</FormLabel>
@@ -194,7 +204,7 @@ export default function ManageHabitsPage() {
                   <div>
                     <FormLabel>{t('habitSlotsLabel')}</FormLabel>
                     <div className="space-y-3 mt-2 border p-4 rounded-md max-h-72 overflow-y-auto">
-                      {fields.map((item, index) => (
+                      {fields.map((item, index) => ( // item.id is string from useFieldArray
                         <div key={item.id} className="p-3 border rounded-md bg-muted/30 space-y-3">
                           <FormField
                             control={form.control}
@@ -211,7 +221,7 @@ export default function ManageHabitsPage() {
                           />
                           <FormField
                             control={form.control}
-                            name={`slots.${index}.defaultTime`}
+                            name={`slots.${index}.default_time`} // Matches backend schema via HabitSlotCreateData
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel>{t('slotDefaultTimeLabel')}</FormLabel>
@@ -243,7 +253,7 @@ export default function ManageHabitsPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => append({ name: "", defaultTime: "" })}
+                      onClick={() => append({ name: "", default_time: "" })}
                       className="mt-3"
                       disabled={isSubmitting || isAppLoading}
                     >
@@ -270,15 +280,15 @@ export default function ManageHabitsPage() {
 
           <Card className="shadow-lg flex flex-col">
             <CardHeader>
-              <CardTitle>{t('existingCategories', {count: habits.length})}</CardTitle> {/* Using categoriesCount for now */}
-              <CardDescription>{t('viewEditManageCategories')}</CardDescription> {/* Using categories for now */}
+              <CardTitle>{t('existingCategories', {count: habits.length})}</CardTitle>
+              <CardDescription>{t('viewEditManageCategories')}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow">
               {isAppLoading && <div className="flex justify-center items-center h-32"><Loader2 className="h-8 w-8 animate-spin" /></div>}
               {!isAppLoading && habits.length > 0 ? (
                 <ScrollArea className="h-full pr-1"> 
                   <ul className="space-y-3">
-                    {habits.map((habit) => (
+                    {habits.map((habit) => ( // habit.id is now number
                       <li key={habit.id} className="flex items-start justify-between p-3 bg-muted/50 rounded-md shadow-sm">
                         <div className="flex-grow min-w-0">
                           <div className="flex items-center gap-3 mb-1">
@@ -286,10 +296,10 @@ export default function ManageHabitsPage() {
                             <span className="font-medium text-lg truncate" title={habit.name}>{habit.name}</span>
                           </div>
                           <div className="ml-9 space-y-1">
-                            {habit.slots.map(slot => (
+                            {habit.slots.map(slot => ( // slot.id is now number
                               <div key={slot.id} className="text-xs text-muted-foreground">
                                 <span className="font-medium text-foreground/80">{slot.name}</span>
-                                {slot.defaultTime && ` - ${slot.defaultTime}`}
+                                {slot.default_time && ` - ${slot.default_time}`}
                               </div>
                             ))}
                           </div>
@@ -332,7 +342,6 @@ export default function ManageHabitsPage() {
             </CardContent>
              {!isAppLoading && habits.length > 0 && (
               <CardFooter className="text-sm text-muted-foreground">
-                 {/* Replace with specific habit count translation if added */}
                 {t('assigneesCount', { count: habits.length })} 
               </CardFooter>
             )}
