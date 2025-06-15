@@ -11,10 +11,10 @@ import type {
   BackendActivityListItem, BackendActivityOccurrence, BackendActivityOccurrenceCreate, BackendActivityOccurrenceUpdate, Habit, HabitSlot, HabitCompletions
 } from '@/lib/types';
 import { DEFAULT_API_BASE_URL } from '@/lib/constants';
-import { getJwtSecretKey } from '@/lib/jwt-config'; // Import the new function
+// Removed: import { getJwtSecretKey } from '@/lib/jwt-config';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
-import * as jose from 'jose';
+// Removed: import * as jose from 'jose';
 import {
   isSameDay, formatISO, parseISO,
   addDays, addWeeks, addMonths,
@@ -36,8 +36,7 @@ import { useTheme } from 'next-themes';
 const envApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 const API_BASE_URL = (envApiBaseUrl && envApiBaseUrl.trim() !== '') ? envApiBaseUrl : DEFAULT_API_BASE_URL;
 
-// Get the JWT secret key using the new function
-const JWT_SECRET_KEY_FOR_DECODING = getJwtSecretKey();
+// Removed: const JWT_SECRET_KEY_FOR_DECODING = getJwtSecretKey();
 
 
 export type AppContextType = AppContextTypeImport;
@@ -55,7 +54,7 @@ const LOCAL_STORAGE_KEY_HABIT_COMPLETIONS = 'todoFlowHabitCompletions_v1';
 
 
 export const getIconComponent = (iconName: string | undefined | null): Icons.LucideIcon => {
-  if (!iconName || typeof iconName !== 'string') return Icons.Package; 
+  if (!iconName || typeof iconName !== 'string') return Icons.Package;
   const capitalizedIconName = iconName.charAt(0).toUpperCase() + iconName.slice(1);
   const pascalCaseIconName = capitalizedIconName.replace(/[^A-Za-z0-9]/g, '');
   const IconComponent = (Icons as any)[pascalCaseIconName];
@@ -413,12 +412,12 @@ const frontendToBackendActivityPayload = (
             return dayNumberToNameArray[numValue];
           }
           console.warn(`[AppProvider] frontendToBackendActivityPayload: Invalid day number value '${dayNumEntry}' (type: ${typeof dayNumEntry}). Skipping.`);
-          return null; 
+          return null;
         })
-        .filter((name): name is string => name !== null); 
-      
+        .filter((name): name is string => name !== null);
+
       if (payload.days_of_week.length === 0) {
-        payload.days_of_week = null; 
+        payload.days_of_week = null;
       }
     } else {
       payload.days_of_week = null;
@@ -537,7 +536,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [assignees, setAllAssignees] = useState<Assignee[]>([]);
   const [appModeState, setAppModeState] = useState<AppMode>('personal');
 
-  const [accessToken, setAccessTokenState] = useState<string | null>(null); 
+  const [accessToken, setAccessTokenState] = useState<string | null>(null);
   const [refreshTokenState, setRefreshTokenState] = useState<string | null>(null);
   const [decodedJwt, setDecodedJwt] = useState<DecodedToken | null>(null);
   const isRefreshingTokenRef = useRef(false);
@@ -604,7 +603,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
 
-  const decodeAndSetAccessToken = useCallback(async (tokenString: string | null, initialUserDetails?: Pick<DecodedToken, 'userId' | 'username' | 'isAdmin'>): Promise<DecodedToken | null> => {
+  const decodeAndSetAccessToken = useCallback(async (tokenString: string | null, initialTokenData?: Pick<Token, 'user_id' | 'username' | 'is_admin'>): Promise<DecodedToken | null> => {
     console.log(`[AppProvider decodeAndSetAccessToken] Attempting to decode token: ${tokenString ? tokenString.substring(0,20) + '...' : 'null'}`);
     if (!tokenString) {
       console.log("[AppProvider decodeAndSetAccessToken] Token string is null. Clearing token state.");
@@ -614,17 +613,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return null;
     }
     try {
-      const secret = new TextEncoder().encode(JWT_SECRET_KEY_FOR_DECODING);
-      const { payload } = await jose.jwtVerify(tokenString, secret, { algorithms: ['HS256'] });
-      console.log("[AppProvider decodeAndSetAccessToken] Token verified. Payload:", payload);
+      const parts = tokenString.split('.');
+      if (parts.length !== 3) {
+        throw new Error("Invalid JWT: token does not have 3 parts");
+      }
+      const payloadBase64 = parts[1];
+      const payloadJson = atob(payloadBase64.replace(/-/g, '+').replace(/_/g, '/'));
+      const payload = JSON.parse(payloadJson);
+
+      console.log("[AppProvider decodeAndSetAccessToken] Token payload decoded:", payload);
 
       const newDecodedJwt: DecodedToken = {
-        sub: payload.sub!,
-        exp: payload.exp!,
-        userId: initialUserDetails?.userId ?? (payload.sub ? parseInt(payload.sub, 10) : undefined),
-        username: initialUserDetails?.username,
-        isAdmin: initialUserDetails?.isAdmin,
+        sub: String(payload.sub), // Ensure sub is a string
+        exp: Number(payload.exp), // Ensure exp is a number
+        userId: initialTokenData?.user_id ?? (payload.sub ? parseInt(String(payload.sub), 10) : undefined),
+        username: initialTokenData?.username ?? payload.username,
+        isAdmin: initialTokenData?.is_admin ?? payload.is_admin,
       };
+
+      if (isNaN(newDecodedJwt.exp) || !newDecodedJwt.sub) {
+        throw new Error("Invalid JWT payload: 'exp' or 'sub' missing or invalid.");
+      }
 
       setAccessTokenState(tokenString);
       setDecodedJwt(newDecodedJwt);
@@ -633,13 +642,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return newDecodedJwt;
     } catch (err) {
       const error = err as Error;
-      console.error(`[AppProvider decodeAndSetAccessToken] Failed to verify/decode Access Token (name: ${error.name}, message: ${error.message}). Token string (first 20 chars): ${tokenString?.substring(0,20)}...`);
+      console.error(`[AppProvider decodeAndSetAccessToken] Failed to decode JWT payload (name: ${error.name}, message: ${error.message}). Token string (first 20 chars): ${tokenString?.substring(0,20)}...`);
       setAccessTokenState(null);
       setDecodedJwt(null);
       if (typeof window !== 'undefined') localStorage.removeItem(LOCAL_STORAGE_KEY_JWT);
       return null;
     }
   }, []);
+
 
   const refreshTokenLogicInternal = useCallback(async (): Promise<string | null> => {
     if (isRefreshingTokenRef.current) {
@@ -649,7 +659,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 if (!isRefreshingTokenRef.current) {
                     clearInterval(interval);
                     console.log("[AppProvider refreshTokenLogicInternal] Ongoing refresh completed. Resolving with current accessToken state.");
-                    resolve(accessToken); 
+                    resolve(accessToken);
                 }
             }, 100);
         });
@@ -669,9 +679,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
         const response = await fetch(`${API_BASE_URL}/refresh-token`, {
             method: 'POST',
-            // No body needed if refresh token is sent via HttpOnly cookie
-            // headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, // If sending in body
-            // body: formData.toString(), // If sending in body
         });
 
         if (!response.ok) {
@@ -680,13 +687,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             throw new Error(formatBackendError(errorData, `Refresh token failed: HTTP ${response.status}`));
         }
 
-        const newAuthData = await response.json();
+        const newAuthData = await response.json(); // Expects { access_token: string, token_type: string }
         if (newAuthData.access_token) {
             console.log("[AppProvider refreshTokenLogicInternal] New access token received. Decoding and setting.");
+            // The /refresh-token endpoint only returns the access_token, not full user details.
+            // We decode it to get 'sub' and 'exp'.
+            // 'username' and 'isAdmin' in decodedJwt state will rely on what was set during initial login.
             const decodedNewToken = await decodeAndSetAccessToken(newAuthData.access_token, undefined);
             if (!decodedNewToken) {
                 console.error("[AppProvider refreshTokenLogicInternal] Failed to decode the new access token obtained from refresh. Logging out.");
-                logout(true); 
+                logout(true);
                  isRefreshingTokenRef.current = false;
                 return null;
             }
@@ -708,27 +718,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
 
   const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}): Promise<Response> => {
-    let currentTokenInScope: string | null = accessToken; 
+    let currentTokenInScope: string | null = accessToken;
     let currentDecodedInScope: DecodedToken | null = decodedJwt;
 
     console.log(`[AppProvider fetchWithAuth] Initiating for ${url}. Current token in state: ${currentTokenInScope ? 'Yes' : 'No'}`);
-    
-    // If no token in state, try from localStorage
+
     if (!currentTokenInScope && typeof window !== 'undefined') {
         const storedToken = localStorage.getItem(LOCAL_STORAGE_KEY_JWT);
         if (storedToken) {
             console.log("[AppProvider fetchWithAuth] No token in state, trying localStorage.");
-            const decodedFromStorage = await decodeAndSetAccessToken(storedToken, undefined); // This updates state if valid
+            const decodedFromStorage = await decodeAndSetAccessToken(storedToken, undefined);
             if (decodedFromStorage) {
-                currentTokenInScope = storedToken; // Use this token for the current request
-                currentDecodedInScope = decodedFromStorage;
+                currentTokenInScope = storedToken;
+                currentDecodedInScope = decodedFromStorage; // AppProvider's state is updated by decodeAndSetAccessToken
                  console.log("[AppProvider fetchWithAuth] Token from localStorage decoded successfully.");
             } else {
                  console.warn("[AppProvider fetchWithAuth] Token from localStorage failed to decode. Cleared from state.");
             }
         }
     }
-    
+
     const tokenIsExpired = currentTokenInScope && currentDecodedInScope && currentDecodedInScope.exp * 1000 < Date.now() + 10000; // 10s buffer
     const needsRefresh = (!currentTokenInScope && (refreshTokenState || (typeof window !== 'undefined' && localStorage.getItem(LOCAL_STORAGE_KEY_REFRESH_JWT)))) || tokenIsExpired;
 
@@ -736,8 +745,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.log(`[AppProvider fetchWithAuth] Token needs refresh for ${url}. Current token ${currentTokenInScope ? (tokenIsExpired ? 'expired' : 'exists') : 'missing'}. Refreshing...`);
         const newAccessTokenString = await refreshTokenLogicInternal();
         if (newAccessTokenString) {
-            currentTokenInScope = newAccessTokenString; 
-            currentDecodedInScope = decodedJwt; // refreshTokenLogic updates decodedJwt state
+            currentTokenInScope = newAccessTokenString;
+            currentDecodedInScope = decodedJwt; // refreshTokenLogicInternal updates AppProvider's decodedJwt state
             console.log(`[AppProvider fetchWithAuth] Token refreshed successfully for ${url}.`);
         } else {
             console.error(`[AppProvider fetchWithAuth] Token refresh failed for ${url}. Logging out as refresh failed.`);
@@ -748,12 +757,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     if (!currentTokenInScope && !url.endsWith('/token') && !url.endsWith('/refresh-token')) {
         console.error(`[AppProvider fetchWithAuth] CRITICAL: No JWT token available for authenticated request to ${url} even after refresh attempt.`);
-        // Do not toast here, as it might be called multiple times. Let caller handle UI feedback.
         throw new Error("No JWT token available for authenticated request.");
     }
 
     const headers = new Headers(options.headers || {});
-    if (currentTokenInScope) { 
+    if (currentTokenInScope) {
         headers.append('Authorization', `Bearer ${currentTokenInScope}`);
     }
 
@@ -781,7 +789,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             response = await fetch(url.startsWith('http') ? url : `${API_BASE_URL}${url}`, { ...options, headers: retryHeaders });
         } else {
              console.error(`[AppProvider fetchWithAuth] Token refresh failed after 401 for ${url}. Logging out.`);
-             logout(true); 
+             logout(true);
              throw new Error(`Unauthorized: ${response.statusText} (refresh failed after 401)`);
         }
     }
@@ -834,7 +842,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     const loadClientSideDataAndFetchInitial = async () => {
       console.log("[AppProvider useEffect init] Starting initial load sequence.");
-      setIsLoadingState(true); 
+      setIsLoadingState(true);
 
       const storedAppMode = localStorage.getItem(LOCAL_STORAGE_KEY_APP_MODE) as AppMode | null;
       if (storedAppMode && (storedAppMode === 'personal' || storedAppMode === 'work')) setAppModeState(storedAppMode);
@@ -846,13 +854,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       console.log(`[AppProvider useEffect init] Found tokens in localStorage - Access: ${storedAccessTokenString ? 'Yes' : 'No'}, Refresh: ${storedRefreshTokenString ? 'Yes' : 'No'}`);
 
       if (storedAccessTokenString) {
-          const decoded = await decodeAndSetAccessToken(storedAccessTokenString, undefined);
-          if (decoded && decoded.exp * 1000 > Date.now() + 10000) { // 10s buffer
+          const decodedFromStorage = await decodeAndSetAccessToken(storedAccessTokenString, undefined); // Pass initialUserDetails as undefined
+          if (decodedFromStorage && decodedFromStorage.exp * 1000 > Date.now() + 10000) { // 10s buffer
               effectiveAccessToken = storedAccessTokenString;
               console.log("[AppProvider useEffect init] Stored access token is valid and set.");
           } else if (storedRefreshTokenString) {
               console.log("[AppProvider useEffect init] Stored access token expired or invalid, attempting refresh with stored refresh token.");
-              setRefreshTokenState(storedRefreshTokenString); 
+              setRefreshTokenState(storedRefreshTokenString);
               effectiveAccessToken = await refreshTokenLogicInternal();
               if(effectiveAccessToken) console.log("[AppProvider useEffect init] Token refresh successful during init.");
               else console.warn("[AppProvider useEffect init] Token refresh FAILED during init.");
@@ -873,20 +881,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       if (!effectiveAccessToken) {
           console.log("[AppProvider useEffect init] No effective access token after initial load/refresh. Logging out and skipping data fetches.");
-          logout(true); 
+          logout(true);
           setIsLoadingState(false);
           setIsActivitiesLoading(false); setIsCategoriesLoading(false); setIsAssigneesLoading(false); setIsHistoryLoading(false);
-          return; 
+          return;
       }
-      
+
       console.log("[AppProvider useEffect init] Effective Access Token established. Proceeding with data fetching.");
-      
+
       const storedUINotifications = localStorage.getItem(LOCAL_STORAGE_KEY_UI_NOTIFICATIONS);
       if (storedUINotifications) setUINotifications(JSON.parse(storedUINotifications));
       if (typeof window !== 'undefined' && 'Notification' in window) setSystemNotificationPermission(Notification.permission);
       const storedPin = localStorage.getItem(LOCAL_STORAGE_KEY_APP_PIN);
       if (storedPin) { setAppPinState(storedPin); setIsAppLocked(true); }
-      
+
       const storedHabitsData = localStorage.getItem(LOCAL_STORAGE_KEY_HABITS);
       if (storedHabitsData) {
           try { setHabits(JSON.parse(storedHabitsData).map((h: Habit) => ({ ...h, icon: getIconComponent(h.iconName) }))); }
@@ -977,13 +985,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } finally {
           setIsActivitiesLoading(false); setIsCategoriesLoading(false); setIsAssigneesLoading(false); setIsHistoryLoading(false);
       }
-      setIsLoadingState(false); 
+      setIsLoadingState(false);
       console.log("[AppProvider useEffect init] Initial load process finished.");
     };
 
     loadClientSideDataAndFetchInitial();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
+  }, []);
 
 
  useEffect(() => {
@@ -1220,20 +1228,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const errorData = await response.json().catch(() => ({ detail: response.statusText }));
         throw new Error(formatBackendError(errorData, `Login failed: HTTP ${response.status}`));
       }
-      const tokenData: Token = await response.json();
+      const tokenData: Token = await response.json(); // Includes user_id, username, is_admin from backend
 
       setRefreshTokenState(tokenData.refresh_token);
       if (typeof window !== 'undefined') {
         localStorage.setItem(LOCAL_STORAGE_KEY_REFRESH_JWT, tokenData.refresh_token);
       }
 
-      const loggedInUser = await decodeAndSetAccessToken(tokenData.access_token, {
-        userId: tokenData.user_id,
-        username: tokenData.username,
-        isAdmin: tokenData.is_admin
+      // Use tokenData for initial DecodedToken fields, decodeAndSetAccessToken will mainly get 'exp'
+      const decodedFromNewToken = await decodeAndSetAccessToken(tokenData.access_token, {
+          user_id: tokenData.user_id,
+          username: tokenData.username,
+          is_admin: tokenData.is_admin,
       });
 
-      if (!loggedInUser) throw new Error("Failed to process token after login.");
+      if (!decodedFromNewToken) throw new Error("Failed to process token after login.");
+
+      // Ensure decodedJwt state is updated with fields from tokenData if not in payload
+      // This might be redundant if decodeAndSetAccessToken handles initialTokenData well
+      setDecodedJwt(prev => ({
+        ...(prev || { sub: String(tokenData.user_id), exp: decodedFromNewToken.exp }), // Ensure exp is there
+        userId: tokenData.user_id,
+        username: tokenData.username,
+        isAdmin: tokenData.is_admin,
+      }));
+
 
       addHistoryLogEntryRef.current?.('historyLogLogin', { username: tokenData.username }, 'account');
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === "granted") {
@@ -1530,7 +1549,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } else {
         setWorkActivities(prev => [...prev, newFrontendActivity]);
       }
-      // toast({ title: t('toastActivityAddedTitle'), description: t('toastActivityAddedDescription') }); // Removed: Handled by calling page
 
       const category = allCategories.find(c => c.id === newFrontendActivity.categoryId);
       addHistoryLogEntryRef.current?.('historyLogAddActivity', {
@@ -1587,8 +1605,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } else {
          targetSetter(prev => prev.map(act => (act.id === activityId ? finalFrontendActivity : act)));
       }
-
-      // toast({ title: t('toastActivityUpdatedTitle'), description: t('toastActivityUpdatedDescription') }); // Removed: Handled by calling page
 
       const category = allCategories.find(c => c.id === finalFrontendActivity.categoryId);
       addHistoryLogEntryRef.current?.('historyLogUpdateActivity', {
@@ -1717,10 +1733,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const deleteTodoFromActivity = useCallback(async (activityId: number, todoId: number) => {
     setError(null);
-    const todoToDelete =
-      personalActivities.find(act => act.id === activityId)?.todos.find(t => t.id === todoId) ||
-      workActivities.find(act => act.id === activityId)?.todos.find(t => t.id === todoId);
-
+    // Removed unused 'todoToDelete'
     try {
       const response = await fetchWithAuth(`${API_BASE_URL}/todos/${todoId}`, { method: 'DELETE' });
       if (!response.ok) { const errorData = await response.json().catch(() => ({ detail: response.statusText })); throw new Error(formatBackendError(errorData, `Failed to delete todo: HTTP ${response.status}`));}
@@ -2038,4 +2051,5 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+    
     
