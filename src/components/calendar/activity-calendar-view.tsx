@@ -4,17 +4,18 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Calendar } from '@/components/ui/calendar';
 import { useAppStore } from '@/hooks/use-app-store';
-import type { Activity, RecurrenceRule } from '@/lib/types';
+import type { Activity, RecurrenceRule, Habit, HabitSlot, HabitSlotCompletionStatus } from '@/lib/types';
 import {
   isSameDay, format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval,
   addDays, addWeeks, addMonths, getDay, getDate as getDayOfMonthFn, parseISO, formatISO,
   isAfter, isBefore, isEqual, setDate as setDayOfMonth
 } from 'date-fns';
 import ActivityListItem from './activity-list-item';
+import HabitListItem from './habit-list-item'; // Import the new component
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { PlusCircle, Loader2, CheckCircle } from 'lucide-react';
+import { PlusCircle, Loader2, CheckCircle, Brain } from 'lucide-react'; // Added Brain icon
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,6 +47,15 @@ const endOfDayUtil = (date: Date): Date => {
   d.setHours(23, 59, 59, 999);
   return d;
 };
+
+// This type will represent a habit slot prepared for display for a specific date
+interface ProcessedHabitSlotDisplayItem {
+  habit: Habit;
+  slot: HabitSlot;
+  date: Date;
+  completionStatus: HabitSlotCompletionStatus | undefined;
+}
+
 
 function generateRecurringInstances(
   masterActivity: Activity,
@@ -100,13 +110,10 @@ function generateRecurringInstances(
     iterations++;
     if (seriesEndDate && isAfter(currentDate, seriesEndDate)) break;
     if (isBefore(currentDate, new Date(masterActivity.createdAt))) {
-        // Efficiently jump based on recurrence type if before master activity start
         if (recurrence.type === 'daily') currentDate = addDays(currentDate, 1);
         else if (recurrence.type === 'weekly') {
-            // Jump to next day, validity check will handle daysOfWeek
              currentDate = addDays(currentDate, 1);
         } else if (recurrence.type === 'monthly') {
-            // Jump to next day, validity check will handle dayOfMonth
             currentDate = addDays(currentDate, 1);
         }
         else break;
@@ -158,7 +165,15 @@ function generateRecurringInstances(
 
 
 export default function ActivityCalendarView() {
-  const { getRawActivities, getCategoryById, deleteActivity } = useAppStore();
+  const { 
+    getRawActivities, 
+    getCategoryById, 
+    deleteActivity,
+    habits, // Get habits
+    habitCompletions, // Get habit completions
+    toggleHabitSlotCompletion, // Function to toggle completion
+    isLoading: isAppStoreLoading, // Use a more generic loading flag
+  } = useAppStore();
   const { toast } = useToast();
   const { t, locale } = useTranslations();
   const router = useRouter();
@@ -170,8 +185,10 @@ export default function ActivityCalendarView() {
   const [viewMode, setViewMode] = useState<ViewMode>('daily');
 
   const [processedActivities, setProcessedActivities] = useState<Activity[]>([]);
+  const [processedHabitSlotsForDay, setProcessedHabitSlotsForDay] = useState<ProcessedHabitSlotDisplayItem[]>([]);
   const [allProcessedActivitiesCompleted, setAllProcessedActivitiesCompleted] = useState(false);
-  const [isLoadingActivities, setIsLoadingActivities] = useState(true);
+  const [isLoadingViewData, setIsLoadingViewData] = useState(true);
+
 
   const [processedDayEventCounts, setProcessedDayEventCounts] = useState<Map<string, number>>(new Map());
   const [isLoadingEventCounts, setIsLoadingEventCounts] = useState(true);
@@ -194,18 +211,21 @@ export default function ActivityCalendarView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Effect to process activities and habits for the selected view/date
   useEffect(() => {
-    if (!selectedDate || !hasMounted) {
+    if (!selectedDate || !hasMounted || isAppStoreLoading) {
       setProcessedActivities([]);
+      setProcessedHabitSlotsForDay([]);
       setAllProcessedActivitiesCompleted(false);
-      setIsLoadingActivities(viewMode !== 'daily' || !!selectedDate); // Only true loading if a date or range is expected
+      setIsLoadingViewData(viewMode !== 'daily' || !!selectedDate);
       return;
     }
 
-    setIsLoadingActivities(true);
+    setIsLoadingViewData(true);
     const rawActivities = getRawActivities();
     let viewStartDate: Date, viewEndDate: Date;
 
+    // Determine date range for activities based on viewMode
     if (viewMode === 'daily') {
       viewStartDate = startOfDayUtil(selectedDate);
       viewEndDate = endOfDayUtil(selectedDate);
@@ -217,6 +237,7 @@ export default function ActivityCalendarView() {
       viewEndDate = endOfMonth(selectedDate);
     }
 
+    // Process Activities
     let allDisplayActivities: Activity[] = [];
     rawActivities.forEach(masterActivity => {
       if (masterActivity.recurrence && masterActivity.recurrence.type !== 'none') {
@@ -258,8 +279,9 @@ export default function ActivityCalendarView() {
         if (aDate !== bDate) return aDate - bDate;
         return a.title.localeCompare(b.title);
     });
+    setProcessedActivities(sortedActivities);
 
-    const allCompleted = sortedActivities.length > 0 && sortedActivities.every(act => {
+    const allActCompleted = sortedActivities.length > 0 && sortedActivities.every(act => {
       const isInstanceCompleted = act.isRecurringInstance && act.originalInstanceDate
         ? !!act.completedOccurrences?.[formatISO(new Date(act.originalInstanceDate), { representation: 'date' })]
         : !!act.completed;
@@ -269,14 +291,42 @@ export default function ActivityCalendarView() {
       }
       return true;
     });
+    setAllProcessedActivitiesCompleted(allActCompleted);
 
-    setProcessedActivities(sortedActivities);
-    setAllProcessedActivitiesCompleted(allCompleted);
-    setIsLoadingActivities(false);
-  }, [getRawActivities, selectedDate, hasMounted, viewMode, dateLocale]);
+    // Process Habits for the selectedDate (regardless of viewMode for the list)
+    const tempProcessedHabitSlots: ProcessedHabitSlotDisplayItem[] = [];
+    const dateKeyForHabits = formatISO(selectedDate, { representation: 'date' });
+
+    habits.forEach(habit => {
+      habit.slots.forEach(slot => {
+        const completionStatus = habitCompletions[habit.id]?.[dateKeyForHabits]?.[slot.id];
+        tempProcessedHabitSlots.push({
+          habit,
+          slot,
+          date: selectedDate,
+          completionStatus,
+        });
+      });
+    });
+    // Sort habits/slots: by habit name, then slot order/name, then time
+    tempProcessedHabitSlots.sort((a, b) => {
+        if (a.habit.name !== b.habit.name) return a.habit.name.localeCompare(b.habit.name);
+        const aOrder = a.slot.order ?? 0;
+        const bOrder = b.slot.order ?? 0;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        if (a.slot.default_time && b.slot.default_time) return a.slot.default_time.localeCompare(b.slot.default_time);
+        if (a.slot.default_time) return -1;
+        if (b.slot.default_time) return 1;
+        return a.slot.name.localeCompare(b.slot.name);
+    });
+    setProcessedHabitSlotsForDay(tempProcessedHabitSlots);
+
+    setIsLoadingViewData(false);
+  }, [getRawActivities, selectedDate, hasMounted, viewMode, dateLocale, habits, habitCompletions, isAppStoreLoading]);
+
 
   useEffect(() => {
-    if (!hasMounted || !currentDisplayMonth) {
+    if (!hasMounted || !currentDisplayMonth || isAppStoreLoading) {
       setProcessedDayEventCounts(new Map());
       setIsLoadingEventCounts(true);
       return;
@@ -306,7 +356,7 @@ export default function ActivityCalendarView() {
     });
     setProcessedDayEventCounts(counts);
     setIsLoadingEventCounts(false);
-  }, [getRawActivities, hasMounted, currentDisplayMonth]);
+  }, [getRawActivities, hasMounted, currentDisplayMonth, isAppStoreLoading]);
 
 
   const handleEditActivity = (activityInstanceOrMaster: Activity) => {
@@ -409,7 +459,7 @@ export default function ActivityCalendarView() {
     return t('selectDateToSeeActivities');
   };
 
-  if (!hasMounted || !currentDisplayMonth) {
+  if (!hasMounted || !currentDisplayMonth || isAppStoreLoading) {
     return (
       <div className="container mx-auto py-6 flex flex-col lg:flex-row gap-6 items-start">
         <Card className="lg:w-1/2 xl:w-2/3 shadow-lg w-full">
@@ -442,7 +492,7 @@ export default function ActivityCalendarView() {
       <div className="container mx-auto py-6 flex flex-col lg:flex-row gap-6 items-start">
         <Card className="lg:w-1/2 xl:w-2/3 shadow-lg w-full">
           <CardContent className="p-0 sm:p-1 flex justify-center">
-            {isLoadingEventCounts && !processedDayEventCounts.size ? (
+            {(isLoadingEventCounts && !processedDayEventCounts.size) && !isAppStoreLoading ? (
                 <div className="h-[300px] w-[350px] sm:w-[400px] sm:h-[350px] flex items-center justify-center">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
@@ -464,7 +514,7 @@ export default function ActivityCalendarView() {
 
         <Card className={cn(
           "lg:w-1/2 xl:w-1/3 shadow-lg w-full flex flex-col transition-colors duration-300",
-          selectedDate && allProcessedActivitiesCompleted && processedActivities.length > 0 && !isLoadingActivities && "bg-primary/10"
+          selectedDate && allProcessedActivitiesCompleted && processedActivities.length > 0 && !isLoadingViewData && "bg-primary/10"
           )}>
           <CardHeader>
             <CardTitle>
@@ -481,33 +531,76 @@ export default function ActivityCalendarView() {
             </div>
           </CardHeader>
           <CardContent className="flex-grow">
-            {isLoadingActivities ? (
+            {isLoadingViewData ? (
                 <div className="flex items-center justify-center h-[calc(100vh-28rem)] sm:h-[calc(100vh-26rem)]">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
-            ) : selectedDate && processedActivities.length > 0 ? (
+            ) : selectedDate ? (
               <ScrollArea className="h-[calc(100vh-24rem)] sm:h-[calc(100vh-22rem)] pr-1">
-                <div className="space-y-3">
-                  {processedActivities.map(activity => (
-                    <ActivityListItem
-                      key={activity.id}
-                      activity={activity}
-                      category={getCategoryById(activity.categoryId)}
-                      onEdit={() => handleEditActivity(activity)}
-                      onDelete={() => handleOpenDeleteConfirm(activity)}
-                      showDate={viewMode === 'weekly' || viewMode === 'monthly'}
-                      instanceDate={activity.originalInstanceDate ? new Date(activity.originalInstanceDate) : undefined}
-                    />
-                  ))}
-                </div>
+                {processedActivities.length > 0 ? (
+                  <div className="space-y-3">
+                    {processedActivities.map(activity => (
+                      <ActivityListItem
+                        key={activity.id}
+                        activity={activity}
+                        category={getCategoryById(activity.categoryId)}
+                        onEdit={() => handleEditActivity(activity)}
+                        onDelete={() => handleOpenDeleteConfirm(activity)}
+                        showDate={viewMode === 'weekly' || viewMode === 'monthly'}
+                        instanceDate={activity.originalInstanceDate ? new Date(activity.originalInstanceDate) : undefined}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground py-4 text-center">{t('noActivitiesForPeriod')}</p>
+                )}
+
+                {/* Habits Section */}
+                {(processedActivities.length > 0 && processedHabitSlotsForDay.length > 0) && (
+                  <hr className="my-4 border-border/50" />
+                )}
+                
+                {processedHabitSlotsForDay.length > 0 && (
+                  <div className="mb-3">
+                    <h3 className="text-md font-semibold flex items-center gap-2 text-primary">
+                      <Brain className="h-5 w-5" />
+                      {t('habitsForDayTitle')}
+                    </h3>
+                  </div>
+                )}
+                
+                {processedHabitSlotsForDay.length > 0 ? (
+                  <div className="space-y-2.5">
+                    {processedHabitSlotsForDay.map(item => (
+                      <HabitListItem
+                        key={`${item.habit.id}-${item.slot.id}`}
+                        habit={item.habit}
+                        slot={item.slot}
+                        date={item.date}
+                        completionStatus={item.completionStatus}
+                        onToggleCompletion={(completed) => {
+                          const dateKey = formatISO(item.date, { representation: 'date' });
+                          toggleHabitSlotCompletion(item.habit.id, item.slot.id, dateKey, item.completionStatus);
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  (processedActivities.length === 0 && !isLoadingViewData) && 
+                  <p className="text-sm text-muted-foreground py-4 text-center">{t('noHabitsForDay')}</p>
+                )}
+                {processedActivities.length === 0 && processedHabitSlotsForDay.length === 0 && !isLoadingViewData && (
+                    <p className="text-sm text-muted-foreground py-4 text-center">{t('noActivitiesForPeriod')}</p>
+                )}
+
               </ScrollArea>
             ) : (
               <p className="text-sm text-muted-foreground py-4 text-center">
-                {selectedDate ? t('noActivitiesForPeriod') : t('selectDateToSeeActivities')}
+                {t('selectDateToSeeActivities')}
               </p>
             )}
           </CardContent>
-          {selectedDate && allProcessedActivitiesCompleted && processedActivities.length > 0 && !isLoadingActivities && (
+          {selectedDate && allProcessedActivitiesCompleted && processedActivities.length > 0 && !isLoadingViewData && (
             <CardFooter className="text-sm text-primary flex items-center justify-center gap-1 py-3 border-t">
               <CheckCircle className="h-5 w-5" />
               <span>{t('allActivitiesCompleted')}</span>

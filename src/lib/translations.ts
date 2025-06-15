@@ -164,6 +164,9 @@ export type Translations = {
   viewWeekly: string;
   viewMonthly: string;
   allActivitiesCompleted: string;
+  habitsForDayTitle: string;
+  noHabitsForDay: string;
+  markAsComplete: string;
 
 
   // ActivityListItem
@@ -353,9 +356,9 @@ export type Translations = {
   noHabitsYet: string;
   confirmDeleteHabitTitle: string;
   confirmDeleteHabitDescription: (params: { habitName: string }) => string;
-  existingHabitsTitle: string; // Added
-  viewEditManageHabits: string; // Added
-  habitsCount: (params: { count: number }) => string; // Added
+  existingHabitsTitle: string;
+  viewEditManageHabits: string; 
+  habitsCount: (params: { count: number }) => string; 
 
 
   // Motivational Phrases
@@ -524,6 +527,9 @@ export const translations: Record<Locale, Translations> = {
     viewWeekly: "Weekly",
     viewMonthly: "Monthly",
     allActivitiesCompleted: "Well done! All activities for this period are complete.",
+    habitsForDayTitle: "Habits for Today",
+    noHabitsForDay: "No habits to display for this day.",
+    markAsComplete: "Mark as complete",
     editActivitySr: "Edit Activity",
     deleteActivitySr: "Delete Activity",
     addToCalendarSr: "Add to Calendar",
@@ -740,7 +746,7 @@ export const translations: Record<Locale, Translations> = {
     confirmDeleteHabitTitle: "Delete Habit?",
     confirmDeleteHabitDescription: (params) => `Are you sure you want to delete the habit "${params.habitName}"? All its completion data will also be removed.`,
     existingHabitsTitle: "Existing Habits",
-    viewEditManageHabits: "View, edit, and manage your current habits.",
+    viewEditManageHabits: "View, edit, and manage your current habits.", 
     habitsCount: (params) => `You have ${params.count} habit${params.count === 1 ? '' : 's'}.`,
     motivationalPhrases: [
       "The secret of getting ahead is getting started.",
@@ -914,6 +920,9 @@ export const translations: Record<Locale, Translations> = {
     viewWeekly: "Semanal",
     viewMonthly: "Mensual",
     allActivitiesCompleted: "¡Bien hecho! Todas las actividades de este periodo están completas.",
+    habitsForDayTitle: "Hábitos para Hoy",
+    noHabitsForDay: "No hay hábitos para mostrar este día.",
+    markAsComplete: "Marcar como completo",
     editActivitySr: "Editar Actividad",
     deleteActivitySr: "Eliminar Actividad",
     addToCalendarSr: "Añadir al Calendario",
@@ -1304,6 +1313,9 @@ export const translations: Record<Locale, Translations> = {
     viewWeekly: "Hebdomadaire",
     viewMonthly: "Mensuel",
     allActivitiesCompleted: "Bien joué ! Toutes les activités pour cette période sont terminées.",
+    habitsForDayTitle: "Habitudes du Jour",
+    noHabitsForDay: "Aucune habitude à afficher pour ce jour.",
+    markAsComplete: "Marquer comme terminé",
     editActivitySr: "Modifier l'activité",
     deleteActivitySr: "Supprimer l'activité",
     addToCalendarSr: "Ajouter au calendrier",
